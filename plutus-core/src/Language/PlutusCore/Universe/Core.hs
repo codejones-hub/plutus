@@ -30,7 +30,6 @@ module Language.PlutusCore.Universe.Core
     , deriveGEq
     , Lift
     , (:~:) (..)
-    , GLift (..)
     ) where
 
 import           Control.DeepSeq
@@ -44,7 +43,6 @@ import           Data.Proxy
 import           Data.Text.Prettyprint.Doc  (Pretty (..))
 import           GHC.Exts
 import           Language.Haskell.TH.Lift
-import           Language.Haskell.TH.Syntax
 import           Text.Show.Deriving
 
 import           Language.PlutusCore.Pretty (PrettyConst, prettyConst)
@@ -329,42 +327,3 @@ instance Closed uni => Hashable (Some (TypeIn uni)) where
 
 instance (Closed uni, uni `Everywhere` Hashable) => Hashable (Some (ValueOf uni)) where
     hashWithSalt salt (Some s) = hashWithSalt salt s
-
--------------------- 'Lift'
-
--- | 'GLift' to 'Lift' is what 'GShow' to 'Show'.
-class GLift f where
-    glift :: f a -> Q Exp
-    default glift :: Lift (f a) => f a -> Q Exp
-    glift = lift
-
-instance GLift f => Lift (AG f a) where
-    lift (AG a) = glift a
-
--- See Note [The G, the Tag and the Auto].
--- >>> :set -XGADTs
--- >>> :set -XStandaloneDeriving
--- >>> :set -XTemplateHaskell
--- >>> :set -XTypeFamilies
--- >>> data U a where UInt :: U Int; UBool :: U Bool
--- >>> deriving instance Show (U a)
--- >>> deriving instance Lift (U a)
--- >>> instance GShow U where gshowsPrec = showsPrec
--- >>> instance GLift U
--- >>> instance Closed U where type Everywhere U constr = (constr Int, constr Bool); tagOf = undefined; uniAt = undefined; bring _ UInt = id; bring _ UBool = id
--- >>> $(lift $ Some UBool)
--- Some UBool
--- >>> $(lift $ Some (TypeIn UInt))
--- Some (TypeIn UInt)
--- >>> $(lift $ Some (ValueOf UBool True))
--- Some (ValueOf UBool True)
-instance GLift f => Lift (Some f) where
-    lift (Some a) = ($(makeLift ''Some)) (Some (AG a))
-
-instance GLift uni => GLift (TypeIn uni)
-instance GLift uni => Lift (TypeIn uni a) where
-    lift (TypeIn uni) = ($(makeLift ''TypeIn)) (TypeIn (AG uni))
-
-instance (GLift uni, Closed uni, uni `Everywhere` Lift) => GLift (ValueOf uni)
-instance (GLift uni, Closed uni, uni `Everywhere` Lift) => Lift (ValueOf uni a) where
-    lift (ValueOf uni x) = bring (Proxy @Lift) uni $ ($(makeLift ''ValueOf)) (ValueOf (AG uni) x)
