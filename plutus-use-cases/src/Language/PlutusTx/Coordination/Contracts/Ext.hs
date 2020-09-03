@@ -11,7 +11,9 @@
 {-# OPTIONS -fplugin-opt Language.PlutusTx.Plugin:debug-context #-}
 module Language.PlutusTx.Coordination.Contracts.Ext where
 
+import Language.PlutusTx (CompiledCode, applyCode)
 import qualified Language.PlutusTx                 as PlutusTx
+import qualified Language.PlutusCore.Universe as PLC
 import Ledger.Scripts (Script, fromCompiledCode, ScriptError, evaluateScript, Checking(Typecheck))
 import           Language.PlutusTx.Prelude
 
@@ -22,22 +24,23 @@ data Arithmetic =
     , mult :: Integer -> Integer -> Integer
     }
 
-goodArithmetic :: Arithmetic
-goodArithmetic = Arithmetic{add = (+), sub = (-), mult = (*)}
+goodArithmetic :: CompiledCode PLC.DefaultUni Arithmetic
+goodArithmetic = $$(PlutusTx.compile [|| Arithmetic{add = (+), sub = (-), mult = (*)} ||])
 
-badArithmetic :: Arithmetic
-badArithmetic = Arithmetic{add = (*), sub = (*), mult = (+)}
+badArithmetic :: CompiledCode PLC.DefaultUni Arithmetic
+badArithmetic = $$(PlutusTx.compile [||  Arithmetic{add = (*), sub = (*), mult = (+)} ||])
 
-mkValidator :: Arithmetic -> Integer
-mkValidator Arithmetic{add, sub, mult} =
+mkValidator :: CompiledCode PLC.DefaultUni (Arithmetic -> Integer)
+mkValidator = $$(PlutusTx.compile [|| \Arithmetic{add, sub, mult} ->
   let r = ((add 12 15) `mult` 5) `sub` 10
   in if r == 125 then trace "correct" 125 else traceError "not correct"
+  ||])
 
 goodScript :: Script
-goodScript = fromCompiledCode ($$(PlutusTx.compile [|| mkValidator goodArithmetic ||]))
+goodScript = fromCompiledCode $ mkValidator `applyCode` goodArithmetic
 
 badScript :: Script
-badScript = fromCompiledCode ($$(PlutusTx.compile [|| mkValidator badArithmetic ||]))
+badScript = fromCompiledCode $ mkValidator `applyCode` badArithmetic
 
 {-
 >>> scriptResult goodScript
