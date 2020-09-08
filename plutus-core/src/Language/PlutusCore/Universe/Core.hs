@@ -1,6 +1,8 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DefaultSignatures     #-}
+{-# LANGUAGE DeriveLift            #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE KindSignatures        #-}
@@ -35,13 +37,14 @@ module Language.PlutusCore.Universe.Core
 
 import           Control.DeepSeq
 import           Control.Monad
-import           Data.GADT.Compare
+import           Data.GADT.Compare          (GEq, geq, defaultEq)
 import           Data.GADT.Compare.TH
 import           Data.GADT.Show
 import           Data.Hashable
 import qualified Data.Kind                  as GHC (Type)
 import           Data.Proxy
 import           Data.Text.Prettyprint.Doc  (Pretty (..))
+import           Data.Type.Equality         ((:~:)(Refl))
 import           GHC.Exts
 import           Language.Haskell.TH.Lift
 import           Language.Haskell.TH.Syntax
@@ -340,6 +343,9 @@ class GLift f where
 
 instance GLift f => Lift (AG f a) where
     lift (AG a) = glift a
+#if MIN_VERSION_template_haskell(2,16,0)
+    liftTyped = unsafeTExpCoerce . lift
+#endif
 
 -- See Note [The G, the Tag and the Auto].
 -- >>> :set -XGADTs
@@ -360,11 +366,20 @@ instance GLift f => Lift (AG f a) where
 -- Some (ValueOf UBool True)
 instance GLift f => Lift (Some f) where
     lift (Some a) = ($(makeLift ''Some)) (Some (AG a))
+#if MIN_VERSION_template_haskell(2,16,0)
+    liftTyped = unsafeTExpCoerce . lift
+#endif
 
 instance GLift uni => GLift (TypeIn uni)
 instance GLift uni => Lift (TypeIn uni a) where
     lift (TypeIn uni) = ($(makeLift ''TypeIn)) (TypeIn (AG uni))
+#if MIN_VERSION_template_haskell(2,16,0)
+    liftTyped = unsafeTExpCoerce . lift
+#endif
 
 instance (GLift uni, Closed uni, uni `Everywhere` Lift) => GLift (ValueOf uni)
 instance (GLift uni, Closed uni, uni `Everywhere` Lift) => Lift (ValueOf uni a) where
     lift (ValueOf uni x) = bring (Proxy @Lift) uni $ ($(makeLift ''ValueOf)) (ValueOf (AG uni) x)
+#if MIN_VERSION_template_haskell(2,16,0)
+    liftTyped = unsafeTExpCoerce . lift
+#endif

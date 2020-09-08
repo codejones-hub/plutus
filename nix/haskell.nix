@@ -8,12 +8,30 @@
 , agdaPackages
 , buildPackages
 , checkMaterialization
+, sources
+, useCabalProject
+, compiler-nix-name
 }:
 
 let
   r-packages = with pkgs.rPackages; [pkgs.R tidyverse dplyr stringr MASS];
   agdaWithStdlib = agdaPackages.agda.withPackages [ agdaPackages.standard-library ];
-  project = haskell-nix.stackProject' {
+  makeProject = args: if useCabalProject
+    then haskell-nix.cabalProject' (args // {
+      inherit compiler-nix-name;
+      modules = args.modules ++ [{
+        # plan-to-nix does not expose `test: False` settings in cabal.project file
+        packages.byron-spec-chain.components.tests.chain-rules-test.buildable = lib.mkForce false;
+        packages.ouroboros-network.components.tests.test-network.buildable = lib.mkForce false;
+        packages.ouroboros-network-framework.components.tests.ouroboros-network-framework-tests.buildable = lib.mkForce false;
+        packages.small-steps.components.tests.examples.buildable = lib.mkForce false;
+        packages.small-steps.components.tests.doctests.buildable = lib.mkForce false;
+        packages.byron-spec-ledger.components.tests.doctests.buildable = lib.mkForce false;
+        packages.eventful-sql-common.package.ghcOptions = "-XDerivingStrategies -XStandaloneDeriving -XUndecidableInstances";
+      }];
+    })
+    else haskell-nix.stackProject' args;
+  project = makeProject {
     # This is incredibly difficult to get right, almost everything goes wrong, see https://github.com/input-output-hk/haskell.nix/issues/496
     src = let root = ../.; in haskell-nix.haskellLib.cleanSourceWith {
       filter = pkgs.nix-gitignore.gitignoreFilter (pkgs.nix-gitignore.gitignoreCompileIgnore [../.gitignore] root) root;
@@ -24,20 +42,21 @@ let
     };
     # These files need to be regenerated when you change the cabal files or stack resolver.
     # See ../CONTRIBUTING.doc for more information.
-    materialized = ./stack.materialized;
+    materialized = if useCabalProject then ./cabal.materialized + "/${compiler-nix-name}" else ./stack.materialized;
     # If true, we check that the generated files are correct. Set in the CI so we don't make mistakes.
-    inherit checkMaterialization;
+    inherit checkMaterialization sources;
     sha256map = {
+      "https://github.com/input-output-hk/goblins"."26d35ad52fe9ade3391532dbfeb2f416f07650bc" = "17p5x0hj6c67jkdqx0cysqlwq2zs2l87azihn1alzajy9ak6ii0b";
       "https://github.com/shmish111/purescript-bridge.git"."28c37771ef30b0d751960c061ef95627f05d290e" = "0n6q7g2w1xafngd3dwbbmfxfn018fmq61db7mymplbrww8ld1cp3";
       "https://github.com/shmish111/servant-purescript.git"."ece5d1dad16a5731ac22040075615803796c7c21" = "1axcbsaym64q67hvjc7b3izd48cgqwi734l7f7m22jpdc80li5f6";
       "https://github.com/input-output-hk/cardano-crypto.git"."2547ad1e80aeabca2899951601079408becbc92c" = "1p2kg2w02q5w1cvqzhfhqmxviy4xrzada3mmb096j2n6hfr20kri";
       "https://github.com/michaelpj/unlit.git"."9ca1112093c5ffd356fc99c7dafa080e686dd748" = "145sffn8gbdn6xp9q5b75yd3m46ql5bnc02arzmpfs6wgjslfhff";
-      "https://github.com/raduom/ouroboros-network"."af744374a05d6a5eb76713b399595131e2a24c38" = "1fljr384bkyg0lj46bkgdplp9dzwkb9dz1r6j863niyvm3q50h66";
-      "https://github.com/input-output-hk/cardano-prelude"."bd7eb69d27bfaee46d435bc1d2720520b1446426" = "1cmxh1gk7lvgs6bfr8v6k2lpjxmk0qam58clvdvxkybrlbh186ps";
+      "https://github.com/input-output-hk/ouroboros-network"."75153affa23a0e68e035d7bb19880fe1ae35b1d4" = "0aj6rsqp93k2079bipv2ia7m56h2xwwlcjffr7mr99cz6l9xj96i";
+      "https://github.com/input-output-hk/cardano-prelude"."71ea865408f2e03e6d6832359423546699730849" = "02v9bd95vjal7yp96b59dgap2k53c2lrg9vxw6d62cxzw8n635y6";
       "https://github.com/input-output-hk/cardano-base"."5035c9ed95e9d47f050314a7d96b1b2043288f61" = "103z0009sz586f2mvnmwl2hp9n94qy0n72ik521xhq7zmfwyv3m7";
       "https://github.com/raduom/cardano-ledger-specs"."2cac85306d8b3e07006e9081f36ce7ebf2d9d0a3" = "0w6z1va6a93f818m9byh49yxkkpd9q3xlxk5irpq3d42vmfpy447";
       "https://github.com/raduom/iohk-monitoring-framework"."b5c035ad4e226d634242ad5979fa677921181435" = "19v32drfb7wy1yqpbxlqvgii0i7s2j89s05lqskx6855yn0calq4";
-      "https://github.com/j-mueller/iohk-monitoring-framework"."636eb9f52f504e8009162b5cf7147e8acb727c1b" = "101ga1cp877b8qnksfanzyw6s4yglwf24mzwgh0pn1xs0l64h6j3";
+      "https://github.com/input-output-hk/iohk-monitoring-framework"."5c9627b6aee487f9b7ec44981aba57a6afc659b1" = "0ndnhff32h37xsc61b181m4vwaj4vm1z04p2rfwffnjjmgz23584";
       };
     modules = [
         {
@@ -82,7 +101,7 @@ let
 
             # plutus-metatheory needs agda with the stdlib around for the custom setup
             # I can't figure out a way to apply this as a blanket change for all the components in the package, oh well
-	    plutus-metatheory.components.library.build-tools = [ agdaWithStdlib ];
+            plutus-metatheory.components.library.build-tools = [ agdaWithStdlib ];
             plutus-metatheory.components.exes.plc-agda.build-tools = [ agdaWithStdlib ];
             plutus-metatheory.components.tests.test1.build-tools = [ agdaWithStdlib ];
             plutus-metatheory.components.tests.test2.build-tools = [ agdaWithStdlib ];
@@ -126,6 +145,8 @@ let
             plutus-tx-plugin.package.ghcOptions = "-Werror";
             plutus-doc.package.ghcOptions = "-Werror";
             plutus-use-cases.package.ghcOptions = "-Werror";
+
+            inline-r.package.ghcOptions = "-XStandaloneKindSignatures";
           };
         }
      ];

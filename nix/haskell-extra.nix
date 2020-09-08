@@ -4,13 +4,21 @@
 #
 # These are for e.g. developer usage, or for running formatting tests.
 ############################################################################
-{ pkgs, index-state, checkMaterialization }:
-let compiler-nix-name = "ghc883";
-in {
-  Agda = pkgs.haskell-nix.hackage-package {
+{ pkgs, compiler-nix-name, index-state, checkMaterialization, sources }:
+{
+  Agda = (pkgs.haskell-nix.cabalProject {
     name = "Agda";
-    version = "2.6.1";
-    plan-sha256 = "05vhmn8fmhsyjsywg3wrg2v1rh1g3qf44lmmwhlqhiwns2i1ap7f";
+    src = pkgs.fetchFromGitHub {
+      name = "Agda";
+      owner = "agda";
+      repo = "agda";
+      rev = "6289bb7cf497aaa8b5758923d585406348a0bb9d";
+      sha256 = "1gz734z60hbln56z2azq8nh3pnm2rjnl9fpijy2f8838sfvni5d8";
+    };
+    plan-sha256 = {
+      ghc883 = "1yrl0pd9507yk9zwwd0klh75rbs88qrzbn9qg0bhk2vvlffhfd64";
+      ghc8102 = "1f5s632vjac4nv83d0bf0d9flwgdsd1w3l9s3g4l9wwpaz6g047h";
+    }.${compiler-nix-name};
     inherit compiler-nix-name index-state checkMaterialization;
     modules = [{
       # Agda is a huge pain. They have a special custom setup that compiles the interface files for
@@ -38,27 +46,40 @@ in {
         done
       '';
     }];
-  };
-  cabal-install = pkgs.haskell-nix.hackage-package {
+  }).Agda;
+  cabal-install = (pkgs.haskell-nix.cabalProject {
     name = "cabal-install";
-    version = "3.2.0.0";
+    src = sources.cabal;
+    modules = [{ reinstallableLibGhc = true; }];
     inherit compiler-nix-name index-state checkMaterialization;
     # Invalidate and update if you change the version or index-state
-    plan-sha256 = "199mp9d177whk3jbl7j41rqwfj7zqw7z214p9xfl7v2k4x3xm7gm";
-  };
+    plan-sha256 = {
+      ghc883 = "17dsny7fl7ksixixss0yn8p6p87sqq5n5ih0s4b98zszgp1xshpd";
+      ghc884 = "0900jwc351i0dw1fdfxiyz4gmfzdc0g7fsf1lh3lssrih5p5ykfs";
+      ghc8102 = "1ph4b6l3gr4ndagrizfkwsqwphbkpjdj5l7qx58d4ls1g0mdnrgf";
+    }.${compiler-nix-name};
+  }).cabal-install;
   stylish-haskell = pkgs.haskell-nix.hackage-package {
     name = "stylish-haskell";
     version = "0.10.0.0";
     inherit compiler-nix-name index-state checkMaterialization;
     # Invalidate and update if you change the version or index-state
-    plan-sha256 = "0irkzwcqazlbl9g47f0x0zxy1nmmgqvfrvzxgkh4cay2315vv2dh";
+    plan-sha256 = {
+      ghc883 = "0irkzwcqazlbl9g47f0x0zxy1nmmgqvfrvzxgkh4cay2315vv2dh";
+      ghc884 = "019n7imqcr7xx2la6inxq1i6s37c02l3yg4hpd8a9pz2jl1dp57g";
+      ghc8102 = "1y5p7wbqvj2i6kyyy34w1gfih76x65q209df2ajlk3wdg9kw9fb3";
+    }.${compiler-nix-name};
   };
   hlint = pkgs.haskell-nix.hackage-package {
     name = "hlint";
     version = "2.2.11";
     inherit compiler-nix-name index-state checkMaterialization;
     # Invalidate and update if you change the version or index-state
-    plan-sha256 = "1vrfk8zvczy9b6i3z9aplx4528a432ihpwj7iqc8c9h9mdib4rir";
+    plan-sha256 = {
+      ghc883 = "1vrfk8zvczy9b6i3z9aplx4528a432ihpwj7iqc8c9h9mdib4rir";
+      ghc884 = "1n4415cjk74c762s8gv25651ar296000i19ajkwpyw392gl3rn4x";
+      ghc8102 = "0yrmhr0c38lybkwv2b84nvgz2aaal6gn5fxk8780a3qbiw8g604a";
+    }.${compiler-nix-name};
   };
   inherit (
     let hspkgs = pkgs.haskell-nix.cabalProject {
@@ -70,16 +91,28 @@ in {
           sha256 = "0jzj1a15wiwd4wa4wg8x0bpb57g4xrs99yp24623cjcvbarmwjgl";
           fetchSubmodules = true;
         };
-        lookupSha256 = { location, tag, ... } : {
+        # Needed for GHC 8.10
+        cabalProjectLocal = ''
+          allow-newer: diagrams-svg:base, monoid-extras:base, svg-builder:base,
+            diagrams-lib:base, dual-tree:base, active:base, diagrams-core:base,
+            diagrams-contrib:base, force-layout:base, diagrams-postscript:base,
+            statestack:base
+        '';
+        sha256map = {
           "https://github.com/bubba/brittany.git"."c59655f10d5ad295c2481537fc8abf0a297d9d1c" = "1rkk09f8750qykrmkqfqbh44dbx1p8aq1caznxxlw8zqfvx39cxl";
-          }."${location}"."${tag}";
+        };
         inherit compiler-nix-name index-state checkMaterialization;
         # Invalidate and update if you change the version
-        plan-sha256 =
-          # This conditional is terrible and I don't know why we need it and I think it's a bug.
-          if pkgs.hostPlatform.isLinux
-          then "1bx2wxjimrchc3yrmd08cmvwp66rbfcnx8svp4y7abac1b4wndd4"
-          else "0h2m3dfw0jbqn845y0p5vw8bzvv00bgl2dvi1q6j631v49dl1mgc";
+        plan-sha256 = (if pkgs.hostPlatform.isLinux
+          then {
+            ghc883 = "0jq1a2iyn394s3d2xag45d8ga32gn1i5bn5i63xd1jqllb85pcw3";
+            ghc8102 = "07qm6xcl7irnql45czdc52s7gnd9vyw87mcn4p80s916may4hqrs";
+          }
+          else {
+            ghc883 = "0h2m3dfw0jbqn845y0p5vw8bzvv00bgl2dvi1q6j631v49dl1mgc";
+            ghc884 = "17kwki0apll74rqprzh5silbrbs9f6bq5g7c6jszxfcl5vv49cqb";
+            ghc8102 = "1fkxw40ay5c9arsxbrimlxb8ckiz4b8k09wcbmy78zxly9594fxs";
+          }).${compiler-nix-name};
         modules = [{
           # Tests don't pass for some reason, but this is a somewhat random revision.
           packages.haskell-language-server.doCheck = false;
