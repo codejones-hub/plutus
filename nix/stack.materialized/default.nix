@@ -31,6 +31,7 @@
         "servant-github-webhook" = (((hackage.servant-github-webhook)."0.4.2.0").revisions).default;
         "servant-server" = (((hackage.servant-server)."0.17").revisions).default;
         "servant-subscriber" = (((hackage.servant-subscriber)."0.7.0.0").revisions).default;
+        "servant-swagger" = (((hackage.servant-swagger)."1.1.9").revisions).default;
         "servant-websockets" = (((hackage.servant-websockets)."2.0.0").revisions).default;
         "statistics-linreg" = (((hackage.statistics-linreg)."0.3").revisions).default;
         "time-interval" = (((hackage.time-interval)."0.1.1").revisions).default;
