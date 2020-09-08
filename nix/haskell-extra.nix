@@ -106,7 +106,7 @@
         plan-sha256 = (if pkgs.hostPlatform.isLinux
           then {
             ghc883 = "0jq1a2iyn394s3d2xag45d8ga32gn1i5bn5i63xd1jqllb85pcw3";
-            ghc8102 = "07qm6xcl7irnql45czdc52s7gnd9vyw87mcn4p80s916may4hqrs";
+            ghc8102 = "1j8dgc0cdji368294m8nh6alivxj3snw636vfcry7cxyyj05qkzw";
           }
           else {
             ghc883 = "0h2m3dfw0jbqn845y0p5vw8bzvv00bgl2dvi1q6j631v49dl1mgc";
