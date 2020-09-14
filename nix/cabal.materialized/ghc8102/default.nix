@@ -317,6 +317,7 @@
         "keys".revision = (((hackage."keys")."3.12.3").revisions).default;
         "ansi-terminal".revision = (((hackage."ansi-terminal")."0.10.3").revisions).default;
         "ansi-terminal".flags.example = false;
+        "witherable-class".revision = (((hackage."witherable-class")."0").revisions).default;
         "vector-binary-instances".revision = (((hackage."vector-binary-instances")."0.2.5.1").revisions).default;
         "quickcheck-instances".revision = (((hackage."quickcheck-instances")."0.3.22").revisions).default;
         "quickcheck-instances".flags.bytestring-builder = false;
@@ -398,6 +399,7 @@
         "wai".revision = (((hackage."wai")."3.2.2.1").revisions).default;
         "th-utilities".revision = (((hackage."th-utilities")."0.2.4.0").revisions).default;
         "basement".revision = (((hackage."basement")."0.0.11").revisions).default;
+        "witherable".revision = (((hackage."witherable")."0.3.5").revisions).default;
         "process-extras".revision = (((hackage."process-extras")."0.7.4").revisions).default;
         "setenv".revision = (((hackage."setenv")."0.1.1.3").revisions).default;
         "cryptohash-sha1".revision = (((hackage."cryptohash-sha1")."0.11.100.1").revisions).default;

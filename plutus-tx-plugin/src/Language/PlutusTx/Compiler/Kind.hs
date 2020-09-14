@@ -11,9 +11,6 @@ import           Language.PlutusTx.Compiler.Types
 import           Language.PlutusTx.Compiler.Utils
 
 import qualified GhcPlugins                       as GHC
-#if !MIN_VERSION_ghc (8,10,1)
-import qualified Kind                             as GHC
-#endif
 
 import qualified Language.PlutusCore              as PLC
 

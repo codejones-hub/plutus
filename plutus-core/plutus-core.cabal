@@ -103,6 +103,7 @@ library
         Language.PlutusIR.Compiler
         Language.PlutusIR.Compiler.Names
         Language.PlutusIR.Compiler.Definitions
+        Language.PlutusIR.Error
         Language.PlutusIR.Generators.AST
         Language.PlutusIR.Parser
         Language.PlutusIR.MkPir
@@ -113,8 +114,11 @@ library
         Language.PlutusIR.Transform.Rename
         Language.PlutusIR.Transform.NonStrict
         Language.PlutusIR.Transform.LetFloat
+        Language.PlutusIR.Transform.Inline
+        Language.PlutusIR.TypeCheck
 
         Language.UntypedPlutusCore
+        Language.UntypedPlutusCore.Evaluation.Machine.Cek
 
         PlutusPrelude
         Common
@@ -176,18 +180,24 @@ library
 
         Language.PlutusIR.Analysis.Dependencies
         Language.PlutusIR.Analysis.Usages
-        Language.PlutusIR.Compiler.Error
         Language.PlutusIR.Compiler.Let
         Language.PlutusIR.Compiler.Datatype
         Language.PlutusIR.Compiler.Provenance
         Language.PlutusIR.Compiler.Recursion
         Language.PlutusIR.Compiler.Types
         Language.PlutusIR.Compiler.Lower
+        Language.PlutusIR.Normalize
+        Language.PlutusIR.TypeCheck.Internal
 
         Language.UntypedPlutusCore.Core
         Language.UntypedPlutusCore.Core.Instance
         Language.UntypedPlutusCore.Core.Instance.Eq
+        Language.UntypedPlutusCore.Core.Instance.Pretty
+        Language.UntypedPlutusCore.Core.Instance.Pretty.Classic
+        Language.UntypedPlutusCore.Core.Instance.Pretty.Plc
+        Language.UntypedPlutusCore.Core.Instance.Pretty.Readable
         Language.UntypedPlutusCore.Core.Type
+        Language.UntypedPlutusCore.Subst
 
         Data.Aeson.THReader
         Data.Functor.Foldable.Monadic
@@ -243,6 +253,7 @@ library
         data-default -any,
         data-default-class -any,
         transformers -any,
+        witherable -any,
         Stream -any
 
 executable plutus-core-generate-evaluation-test
@@ -311,6 +322,7 @@ test-suite plutus-ir-test
         OptimizerSpec
         TransformSpec
         ParserSpec
+        TypeSpec
         TestLib
     build-depends:
         base >=4.9 && <5,
@@ -318,6 +330,7 @@ test-suite plutus-ir-test
         filepath -any,
         text -any,
         plutus-core -any,
+        lens -any,
         mtl -any,
         mmorph -any,
         prettyprinter -any,
@@ -333,12 +346,14 @@ test-suite untyped-plutus-core-test
     hs-source-dirs: untyped-plutus-core-test
     other-modules:
         Evaluation.ApplyBuiltinName
+        Evaluation.Machines
     build-depends:
         base >=4.9 && <5,
         bytestring,
         hedgehog -any,
         plutus-core -any,
         mtl -any,
+        prettyprinter -any,
         tasty -any,
         tasty-hedgehog -any
 

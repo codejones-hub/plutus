@@ -82,7 +82,9 @@ allow-newer: Win32-network:base
            , *:template-haskell
            , *:ghc
 
-constraints: nonempty-containers <0.3.4.0
+constraints:
+  -- cardano-prelude currently redefines some instances that appear in 0.3.4
+  nonempty-containers < 0.3.4
 
 package ouroboros-network
   tests: False

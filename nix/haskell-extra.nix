@@ -87,8 +87,8 @@
           name = "haskell-language-server";
           owner = "haskell";
           repo = "haskell-language-server";
-          rev = "0.3.0";
-          sha256 = "0jzj1a15wiwd4wa4wg8x0bpb57g4xrs99yp24623cjcvbarmwjgl";
+          rev = "0.4.0";
+          sha256 = "0b94l6bywa6jk20y2cswyq5ks4g515895k2apvr1mdfkfhngdb7b";
           fetchSubmodules = true;
         };
         # Needed for GHC 8.10
@@ -102,6 +102,8 @@
           "https://github.com/bubba/brittany.git"."c59655f10d5ad295c2481537fc8abf0a297d9d1c" = "1rkk09f8750qykrmkqfqbh44dbx1p8aq1caznxxlw8zqfvx39cxl";
         };
         inherit compiler-nix-name index-state checkMaterialization;
+        # Plan issues with the benchmarks, can try removing later
+        configureArgs = "--disable-benchmarks";
         # Invalidate and update if you change the version
         plan-sha256 = (if pkgs.hostPlatform.isLinux
           then {
@@ -111,7 +113,7 @@
           else {
             ghc883 = "0h2m3dfw0jbqn845y0p5vw8bzvv00bgl2dvi1q6j631v49dl1mgc";
             ghc884 = "17kwki0apll74rqprzh5silbrbs9f6bq5g7c6jszxfcl5vv49cqb";
-            ghc8102 = "1fkxw40ay5c9arsxbrimlxb8ckiz4b8k09wcbmy78zxly9594fxs";
+            ghc8102 = "0kw4zb3kllj70kfr3mzpdnchd72lhac0s8mvkgng97gyk99826az";
           }).${compiler-nix-name};
         modules = [{
           # Tests don't pass for some reason, but this is a somewhat random revision.

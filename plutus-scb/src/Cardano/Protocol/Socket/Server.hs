@@ -32,7 +32,7 @@ import           Ouroboros.Network.Protocol.ChainSync.Server         (ChainSyncS
                                                                       ServerStIntersect (..), ServerStNext (..))
 import qualified Ouroboros.Network.Protocol.ChainSync.Server         as ChainSync
 import qualified Ouroboros.Network.Protocol.LocalTxSubmission.Server as TxSubmission
-import           Ouroboros.Network.Protocol.LocalTxSubmission.Type   (SubmitResult (..))
+import qualified Ouroboros.Network.Protocol.LocalTxSubmission.Type   as TxSubmission
 
 import           Cardano.Slotting.Slot                               (SlotNo (..), WithOrigin (..))
 import           Ouroboros.Network.Block                             (Point (..), pointSlot)
@@ -428,6 +428,6 @@ txSubmissionServer state = txSubmissionState
           TxSubmission.recvMsgSubmitTx =
             \tx -> do
                 modifyMVar_ state (pure . over Chain.txPool (Chain.addTxToPool tx))
-                return (SubmitSuccess, txSubmissionState)
+                return (TxSubmission.SubmitSuccess, txSubmissionState)
         , TxSubmission.recvMsgDone     = ()
         }

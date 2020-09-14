@@ -31,6 +31,7 @@ import qualified Ouroboros.Network.Protocol.ChainSync.Codec         as ChainSync
 import qualified Ouroboros.Network.Protocol.ChainSync.Type          as ChainSync
 import qualified Ouroboros.Network.Protocol.LocalTxSubmission.Codec as TxSubmission
 import qualified Ouroboros.Network.Protocol.LocalTxSubmission.Type  as TxSubmission
+import           Ouroboros.Network.Util.ShowProxy
 
 import           Ledger                                             (Block, Tx (..), TxId (..))
 import           LedgerBytes                                        (LedgerBytes (..))
@@ -83,7 +84,7 @@ nodeApplication
   -> RunMiniProtocol appType bytes m a b
   -> OuroborosApplication appType addr bytes m a b
 nodeApplication chainSync txSubmission =
-    OuroborosApplication (\_ _ -> [
+    OuroborosApplication $ \_connectionId _shouldStopSTM -> [
       MiniProtocol {
         miniProtocolNum = MiniProtocolNum 2,
         miniProtocolLimits = maximumMiniProtocolLimits,
@@ -94,7 +95,7 @@ nodeApplication chainSync txSubmission =
         miniProtocolLimits = maximumMiniProtocolLimits,
         miniProtocolRun = txSubmission
       }
-    ])
+    ]
 
 type Offset = Integer
 
