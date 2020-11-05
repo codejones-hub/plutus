@@ -68,7 +68,7 @@ yarn2nix-moretea.mkYarnPackage {
 
   buildInputs = [ cacert ];
 
-  nativeBuildInputs = [ git easyPS.purs easyPS.spago easyPS.psc-package nodePackages_10_x.node-gyp nodejs-10_x python2 ];
+  nativeBuildInputs = [ git easyPS.purs easyPS.spago easyPS.psc-package nodePackages.node-gyp nodejs python2 ];
 
   buildPhase = ''
     export HOME=$NIX_BUILD_TOP

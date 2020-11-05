@@ -71,7 +71,7 @@ let
   updateMetadataSamples = pkgs.callPackage ./update-metadata-samples { };
   updateClientDeps = pkgs.callPackage ./update-client-deps {
     inherit purty;
-    inherit (pkgs.nodePackages_10_x) node-gyp;
+    inherit (pkgs.nodePackages) node-gyp;
     inherit (pkgs.yarn2nix-moretea) yarn2nix;
     inherit (easyPS) purs psc-package spago spago2nix;
     inherit (pkgs.stdenv) isDarwin;
