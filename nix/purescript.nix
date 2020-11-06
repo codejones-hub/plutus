@@ -53,15 +53,15 @@ in
 yarn2nix-moretea.mkYarnPackage {
   inherit name packageJSON yarnLock yarnNix checkPhase;
   src = cleanSrcs;
-  nodejs = nodejs-10_x;
+  nodejs = nodejs;
 
   pkgConfig = {
     "libxmljs" = {
-      buildInputs = [ nodejs-10_x python2 ];
+      buildInputs = [ nodejs python2 ];
       postInstall = ''
         # To deal with some OSX setups we need to use the version of node-gyp that's patched in
         # https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/web/nodejs/nodejs.nix#L106
-        ${nodejs-10_x}/lib/node_modules/npm/bin/node-gyp-bin/node-gyp --tarball ${nodejs-headers} rebuild
+        ${nodejs}/lib/node_modules/npm/bin/node-gyp-bin/node-gyp --tarball ${nodejs-headers} rebuild
       '';
     };
   };

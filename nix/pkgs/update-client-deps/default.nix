@@ -8,7 +8,7 @@
 , python
 , gnumake
 , gnused
-, nodejs-10_x
+, nodejs
 , node-gyp
 , yarn
 , yarn2nix
@@ -30,7 +30,7 @@ lib.meta.addMetaAttrs { platforms = lib.platforms.linux; } (writeScriptBin "upda
     python
     gnumake
     gnused
-    nodejs-10_x
+    nodejs
     node-gyp
     yarn
     # yarn2nix won't seem to build on hydra, see
