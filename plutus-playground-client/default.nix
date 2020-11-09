@@ -1,50 +1,28 @@
-{ pkgs, set-git-rev, haskell, docs, easyPS, webCommon, nodejs-headers }:
+{ pkgs, set-git-rev, haskell, docs, buildPlayground }:
 
 let
+
   playground-exe = set-git-rev haskell.packages.plutus-playground-server.components.exes.plutus-playground-server;
 
-  server-invoker =
-    let
-      # the playground uses ghc at runtime so it needs one packaged up with the dependencies it needs in one place
-      runtimeGhc = haskell.packages.ghcWithPackages (ps: [
-        ps.playground-common
-        ps.plutus-playground-server
-        ps.plutus-use-cases
-      ]);
-    in
-    pkgs.runCommand "plutus-server-invoker" { buildInputs = [ pkgs.makeWrapper ]; } ''
-      # We need to provide the ghc interpreter with the location of the ghc lib dir and the package db
-      mkdir -p $out/bin
-      ln -s ${playground-exe}/bin/plutus-playground-server $out/bin/plutus-playground
-      wrapProgram $out/bin/plutus-playground \
-        --set GHC_LIB_DIR "${runtimeGhc}/lib/ghc-${runtimeGhc.version}" \
-        --set GHC_BIN_DIR "${runtimeGhc}/bin" \
-        --set GHC_PACKAGE_PATH "${runtimeGhc}/lib/ghc-${runtimeGhc.version}/package.conf.d" \
-        --set GHC_RTS "-M2G"
-    '';
+  playground-exe-name = "plutus-playground-server";
 
-  generated-purescript = pkgs.runCommand "plutus-playground-purescript" { } ''
-    mkdir $out
-    ${server-invoker}/bin/plutus-playground psgenerator $out
-  '';
+  runtimeGhc = haskell.packages.ghcWithPackages (ps: [
+    ps.playground-common
+    ps.plutus-playground-server
+    ps.plutus-use-cases
+  ]);
 
+  client = buildPlayground {
+    srcDir = ./.;
+    name = "plutus-playground-client";
+    pscPackages = pkgs.callPackage ./packages.nix { };
+    spagoPackages = pkgs.callPackage ./spago-packages.nix { };
+    inherit runtimeGhc;
+    inherit playground-exe playground-exe-name;
+  };
 in
 {
-
-  client = pkgs.callPackage ../nix/purescript.nix rec {
-    inherit nodejs-headers;
-    inherit easyPS webCommon;
-    psSrc = generated-purescript;
-    src = ./.;
-    packageJSON = ./package.json;
-    yarnLock = ./yarn.lock;
-    yarnNix = ./yarn.nix;
-    additionalPurescriptSources = [ "../web-common/**/*.purs" ];
-    packages = pkgs.callPackage ./packages.nix { };
-    spagoPackages = pkgs.callPackage ./spago-packages.nix { };
-    name = (pkgs.lib.importJSON packageJSON).name;
-    checkPhase = ''node -e 'require("./output/Test.Main").main()' '';
-  };
+  inherit client;
   tutorial = docs.site;
   haddock = docs.plutus-haddock-combined;
 }

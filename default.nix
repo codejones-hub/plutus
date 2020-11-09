@@ -30,6 +30,20 @@ let
   inherit (pkgs) lib haskell-nix;
   inherit (pkgsLocal) haskell iohkNix git-rev set-git-rev agdaPackages;
   inherit (pkgsLocal) easyPS sphinxcontrib-haddock nodejs-headers;
+
+  webCommon = import ./web-common { inherit lib; };
+
+  buildPursProject = pkgs.callPackage ./nix/purescript.nix {
+    inherit easyPS webCommon nodejs-headers;
+    nodejs = pkgs.nodejs-10_x;
+    nodePackages = pkgs.nodePackages_10_x;
+  };
+
+  buildPlayground = pkgs.callPackage ./nix/lib/build-playground.nix {
+    inherit nodejs-headers easyPS webCommon;
+    inherit buildPursProject;
+  };
+
 in
 rec {
   inherit pkgs pkgsLocal pkgsMusl;
@@ -42,14 +56,13 @@ rec {
     plutus-atomic-swap
     plutus-pay-to-wallet;
 
-  webCommon = import ./web-common { inherit lib; };
 
   plutus-playground = pkgs.callPackage ./plutus-playground-client {
-    inherit set-git-rev haskell docs easyPS nodejs-headers webCommon;
+    inherit set-git-rev haskell docs buildPlayground;
   };
 
   marlowe-playground = pkgs.callPackage ./marlowe-playground-client {
-    inherit set-git-rev haskell docs easyPS nodejs-headers webCommon;
+    inherit set-git-rev haskell docs buildPlayground;
   };
 
   marlowe-symbolic-lambda = pkgsMusl.callPackage ./marlowe-symbolic/lambda.nix {

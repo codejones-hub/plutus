@@ -1,23 +1,16 @@
 { stdenv
-, pkgs
+, lib
 , fetchurl
-, psSrc
 , easyPS
 , yarn2nix-moretea
+, nodejs
+, nodePackages
 , nodejs-headers
-, src
-, additionalPurescriptSources ? [ ]
-, packages
-, spagoPackages
-, name
-, packageJSON
-, yarnLock
-, yarnNix
 , webCommon
-, checkPhase ? "yarn --offline test"
+, cacert
+, git
+, python2
 }:
-
-with pkgs;
 
 let
 
@@ -31,17 +24,21 @@ let
     sha256 = "1p5gz1694vxar81hbrrbdmmr2wjw3ksfvfgwh0kzzgjkc2dpk5pa";
   };
 
-  packagesJson = "${src}/packages.json";
 
-  cleanSrcs = pkgs.lib.cleanSourceWith {
-    filter = pkgs.lib.cleanSourceFilter;
-    src = lib.cleanSourceWith {
-      filter = (path: type: !(pkgs.lib.elem (baseNameOf path)
-        [ ".spago" ".spago2nix" "generated" "generated-docs" "output" "dist" "node_modules" ".psci_modules" ".vscode" ]));
-      inherit src;
-    };
-  };
+in
 
+{ src
+, psSrc
+, additionalPurescriptSources ? [ ]
+, packages
+, spagoPackages
+, name
+, packageJSON
+, yarnLock
+, yarnNix
+, checkPhase ? "yarn --offline test"
+}:
+let
   purescriptSources = [
     "src/**/*.purs"
     "test/**/*.purs"
@@ -49,26 +46,36 @@ let
     ".spago/*/*/src/**/*.purs"
   ] ++ additionalPurescriptSources;
 
+  packagesJson = "${src}/packages.json";
+
+  cleanSrcs = lib.cleanSourceWith {
+    filter = lib.cleanSourceFilter;
+    src = lib.cleanSourceWith {
+      filter = (path: type: !(lib.elem (baseNameOf path)
+        [ ".spago" ".spago2nix" "generated" "generated-docs" "output" "dist" "node_modules" ".psci_modules" ".vscode" ]));
+      inherit src;
+    };
+  };
+
 in
 yarn2nix-moretea.mkYarnPackage {
-  inherit name packageJSON yarnLock yarnNix checkPhase;
+  inherit name packageJSON yarnLock yarnNix checkPhase nodejs;
   src = cleanSrcs;
-  nodejs = nodejs-10_x;
 
   pkgConfig = {
     "libxmljs" = {
-      buildInputs = [ nodejs-10_x python2 ];
+      buildInputs = [ nodejs python2 ];
       postInstall = ''
         # To deal with some OSX setups we need to use the version of node-gyp that's patched in
         # https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/web/nodejs/nodejs.nix#L106
-        ${nodejs-10_x}/lib/node_modules/npm/bin/node-gyp-bin/node-gyp --tarball ${nodejs-headers} rebuild
+        ${nodejs}/lib/node_modules/npm/bin/node-gyp-bin/node-gyp --tarball ${nodejs-headers} rebuild
       '';
     };
   };
 
   buildInputs = [ cacert ];
 
-  nativeBuildInputs = [ git easyPS.purs easyPS.spago easyPS.psc-package nodePackages_10_x.node-gyp nodejs-10_x python2 ];
+  nativeBuildInputs = [ git easyPS.purs easyPS.spago easyPS.psc-package nodePackages.node-gyp nodejs python2 ];
 
   buildPhase = ''
     export HOME=$NIX_BUILD_TOP
@@ -113,5 +120,5 @@ yarn2nix-moretea.mkYarnPackage {
   '';
 
   # A bunch of this stuff doesn't seem to work on darwin
-  meta.platforms = pkgs.lib.platforms.linux;
+  meta.platforms = lib.platforms.linux;
 }
