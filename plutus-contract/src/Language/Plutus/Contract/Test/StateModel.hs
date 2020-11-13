@@ -50,16 +50,16 @@ instance Show (Action state) => Show (Script state) where
 instance StateModel state => Arbitrary (Script state) where
   arbitrary = Script <$> arbActions initialState 1
     where
-      arbActions :: StateModel state => state -> Int -> Gen [(Step, Action state)]
+      arbActions :: state -> Int -> Gen [(Step, Action state)]
       arbActions s step = sized $ \n ->
         let w = n `div` 2 + 1 in
           frequency [(1, return []),
                      (w, do mact <- arbitraryAction s `suchThatMaybe` precondition s
-		            case mact of
-			      Just act ->
+                            case mact of
+                              Just act ->
                                 ((Step step,act):) <$> arbActions (nextState s act (Step step)) (step+1)
-		              Nothing ->
-			        return [])]
+                              Nothing ->
+                                return [])]
 
   shrink (Script as) =
     map (Script . prune . map fst) (shrinkList shrinker (withStates as))
@@ -81,7 +81,7 @@ withStates = loop initialState
     loop s ((step,act):as) =
       ((step,act),s):loop (nextState s act step) as
 
-runScript :: (StateModel state, Monad (ActionMonad state), Show (Action state), Show (Ret state)) =>
+runScript :: (StateModel state, Show (Ret state)) =>
                 Script state -> PropertyM (ActionMonad state) [(Step, Ret state)]
 runScript (Script script) = loop initialState [] script
   where
