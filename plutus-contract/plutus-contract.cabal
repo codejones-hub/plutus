@@ -122,11 +122,13 @@ library
         cryptonite >=0.25,
         fingertree -any,
         uuid -any,
-        aeson-pretty -any
+        aeson-pretty -any,
+        QuickCheck -any
 
     if !(impl(ghcjs) || os(ghcjs))
         exposed-modules:
             Language.Plutus.Contract.Test
+            Language.Plutus.Contract.Test.StateModel
         build-depends:
             tasty -any,
             tasty-hunit -any,
