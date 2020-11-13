@@ -32,13 +32,14 @@ let
   # additional haskell packages from ./nix/pkgs/haskell-extra
   #
   exeFromExtras = x: haskell.extraPackages."${x}".components.exes."${x}";
-  purty = exeFromExtras "purty";
   cabal-install = haskell.extraPackages.cabal-install.components.exes.cabal;
   stylish-haskell = exeFromExtras "stylish-haskell";
   hlint = exeFromExtras "hlint";
   haskell-language-server = exeFromExtras "haskell-language-server";
   hie-bios = exeFromExtras "hie-bios";
   haskellNixAgda = haskell.extraPackages.Agda;
+
+  purty = pkgs.callPackage ./purty { };
 
   # The Agda builder needs a derivation with:
   # - The 'agda' executable
