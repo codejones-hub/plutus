@@ -29,7 +29,7 @@ module Language.PlutusTx.Coordination.Contracts.GameStateMachine(
     , monetaryPolicy
     , LockArgs(..)
     , GuessArgs(..)
-    , GameStateMachineSchema
+    , GameStateMachineSchema, GameError
     , token
     ) where
 
