@@ -4,7 +4,7 @@ module Simulation
   ) where
 
 import Types
-import Bootstrap (alertDanger_, badge, badgePrimary, btn, btnDanger, btnDefault, btnGroup, btnGroupSmall, btnGroup_, btnInfo, btnPrimary, btnSecondary, btnSmall, btnSuccess, btnWarning, card, cardBody_, col, colFormLabel, col_, formControl, formGroup_, formRow_, ellipsis, pullRight, responsiveThird, row, row_)
+import Bootstrap (alertDanger_, badge, badgePrimary, btn, btnDanger, btnDefault, btnGroup, btnGroupSmall, btnGroup_, btnInfo, btnPrimary, btnSecondary, btnSmall, btnSuccess, btnWarning, card, cardBody_, col, colFormLabel, col_, formControl, formGroup_, formRow_, pullRight, responsiveThird, row, row_)
 import Bootstrap as Bootstrap
 import Cursor (Cursor, current)
 import Cursor as Cursor
