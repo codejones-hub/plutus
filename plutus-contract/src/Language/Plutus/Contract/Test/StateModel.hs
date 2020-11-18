@@ -82,10 +82,10 @@ withStates = loop initialState
       ((step,act),s):loop (nextState s act step) as
 
 runScript :: (StateModel state, Show (Ret state)) =>
-                Script state -> PropertyM (ActionMonad state) [(Step, Ret state)]
+                Script state -> PropertyM (ActionMonad state) (state, [(Step, Ret state)])
 runScript (Script script) = loop initialState [] script
   where
-    loop _s steps [] = return (reverse steps)
+    loop s steps [] = return (s, reverse steps)
     loop s steps ((n,a):as) = do
       pre $ precondition s a
       let deps = map (getStep steps) (needs a)
