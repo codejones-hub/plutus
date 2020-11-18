@@ -2,12 +2,25 @@
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE MonoLocalBinds       #-}
 {-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Spec.GameStateMachine where
 
+import           Control.Monad
+import           Control.Monad.Freer.Error
+import qualified Control.Monad.Freer.State                                 as Eff
+import           Control.Monad.Writer
+import           Data.Map                                                  (Map)
+import qualified Data.Map                                                  as Map
+import           Data.Row                                                  (Forall)
+import qualified Data.Text                                                 as Text
+import           Data.Text.Prettyprint.Doc
+import           Test.QuickCheck
+import           Test.QuickCheck.Monadic
 import           Test.Tasty
 import qualified Test.Tasty.HUnit                                          as HUnit
 
@@ -15,6 +28,7 @@ import qualified Spec.Lib                                                  as Li
 
 import qualified Language.PlutusTx                                         as PlutusTx
 
+import           Language.Plutus.Contract.Schema                           (Event (..), Handlers (..), Input, Output)
 import           Language.Plutus.Contract.Test
 import           Language.Plutus.Contract.Test.StateModel
 import           Language.PlutusTx.Coordination.Contracts.GameStateMachine as G
@@ -22,8 +36,6 @@ import           Language.PlutusTx.Lattice
 import qualified Ledger.Ada                                                as Ada
 import qualified Ledger.Typed.Scripts                                      as Scripts
 import           Ledger.Value                                              (Value)
-import           Test.QuickCheck
-import           Test.QuickCheck.Monadic
 import qualified Wallet.Emulator                                           as EM
 
 -- * QuickCheck model
@@ -36,11 +48,31 @@ runTr tr =
         (Right (p, _), _) -> p
         (Left err, _s)    -> whenFail (print err) False
 
+getEmulatorState :: ContractTrace s e a EM.EmulatorState
+getEmulatorState = Eff.get
+
+getContractTraceState :: ContractTrace s e a (ContractTraceState s (TraceError e) a)
+getContractTraceState = Eff.get
+
+assertPredicate :: forall s e a.
+    ( Show e
+    , Forall (Input s) Pretty
+    , Forall (Output s) Pretty
+    ) => TracePredicate s (TraceError e) a -> PropertyM (ContractTrace s e a) ()
+assertPredicate predicate = do
+    em <- run getEmulatorState
+    st <- run getContractTraceState
+    let r = ContractTraceResult em st
+        (result, testOutputs) = runWriter $ unPredF predicate (defaultDist, r)  -- TODO: remember dist used by runTr?
+    monitor (counterexample $ Text.unpack $ renderTraceContext testOutputs st)
+    assert result
+
 data GameModel = GameModel
     { gameValue     :: Integer
     , keeper        :: Maybe EM.Wallet
     , hasToken      :: Maybe EM.Wallet
-    , currentSecret :: String }
+    , currentSecret :: String
+    , balances      :: Map EM.Wallet Integer }
     deriving (Show)
 
 instance StateModel GameModel where
@@ -59,6 +91,7 @@ instance StateModel GameModel where
         , hasToken      = Nothing
         , keeper        = Nothing
         , currentSecret = ""
+        , balances      = Map.empty
         }
 
     precondition s (Lock _ _ _)        = Nothing == hasToken s
@@ -70,8 +103,17 @@ instance StateModel GameModel where
                                              , w /= w'
                                              , gameValue s > 0 ] -- stops the test
 
-    nextState s (Lock w secret val)    _ = s { hasToken = Just w, keeper = Just w, currentSecret = secret, gameValue = val }
-    nextState s (Guess w _old new val) _ = s { keeper = Just w, currentSecret = new, gameValue = gameValue s - val }
+    nextState s (Lock w secret val)    _ = s { hasToken      = Just w
+                                             , keeper        = Just w
+                                             , currentSecret = secret
+                                             , gameValue     = val
+                                             , balances      = Map.singleton w (-val) }
+    nextState s (Guess w _old new val) _ = s { keeper        = Just w
+                                             , currentSecret = new
+                                             , gameValue     = gameValue s - val
+                                             , balances      = Map.insert w val $ balances s    -- <== BUG
+                                             -- , balances      = Map.insertWith w val $ balances s
+                                             }
     nextState s (PassToken _ w)        _ = s { hasToken = Just w }
 
     arbitraryAction s = oneof $
@@ -95,6 +137,14 @@ instance StateModel GameModel where
         addBlocks 1
         handleBlockchainEvents w'
 
+finalPredicate :: GameModel -> TracePredicate GameStateMachineSchema (TraceError G.GameError) ()
+finalPredicate s = Map.foldrWithKey change top $ balances s
+    where
+        change w val rest = walletFundsChange w (Ada.lovelaceValueOf val <> gameTok) /\ rest
+            where
+                gameTok | Just w == hasToken s = gameTokenVal
+                        | otherwise            = mempty
+
 genWallet :: Gen EM.Wallet
 genWallet = elements [w1, w2, w3]
 
@@ -105,7 +155,9 @@ genValue :: Gen Integer
 genValue = getPositive <$> arbitrary
 
 prop_Game :: Script GameModel -> Property
-prop_Game s = monadic runTr $ () <$ runScript s
+prop_Game s = monadic runTr $ do
+    (st, _) <- runScript s
+    assertPredicate (finalPredicate st)
 
 -- * Unit tests
 

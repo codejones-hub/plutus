@@ -124,6 +124,7 @@ test-suite plutus-use-cases-test
         aeson -any,
         bytestring -any,
         containers -any,
+        freer-simple -any,
         hedgehog -any,
         prettyprinter -any,
         tasty -any,
