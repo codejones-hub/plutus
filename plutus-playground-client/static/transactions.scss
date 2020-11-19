@@ -35,7 +35,7 @@ table.balance-map {
     .balance {
         position: relative;
         border: solid 1px $section-border;
-        background-color: $sub-header;
+        background-color: $off-white;
         padding: 3px 8px;
         min-width: 5rem;
 
@@ -98,7 +98,7 @@ table.balance-map {
 .chain {
     .balances-table {
         thead {
-            background-color: $sub-header;
+            background-color: $off-white;
             border-bottom: none;
         }
     }

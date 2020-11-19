@@ -1,28 +1,6 @@
 @import url(https://fonts.googleapis.com/css?family=Open+Sans);
 
-$body-bg: #F8F8F8;
-$main-header: #E7E7E9;
 @import 'variables.scss';
-
-$link-text: #3677f7;
-
-$headings-color: black;
-$input-color: $dark;
-$input-border-color: $purple05;
-$badge: $headings-color;
-$badge-background: $white;
-$btn-group-separator: $gray-700;
-$nav-link: $headings-color;
-$nav-link-active-border: solid 1px $nav-link;
-$nav-link-hover: $headings-color;
-$nav-link-border-radius: 4px;
-$clipboard-button-color: $white;
-
-$chart-bg: $sub-header;
-$chart-tooltip: $headings-color;
-$chart-title: $headings-color;
-$chart-label: $headings-color;
-$chart-grid-stroke: $section-border;
 
 @import '../../web-common/static/common.scss';
 @import '../../web-common/static/chain.scss';
@@ -33,9 +11,10 @@ $chart-grid-stroke: $section-border;
 @import 'editor.scss';
 
 body {
-    font-family: 'Open Sans', sans-serif;
-    background: $body-bg;
-    background: $body-bg;
+    font-family: 'Open Sans', arial, sans-serif;
+    font-size: calc(8px + 0.35vw);
+    line-height: calc(8px + 1.05vw);
+    color: $off-black;
 }
 
 .tab-help {
@@ -67,36 +46,73 @@ h1, h2, h3, h4, h5, h6 {
     }
 }
 
-#main-header {
-    font-size: 14px;
-    line-height: 16px;
-    color: $headings-color;
-    background: $main-header;
-    z-index: 10;
-    padding: 15px 15px;
+.frame {
+    background: $frame-bg;
 }
 
-#sub-header {
+.header,
+.footer {
+    display: flex;
+    background: $gray;
+    padding: .5rem 2rem;
+    height: 54px;
+
+    div {
+        display: flex;
+        flex: 1;
+        justify-content: center;
+        align-items: center;
+
+        &:first-child {
+            justify-content: flex-start;
+        }
+
+        &:last-child {
+            justify-content: flex-end;
+        }
+    }
+
+    a,
+    a:hover,
+    a:visited {
+        color: inherit;
+    }
+
+    a {
+        margin: .5rem;
+        text-decoration: none;
+
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+}
+
+.header {
+    z-index: 10;
+
+    .logo {
+        font-size: 1.4em;
+        text-transform: uppercase;
+
+        img {
+            margin-right: 1.5rem;
+        }
+    }
+}
+
+.sub-header {
     font-size: 13px;
     line-height: 15px;
-    background-color: $sub-header;
+    background-color: $sub-header-bg;
     z-index: 5;
     margin: 0 15px 15px 15px;
     border-bottom: 1px solid $section-border;
     padding: 0 12px;
 }
 
-.navbar-brand {
-    font-size: 19px;
-    line-height: 21px;
-
-    img {
-        margin: 0 22px 0 7px;
-    }
-}
-
-#main-header,
-#sub-header {
+.header,
+.sub-header {
     .btn-link,
     .nav-link {
         color: #333333;
@@ -110,8 +126,9 @@ h1, h2, h3, h4, h5, h6 {
     }
 }
 
-#main-content {
+.content {
     min-height: 80vh;
+    background: $content-bg;
 
     .btn-link {
         text-decoration: none;
@@ -142,7 +159,7 @@ h1, h2, h3, h4, h5, h6 {
     }
 
     .btn-default {
-        @include main-button($headings-color, $main-header);
+        @include main-button($headings-color, $header-bg);
     }
 
     .btn {
@@ -191,20 +208,11 @@ a,
 }
 
 .btn-secondary {
-    background-color: $sub-header;
+    background-color: $off-white;
 }
 
-footer {
-    border-top: solid 1px black;
-    color: #333333;
-    background: $footer;
-    margin: 15px 0 0 0;
-
-    a,
-    a:hover,
-    a:visited {
-        color: #333333;
-    }
+.footer {
+    margin-top: 1rem;
 }
 
 .simulation-nav-item-close {
