@@ -6,9 +6,7 @@
 , rev ? null
 , sources
 }:
-
 let
-
   iohkNix =
     import sources.iohk-nix {
       inherit system config;
@@ -23,16 +21,13 @@ let
   # { index-state, project, projectPackages, packages, muslProject, muslPackages, extraPackages }
   haskell = pkgs.callPackage ./haskell {
     inherit plutusMusl;
-    inherit (pkgs) stdenv fetchFromGitHub fetchFromGitLab haskell-nix buildPackages nix-gitignore z3 R rPackages;
     inherit agdaWithStdlib checkMaterialization;
   };
-
 
   #
   # additional haskell packages from ./nix/pkgs/haskell-extra
   #
   exeFromExtras = x: haskell.extraPackages."${x}".components.exes."${x}";
-  purty = exeFromExtras "purty";
   cabal-install = haskell.extraPackages.cabal-install.components.exes.cabal;
   stylish-haskell = exeFromExtras "stylish-haskell";
   hlint = exeFromExtras "hlint";
@@ -40,10 +35,14 @@ let
   hie-bios = exeFromExtras "hie-bios";
   haskellNixAgda = haskell.extraPackages.Agda;
 
+  # We want to keep control of which version of Agda we use, so we supply our own and override
+  # the one from nixpkgs.
+  #
   # The Agda builder needs a derivation with:
   # - The 'agda' executable
   # - The 'agda-mode' executable
   # - A 'version' attribute
+  #
   # So we stitch one together here. It doesn't *seem* to need the library interface files,
   # but it seems like they should be there so I added them too.
   agdaPackages =
@@ -57,7 +56,7 @@ let
         ];
       }) // { version = haskellNixAgda.identifier.version; };
     in
-    pkgs.callPackage ./../lib/agda { Agda = frankenAgda; };
+    pkgs.agdaPackages.override { Agda = frankenAgda; };
 
   agdaWithStdlib = agdaPackages.agda.withPackages [ agdaPackages.standard-library ];
 
@@ -69,12 +68,7 @@ let
   updateMaterialized = haskell.project.stack-nix.passthru.updateMaterialized;
   updateMetadataSamples = pkgs.callPackage ./update-metadata-samples { };
   updateClientDeps = pkgs.callPackage ./update-client-deps {
-    inherit purty;
-    inherit (pkgs.nodePackages_10_x) node-gyp;
-    inherit (pkgs.yarn2nix-moretea) yarn2nix;
     inherit (easyPS) purs psc-package spago spago2nix;
-    inherit (pkgs.stdenv) isDarwin;
-    inherit (pkgs) clang;
   };
 
   #
@@ -83,7 +77,7 @@ let
   sphinx-markdown-tables = pkgs.python3Packages.callPackage ./sphinx-markdown-tables { };
   sphinxemoji = pkgs.python3Packages.callPackage ./sphinxemoji { };
 
-  # `set-git-rev` is a function that can be called on a haskellPackages 
+  # `set-git-rev` is a function that can be called on a haskellPackages
   # package to inject the git revision post-compile
   set-git-rev = pkgs.callPackage ./set-git-rev {
     inherit (haskell.packages) ghcWithPackages;
@@ -113,6 +107,10 @@ let
   # mean that e.g. we can't build the client dep updating
   # script on Darwin.
   easyPS = pkgs.callPackage (sources.easy-purescript-nix) { };
+  # We pull out some packages from easyPS that are a pain to get otherwise.
+  # In particular, we used to build purty ourselves, but now its build is a nightmare.
+  # This does mean we can't as easily control the version we get, though.
+  inherit (easyPS) purty purs spago;
 
   # sphinx haddock support
   sphinxcontrib-haddock = pkgs.callPackage (sources.sphinxcontrib-haddock) { pythonPackages = pkgs.python3Packages; };
@@ -150,7 +148,8 @@ in
 {
   inherit sphinx-markdown-tables sphinxemoji sphinxcontrib-haddock;
   inherit nix-pre-commit-hooks nodejs-headers;
-  inherit haskell agdaPackages cabal-install stylish-haskell hlint haskell-language-server hie-bios purty;
+  inherit haskell agdaPackages cabal-install stylish-haskell hlint haskell-language-server hie-bios;
+  inherit purty purs spago;
   inherit fixPurty fixStylishHaskell updateMaterialized updateMetadataSamples updateClientDeps;
   inherit iohkNix set-git-rev web-ghc thorp;
   inherit easyPS plutus-haddock-combined;

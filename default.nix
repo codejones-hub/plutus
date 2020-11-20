@@ -19,7 +19,6 @@
   # false, generally, since it does more work, but we set it to true in the CI
 , checkMaterialization ? false
 }:
-
 let
   inherit (packages) pkgs plutus plutusMusl;
   inherit (pkgs) lib haskell-nix;
@@ -39,23 +38,23 @@ rec {
 
   webCommon = import ./web-common { inherit lib; };
 
-  plutus-playground = {
+  plutus-playground = pkgs.recurseIntoAttrs rec {
     tutorial = docs.site;
     haddock = plutus.plutus-haddock-combined;
 
-    client = pkgs.callPackage ./plutus-playground-client {
+    inherit (pkgs.callPackage ./plutus-playground-client {
       inherit (plutus.lib) buildPursPackage;
       inherit set-git-rev haskell webCommon;
-    };
+    }) client server-invoker generated-purescript;
   };
 
-  marlowe-playground = {
+  marlowe-playground = pkgs.recurseIntoAttrs rec {
     tutorial = docs.marlowe-tutorial;
 
-    client = pkgs.callPackage ./marlowe-playground-client {
+    inherit (pkgs.callPackage ./marlowe-playground-client {
       inherit (plutus.lib) buildPursPackage;
       inherit set-git-rev haskell webCommon;
-    };
+    }) client server-invoker generated-purescript;
   };
 
   marlowe-symbolic-lambda = plutusMusl.callPackage ./marlowe-symbolic/lambda.nix {
@@ -76,7 +75,8 @@ rec {
   };
 
   tests = import ./nix/tests/default.nix {
-    inherit pkgs iohkNix haskell;
+    inherit pkgs iohkNix;
+    inherit (plutus) stylish-haskell purty;
     src = ./.;
   };
 

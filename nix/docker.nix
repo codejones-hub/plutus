@@ -9,7 +9,6 @@
 , marlowe-playground
 , haskell
 }:
-
 let defaultPlaygroundConfig = writeTextFile {
   name = "playground.yaml";
   destination = "/etc/playground.yaml";
@@ -18,7 +17,8 @@ let defaultPlaygroundConfig = writeTextFile {
       github-client-id: ""
       github-client-secret: ""
       jwt-signature: ""
-      redirect-url: "localhost:8080"
+      frontend-url: "localhost:8009"
+      github-cb-path: "/#/gh-oauth-cb"
   '';
 };
 in
@@ -26,7 +26,7 @@ in
   plutusPlaygroundImage =
     let
       client = plutus-playground.client;
-      server-invoker = client.passthru.server-invoker;
+      server-invoker = plutus-playground.server-invoker;
     in
     dockerTools.buildLayeredImage {
       name = "plutus-playgrounds";
@@ -38,7 +38,7 @@ in
   marlowePlaygroundImage =
     let
       client = marlowe-playground.client;
-      server-invoker = client.passthru.server-invoker;
+      server-invoker = marlowe-playground.server-invoker;
     in
     dockerTools.buildLayeredImage {
       name = "marlowe-playground";

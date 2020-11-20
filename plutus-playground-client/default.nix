@@ -1,5 +1,4 @@
 { pkgs, set-git-rev, haskell, webCommon, buildPursPackage }:
-
 let
   playground-exe = set-git-rev haskell.packages.plutus-playground-server.components.exes.plutus-playground-server;
 
@@ -28,15 +27,17 @@ let
     ${server-invoker}/bin/plutus-playground psgenerator $out
   '';
 
+  client = buildPursPackage {
+    inherit webCommon;
+    src = ./.;
+    name = "plutus-playground-client";
+    psSrc = generated-purescript;
+    additionalPurescriptSources = [ "../web-common/**/*.purs" ];
+    packages = pkgs.callPackage ./packages.nix { };
+    spagoPackages = pkgs.callPackage ./spago-packages.nix { };
+    checkPhase = ''node -e 'require("./output/Test.Main").main()' '';
+  };
 in
-buildPursPackage {
-  inherit webCommon;
-  src = ./.;
-  name = "plutus-playground-client";
-  psSrc = generated-purescript;
-  additionalPurescriptSources = [ "../web-common/**/*.purs" ];
-  packages = pkgs.callPackage ./packages.nix { };
-  spagoPackages = pkgs.callPackage ./spago-packages.nix { };
-  checkPhase = ''node -e 'require("./output/Test.Main").main()' '';
-  passthru = { inherit server-invoker; };
+{
+  inherit client server-invoker generated-purescript;
 }

@@ -1,5 +1,4 @@
 { pkgs, set-git-rev, haskell, webCommon, buildPursPackage }:
-
 let
   server-invoker = set-git-rev haskell.packages.plutus-scb.components.exes.plutus-scb;
 
@@ -24,5 +23,5 @@ let
 
 in
 {
-  inherit client demo-scripts;
+  inherit client demo-scripts server-invoker generated-purescript;
 }
