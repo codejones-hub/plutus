@@ -97,7 +97,7 @@ instance StateModel GameModel where
     precondition s (Lock _ _ _)        = Nothing == hasToken s
     precondition s (Guess w old _ val) = and [ Just w == hasToken s
                                              , val <= gameValue s
-                                             , old == currentSecret s
+                                             -- , old == currentSecret s
                                              , Just w /= keeper s ]
     precondition s (PassToken w w')    = and [ Just w == hasToken s
                                              , w /= w'
@@ -108,11 +108,13 @@ instance StateModel GameModel where
                                              , currentSecret = secret
                                              , gameValue     = val
                                              , balances      = Map.singleton w (-val) }
-    nextState s (Guess w _old new val) _ = s { keeper        = Just w
+    nextState s (Guess w old new val) _
+        | old /= currentSecret s         = s
+        | otherwise                      = s { keeper        = Just w
                                              , currentSecret = new
                                              , gameValue     = gameValue s - val
-                                             , balances      = Map.insert w val $ balances s    -- <== BUG
-                                             -- , balances      = Map.insertWith w val $ balances s
+                                             -- , balances      = Map.insert w val $ balances s    -- <== BUG
+                                             , balances      = Map.insertWith (+) w val $ balances s
                                              }
     nextState s (PassToken _ w)        _ = s { hasToken = Just w }
 
@@ -121,7 +123,7 @@ instance StateModel GameModel where
 
     arbitraryAction s = oneof $
         [ Lock        <$> genWallet <*> genGuess <*> genValue | Nothing == hasToken s ] ++
-        [ Guess w     <$> pure (currentSecret s) <*> genGuess <*> choose (1, gameValue s)
+        [ Guess w     <$> genGuess <*> genGuess <*> choose (1, gameValue s)
           | Just w <- [hasToken s], hasToken s /= keeper s, gameValue s > 0 ] ++
         [ PassToken w <$> genWallet | Just w <- [hasToken s] ]
 
