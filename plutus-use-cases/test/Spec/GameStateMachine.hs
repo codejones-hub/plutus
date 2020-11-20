@@ -81,7 +81,7 @@ instance StateModel GameModel where
                           | PassToken EM.Wallet EM.Wallet
         deriving (Show)
 
-    data Ret GameModel = RetOk
+    data Ret GameModel = RetOk | RetFail (TraceError G.GameError)
         deriving (Show)
 
     type ActionMonad GameModel = Tr
@@ -116,26 +116,32 @@ instance StateModel GameModel where
                                              }
     nextState s (PassToken _ w)        _ = s { hasToken = Just w }
 
+    postcondition _ _ _ RetOk     = True
+    postcondition _ _ _ RetFail{} = False
+
     arbitraryAction s = oneof $
         [ Lock        <$> genWallet <*> genGuess <*> genValue | Nothing == hasToken s ] ++
         [ Guess w     <$> pure (currentSecret s) <*> genGuess <*> choose (1, gameValue s)
           | Just w <- [hasToken s], hasToken s /= keeper s, gameValue s > 0 ] ++
         [ PassToken w <$> genWallet | Just w <- [hasToken s] ]
 
-    perform (Lock w new val) _ = RetOk <$ do
-        callEndpoint @"lock" w LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
-        handleBlockchainEvents w
-        addBlocks 1
-        handleBlockchainEvents w
-        addBlocks 1
-    perform (Guess w old new val) _ = RetOk <$ do
-        callEndpoint @"guess" w GuessArgs{guessArgsOldSecret = old, guessArgsNewSecret = new, guessArgsValueTakenOut = Ada.lovelaceValueOf val}
-        handleBlockchainEvents w
-        addBlocks 1
-    perform (PassToken w w') _ = RetOk <$ do
-        payToWallet w w' gameTokenVal
-        addBlocks 1
-        handleBlockchainEvents w'
+    perform cmd _env = handle $ case cmd of
+        Lock w new val -> do
+            callEndpoint @"lock" w LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
+            handleBlockchainEvents w
+            addBlocks 1
+            handleBlockchainEvents w
+            addBlocks 1
+        Guess w old new val -> do
+            callEndpoint @"guess" w GuessArgs{guessArgsOldSecret = old, guessArgsNewSecret = new, guessArgsValueTakenOut = Ada.lovelaceValueOf val}
+            handleBlockchainEvents w
+            addBlocks 1
+        PassToken w w' -> do
+            payToWallet w w' gameTokenVal
+            addBlocks 1
+            handleBlockchainEvents w'
+        where
+            handle m = catchError (RetOk <$ m) (return . RetFail)
 
 finalPredicate :: GameModel -> TracePredicate GameStateMachineSchema (TraceError G.GameError) ()
 finalPredicate s = Map.foldrWithKey change top $ balances s
