@@ -47,10 +47,6 @@ let
   ]);
 
 in
-{
-  buildInputs = [ ];
-  nativeBuildInputs = [ ];
+haskell.packages.shellFor {
+  # nativeBuildInputs = nixpkgsInputs ++ localInputs; # ++ [ agdaWithStdlib sphinxTools ];
 }
-#haskell.packages.shellFor {
-#  # nativeBuildInputs = nixpkgsInputs ++ localInputs; # ++ [ agdaWithStdlib sphinxTools ];
-#}
