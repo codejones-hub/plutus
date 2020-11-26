@@ -23,8 +23,10 @@ RUN touch .bash_profile \
 
 COPY default.nix default.nix
 COPY shell.nix shell.nix
-COPY nix nix
 COPY cabal.project cabal.project
+COPY stack.yaml stack.yaml
+COPY .gitignore .gitignore
+COPY nix nix
 
 # ls */*.cabal | sed 's|\(.*\)|COPY \1 \1|'
 COPY deployment-server/deployment-server.cabal deployment-server/deployment-server.cabal
