@@ -1,0 +1,7 @@
+image:
+    file: .gitpod.dockerfile
+
+vscode:
+  extensions:
+    - justusadam.language-haskell@3.3.0:uqgpHstOoamig+7LyFNNVw==
+    - haskell.haskell@1.2.0:ZPrUKYpwCCFQf9Q0phszuQ==
