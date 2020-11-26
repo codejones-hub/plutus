@@ -21,7 +21,7 @@ WORKDIR /home/gitpod
 RUN touch .bash_profile \
  && curl https://nixos.org/releases/nix/nix-2.3.8/install | sh 
 
-RUN echo "Forcing rebuild from here."
+RUN echo "Forcing rebuild from here.."
 
 COPY default.nix default.nix
 COPY shell.nix shell.nix
