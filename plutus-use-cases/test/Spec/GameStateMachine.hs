@@ -127,6 +127,15 @@ instance StateModel GameModel where
           | Just w <- [hasToken s], hasToken s /= keeper s, gameValue s > 0 ] ++
         [ PassToken w <$> genWallet | Just w <- [hasToken s] ]
 
+    shrinkAction s (Lock w secret val) =
+        [Lock w' secret val | w' <- shrinkWallet w] ++
+	[Lock w secret val' | val' <- shrink val]
+    shrinkAction s (PassToken w w') =
+        [PassToken w w'' | w'' <- shrinkWallet w']
+    shrinkAction s (Guess w old new val) =
+        [Guess w' old new val | w' <- shrinkWallet w] ++
+	[Guess w old new val' | val' <- shrink val]
+
     perform cmd _env = handle $ case cmd of
         Lock w new val -> do
             callEndpoint @"lock" w LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
@@ -156,14 +165,16 @@ finalPredicate s = Map.foldrWithKey change top $ balances s
 genWallet :: Gen EM.Wallet
 genWallet = elements [w1, w2, w3]
 
+shrinkWallet w = [w' | w' <- [w1, w2], w' < w]
+
 genGuess :: Gen String
 genGuess = elements ["hello", "secret", "hunter2", "*******"]
 
 genValue :: Gen Integer
 genValue = getPositive <$> arbitrary
 
-prop_Game :: Script GameModel -> Property
-prop_Game s = monadic runTr $ do
+prop_Game :: Shrink2 (Script GameModel) -> Property
+prop_Game (Shrink2 s) = monadic runTr $ do
     (st, _) <- runScript s
     assertPredicate (finalPredicate st)
 
