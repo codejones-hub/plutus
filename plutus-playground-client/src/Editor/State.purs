@@ -2,6 +2,7 @@ module Editor.State where
 
 import Editor.Types
 import Control.Alternative ((<|>))
+import Data.Lens (assign)
 import Data.Maybe (Maybe, fromMaybe, maybe)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect)
@@ -27,9 +28,10 @@ handleAction ::
   MonadAff m =>
   Key ->
   Action ->
-  HalogenM state action ChildSlots output m Unit
+  HalogenM State action ChildSlots output m Unit
 handleAction bufferLocalStorageKey Init = do
   binding <- loadKeyBindings
+  assign _keyBindings binding
   handleAction bufferLocalStorageKey (SetKeyBindings binding)
 
 handleAction bufferLocalStorageKey (HandleEditorMessage (Monaco.TextChanged text)) = liftEffect $ saveBuffer bufferLocalStorageKey text
@@ -37,6 +39,8 @@ handleAction bufferLocalStorageKey (HandleEditorMessage (Monaco.TextChanged text
 handleAction _ (SetKeyBindings binding) = do
   void $ query _editorSlot unit $ tell $ Monaco.SetKeyBindings binding
   void $ query _editorSlot unit $ tell $ Monaco.Focus
+  void $ query _editorSlot unit $ tell $ Monaco.Resize
+  assign _keyBindings binding
   liftEffect $ LocalStorage.setItem keybindingsLocalStorageKey (show binding)
 
 handleAction _ (HandleDragEvent event) = liftEffect $ preventDefault event
