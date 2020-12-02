@@ -80,7 +80,7 @@ instance StateModel GameModel where
     data Action GameModel = Lock EM.Wallet String Integer
                           | Guess EM.Wallet String String Integer
                           | PassToken EM.Wallet EM.Wallet
-			  | Delay
+                          | Delay
         deriving (Show)
 
     data Ret GameModel = RetOk | RetFail (TraceError G.GameError)
@@ -94,18 +94,18 @@ instance StateModel GameModel where
         , keeper        = Nothing
         , currentSecret = ""
         , balances      = Map.empty
-	, busy          = 0
+        , busy          = 0
         }
 
     precondition s (Lock _ _ _)        = Nothing == hasToken s
     precondition s (Guess w old _ val) = and [ Just w == hasToken s
                                              , val <= gameValue s
                                              -- , old == currentSecret s
-					     -- , busy s == 0   -- <== precondition to avoid inactive endpoint
+                                             -- , busy s == 0   -- <== precondition to avoid inactive endpoint
                                              , Just w /= keeper s ]
     precondition s (PassToken w w')    = and [ Just w == hasToken s
                                              , w /= w'
-					     -- , busy s == 0
+                                             -- , busy s == 0
                                              , gameValue s > 0 ] -- stops the test
     precondition s Delay               = True
 
@@ -118,7 +118,7 @@ instance StateModel GameModel where
         | busy s > 0                     = s
         | old /= currentSecret s         = busyFor 2 s
         | otherwise                      = busyFor 1 $ s
-	  				     { keeper        = Just w
+                                             { keeper        = Just w
                                              , currentSecret = new
                                              , gameValue     = gameValue s - val
                                              -- , balances      = Map.insert w val $ balances s    -- <== BUG
@@ -139,16 +139,16 @@ instance StateModel GameModel where
         [ Guess w     <$> genGuess <*> genGuess <*> choose (1, gameValue s)
           | Just w <- [hasToken s], hasToken s /= keeper s, gameValue s > 0 ] ++
         [ PassToken w <$> genWallet | Just w <- [hasToken s] ] ++
-	[ return Delay ]
+        [ return Delay ]
 
     shrinkAction s (Lock w secret val) =
         [Lock w' secret val | w' <- shrinkWallet w] ++
-	[Lock w secret val' | val' <- shrink val]
+        [Lock w secret val' | val' <- shrink val]
     shrinkAction s (PassToken w w') =
         [PassToken w w'' | w'' <- shrinkWallet w']
     shrinkAction s (Guess w old new val) =
         [Guess w' old new val | w' <- shrinkWallet w] ++
-	[Guess w old new val' | val' <- shrink val]
+        [Guess w old new val' | val' <- shrink val]
     shrinkAction s Delay = []
 
     perform cmd _env = handle $ case cmd of
@@ -163,14 +163,14 @@ instance StateModel GameModel where
         PassToken w w' -> do
             payToWallet w w' gameTokenVal
             delay 1
-	Delay -> delay 1
+        Delay -> delay 1
         where
             handle m = catchError (RetOk <$ m) (return . RetFail)
 
     monitoring (_s,s) act _ res =
       case act of
         PassToken _ _ | busy _s > 0 -> classify True "passing-while-busy"
-	_                                  -> id
+        _                           -> id
       . (counterexample $ show s)
 
 lessBusy s = s { busy = 0 `max` (busy s - 1) }
