@@ -73,6 +73,7 @@ data GameModel = GameModel
     , hasToken      :: Maybe EM.Wallet
     , currentSecret :: String
     , balances      :: Map EM.Wallet Integer
+    , tokenLock     :: Integer
     , busy          :: Integer }
     deriving (Show)
 
@@ -94,6 +95,7 @@ instance StateModel GameModel where
         , keeper        = Nothing
         , currentSecret = ""
         , balances      = Map.empty
+        , tokenLock     = 0
         , busy          = 0
         }
 
@@ -124,10 +126,10 @@ instance StateModel GameModel where
                                              -- , balances      = Map.insert w val $ balances s    -- <== BUG
                                              , balances      = Map.insertWith (+) w val $ balances s
                                              }
-    nextState s (PassToken _ w)        _
-      | busy s > 0 = lessBusy s
-      | otherwise  = lessBusy $ s { hasToken = Just w }
-    nextState s Delay                  _ = lessBusy s
+    nextState s (PassToken _ w) _
+      | tokenLock s > 0 = lessBusy s
+      | otherwise       = lessBusy $ s { hasToken = Just w }
+    nextState s Delay _ = lessBusy s
 
     postcondition s (Guess w _ _ _) _ (RetFail (HookError (EndpointNotActive (Just w') _)))
       | w==w' = busy s > 0
@@ -173,8 +175,8 @@ instance StateModel GameModel where
         _                           -> id
       . (counterexample $ show s)
 
-lessBusy s = s { busy = 0 `max` (busy s - 1) }
-busyFor n s = s { busy = n `max` busy s }
+lessBusy s = s { busy = 0 `max` (busy s - 1), tokenLock = 0 `max` (tokenLock s - 1) }
+busyFor n s = s { busy = n `max` busy s, tokenLock = 1 `max` tokenLock s }
 
 finalPredicate :: GameModel -> TracePredicate GameStateMachineSchema (TraceError G.GameError) ()
 finalPredicate s = Map.foldrWithKey change top $ balances s
