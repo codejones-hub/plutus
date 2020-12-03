@@ -5,7 +5,12 @@
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Language.Plutus.Contract.Test.StateModel (StateModel(..),Step(..),Script(..),runScript) where
+module Language.Plutus.Contract.Test.StateModel
+  ( StateModel(..)
+  , Step(..)
+  , Script(..)
+  , runScript
+  , notStuck) where
 
 import           Test.QuickCheck
 import           Test.QuickCheck.Monadic
@@ -33,6 +38,7 @@ class (Show (Action state), Monad (ActionMonad state)) =>
   postcondition _ _ _ _ = True
   monitoring      :: (state,state) -> Action state -> (Step -> Ret state) -> Ret state -> Property -> Property
   monitoring _ _ _ _ = id
+  isFinal :: state -> Bool
 
 newtype Step = Step Int
   deriving (Eq, Ord, Show)
@@ -81,6 +87,12 @@ withStates = loop initialState
     loop s ((step,act):as) =
       ((step,act),s):loop (nextState s act step) as
 
+stateAfter :: StateModel state => Script state -> state
+stateAfter (Script script) = loop initialState script
+  where
+    loop s []                 = s
+    loop s ((step, act) : as) = loop (nextState s act step) as
+
 runScript :: (StateModel state, Show (Ret state)) =>
                 Script state -> PropertyM (ActionMonad state) (state, [(Step, Ret state)])
 runScript (Script script) = loop initialState [] script
@@ -103,3 +115,11 @@ getStep :: (Show step, Eq step) => [(step, ret)] -> step -> ret
 getStep steps n = case lookup n steps of
   Just v  -> v
   Nothing -> error ("Missing step "++show n)
+
+notStuck :: StateModel state => Script state -> Property
+notStuck script
+  | isFinal s = property True
+  | otherwise = forAll (vectorOf 20 $ arbitraryAction s) $ any (precondition s)
+  where
+    s = stateAfter script
+

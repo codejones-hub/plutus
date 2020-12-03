@@ -99,6 +99,8 @@ instance StateModel GameModel where
         , busy          = 0
         }
 
+    isFinal _ = False
+
     precondition s (Lock _ _ _)        = Nothing == hasToken s
     precondition s (Guess w old _ val) = and [ Just w == hasToken s
                                              , val <= gameValue s
@@ -210,6 +212,14 @@ prop_Game (Shrink2 s) = monadic runTr $ do
     (st, _) <- runScript s
     run $ delay 10
     assertPredicate (finalPredicate st)
+
+-- Generic property to check that we don't get stuck. This only tests the model, but if the model
+-- thinks it's not stuck, but the actual implementation is, the property running the contract will
+-- fail. Except: this is only true if the precondition does not admit invalid transactions. At the
+-- moment the off-chain contract breaks if you try to take an invalid transaction, so this isn't a
+-- problem.
+prop_notStuck :: StateModel state => Shrink2 (Script state) -> Property
+prop_notStuck (Shrink2 s) = notStuck s
 
 -- * Unit tests
 
