@@ -158,15 +158,6 @@ transition State{stateData=oldData, stateValue=oldValue} input = case (oldData, 
                 , stateValue = oldValue - takenOut
                 }
              )
-    (Locked mph tn currentSecret, Guess theGuess nextSecret takenOut)
-         ->
-        let constraints = Constraints.mustSpendValue (token mph tn) <> Constraints.mustForgeCurrency mph tn 0 in
-        Just ( constraints
-             , State
-                { stateData = Locked mph tn currentSecret
-                , stateValue = oldValue
-                }
-             )
     _ -> Nothing
 
 {-# INLINABLE machine #-}

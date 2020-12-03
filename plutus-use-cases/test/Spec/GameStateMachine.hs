@@ -87,8 +87,8 @@ instance StateModel GameModel where
                                              , balances      = Map.singleton w (-val) }
     nextState s (Guess w old new val) _
         | busy s > 0                     = s
-        | old /= currentSecret s         = busyFor 2 s
-        | otherwise                      = busyFor 1 $ s
+        | old /= currentSecret s         = busyFor 1 0 s
+        | otherwise                      = busyFor 1 1 $ s
                                              { keeper        = Just w
                                              , currentSecret = new
                                              , gameValue     = gameValue s - val
@@ -101,7 +101,7 @@ instance StateModel GameModel where
     nextState s Delay _ = lessBusy s
 
     postcondition s (Guess w _ _ _) _ (RetFail (HookError (EndpointNotActive (Just w') _)))
-      | w==w' = busy s > 0
+      | w == w' = busy s > 0
     postcondition _ _ _ RetOk     = True
     postcondition _ _ _ RetFail{} = False
 
@@ -147,8 +147,8 @@ instance StateModel GameModel where
 lessBusy :: GameModel -> GameModel
 lessBusy s = s { busy = 0 `max` (busy s - 1), tokenLock = 0 `max` (tokenLock s - 1) }
 
-busyFor :: Integer -> GameModel -> GameModel
-busyFor n s = s { busy = n `max` busy s, tokenLock = 1 `max` tokenLock s }
+busyFor :: Integer -> Integer -> GameModel -> GameModel
+busyFor n t s = s { busy = n `max` busy s, tokenLock = t `max` tokenLock s }
 
 finalPredicate :: GameModel -> TracePredicate GameStateMachineSchema (TraceError G.GameError) ()
 finalPredicate s = Map.foldrWithKey change top $ balances s
