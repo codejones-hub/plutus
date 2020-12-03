@@ -7,6 +7,8 @@
 , sources
 }:
 let
+  inherit (pkgs) stdenv;
+
   iohkNix =
     import sources.iohk-nix {
       inherit system config;
@@ -33,6 +35,7 @@ let
   hlint = exeFromExtras "hlint";
   haskell-language-server = exeFromExtras "haskell-language-server";
   hie-bios = exeFromExtras "hie-bios";
+  gen-hie = haskell.extraPackages.implicit-hie.components.exes.gen-hie;
   haskellNixAgda = haskell.extraPackages.Agda;
 
   # We want to keep control of which version of Agda we use, so we supply our own and override
@@ -66,6 +69,7 @@ let
   fixPurty = pkgs.callPackage ./fix-purty { inherit purty; };
   fixStylishHaskell = pkgs.callPackage ./fix-stylish-haskell { inherit stylish-haskell; };
   updateMaterialized = haskell.project.stack-nix.passthru.updateMaterialized;
+  updateHie = pkgs.callPackage ./update-hie { inherit gen-hie; };
   updateMetadataSamples = pkgs.callPackage ./update-metadata-samples { };
   updateClientDeps = pkgs.callPackage ./update-client-deps {
     inherit (easyPS) purs psc-package spago spago2nix;
@@ -97,6 +101,12 @@ let
   # including stylish-haskell support
   nix-pre-commit-hooks = import (sources."pre-commit-hooks.nix");
 
+  # purty is unable to process several files but that is what pre-commit
+  # does. pre-commit-hooks.nix does provide a wrapper for that but when
+  # we pin our own `tools` attribute that gets overwritten so we have to
+  # instead provide the wrapper.
+  purty-pre-commit = pkgs.callPackage ./purty-pre-commit { inherit purty; };
+
   # easy-purescript-nix has some kind of wacky internal IFD
   # usage that breaks the logic that makes source fetchers
   # use native dependencies. This isn't easy to fix, since
@@ -115,9 +125,6 @@ let
   # sphinx haddock support
   sphinxcontrib-haddock = pkgs.callPackage (sources.sphinxcontrib-haddock) { pythonPackages = pkgs.python3Packages; };
 
-  # nodejs headers  (needed for purescript builds)
-  nodejs-headers = sources.nodejs-headers;
-
   # ghc web service
   web-ghc = pkgs.callPackage ./web-ghc { inherit set-git-rev haskell; };
 
@@ -135,22 +142,27 @@ let
     };
 
   # Collect everything to be exported under `plutus.lib`: builders/functions/utils
-  lib = {
+  lib = rec {
     haddock-combine = pkgs.callPackage ../lib/haddock-combine.nix { inherit sphinxcontrib-haddock; };
     latex = pkgs.callPackage ../lib/latex.nix { };
-    buildPursPackage = pkgs.callPackage ../lib/purescript.nix {
-      inherit easyPS nodejs-headers;
-    };
-  };
+    npmlock2nix = (pkgs.callPackage sources.npmlock2nix { });
+    buildPursPackage = pkgs.callPackage ../lib/purescript.nix { inherit easyPS;inherit (pkgs) nodejs; };
+    buildNodeModules = pkgs.callPackage ../lib/node_modules.nix ({
+      inherit npmlock2nix;
+    } // pkgs.lib.optionalAttrs (stdenv.isDarwin) {
+      CoreServices = pkgs.darwin.apple_sdk.frameworks.CoreServices;
+      xcodebuild = pkgs.xcodebuild;
+    });
 
+  };
 
 in
 {
   inherit sphinx-markdown-tables sphinxemoji sphinxcontrib-haddock;
-  inherit nix-pre-commit-hooks nodejs-headers;
-  inherit haskell agdaPackages cabal-install stylish-haskell hlint haskell-language-server hie-bios;
-  inherit purty purs spago;
-  inherit fixPurty fixStylishHaskell updateMaterialized updateMetadataSamples updateClientDeps;
+  inherit nix-pre-commit-hooks;
+  inherit haskell agdaPackages cabal-install stylish-haskell hlint haskell-language-server hie-bios gen-hie;
+  inherit purty purty-pre-commit purs spago;
+  inherit fixPurty fixStylishHaskell updateMaterialized updateHie updateMetadataSamples updateClientDeps;
   inherit iohkNix set-git-rev web-ghc thorp;
   inherit easyPS plutus-haddock-combined;
   inherit agdaWithStdlib;

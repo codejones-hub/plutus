@@ -6,10 +6,10 @@
         "homepage": "",
         "owner": "justinwoo",
         "repo": "easy-purescript-nix",
-        "rev": "7b1c1635e16c7f12065db2f8ec049030fcc63655",
-        "sha256": "1nybcann9aiwbvj95p6wam8xyhxwaxmfnkxmgylxcw42np2lvbzr",
+        "rev": "860a95cb9e1ebdf574cede2b4fcb0f66eac77242",
+        "sha256": "1ly3bm6i1viw6d64gi1zfiwdvjncm3963rj59320cr15na5bzjri",
         "type": "tarball",
-        "url": "https://github.com/justinwoo/easy-purescript-nix/archive/7b1c1635e16c7f12065db2f8ec049030fcc63655.tar.gz",
+        "url": "https://github.com/justinwoo/easy-purescript-nix/archive/860a95cb9e1ebdf574cede2b4fcb0f66eac77242.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "hackage.nix": {
@@ -43,10 +43,10 @@
         "homepage": null,
         "owner": "input-output-hk",
         "repo": "iohk-nix",
-        "rev": "24ddc8f531f320c9e2394d205d0df39857222901",
-        "sha256": "0x6zyh18c96a2kkchfmany475d8rb8qkmg1bd7y8xk6fb2vpad62",
+        "rev": "72b62e35a3c4931a65d89026bbdecffb3442b88d",
+        "sha256": "1rdaa3c4sz3h1ky9ilp4sm5j9xm9v0vhnzlgnwcs3z1l8ygmvghf",
         "type": "tarball",
-        "url": "https://github.com/input-output-hk/iohk-nix/archive/24ddc8f531f320c9e2394d205d0df39857222901.tar.gz",
+        "url": "https://github.com/input-output-hk/iohk-nix/archive/72b62e35a3c4931a65d89026bbdecffb3442b88d.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "mvn2nix": {
@@ -68,10 +68,10 @@
         "homepage": "",
         "owner": "siers",
         "repo": "nix-gitignore",
-        "rev": "686b057f6c24857c8862c0ef15a6852caab809c7",
-        "sha256": "1hv8jl7ppv0f8lnfx2qi2jmzc7b5yiy12yvd4waq9xmxhip1k7rb",
+        "rev": "a9609739209cef90e2e8eaa0b5b656721d3da63e",
+        "sha256": "1h7dgiy0kiyzsv0s2w5p6z5103k4s8wc6i793cwq1srk2kwdsrxm",
         "type": "tarball",
-        "url": "https://github.com/siers/nix-gitignore/archive/686b057f6c24857c8862c0ef15a6852caab809c7.tar.gz",
+        "url": "https://github.com/siers/nix-gitignore/archive/a9609739209cef90e2e8eaa0b5b656721d3da63e.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "nixpkgs": {
@@ -87,13 +87,18 @@
         "url": "https://github.com/NixOS/nixpkgs/archive/d105075a1fd870b1d1617a6008cb38b443e65433.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
-    "nodejs-headers": {
+    "npmlock2nix": {
+        "branch": "restricted-mode-support",
         "builtin": false,
-        "rev": "v12.19.0",
-        "sha256": "1fb0dkzsprilybg30nhgdy0fcaqx9kc89iyrw6871frkaqmcdwwn",
-        "type": "file",
-        "url": "https://nodejs.org/download/release/v12.19.0/node-v12.19.0-headers.tar.gz",
-        "url_template": "https://nodejs.org/download/release/<rev>/node-<rev>-headers.tar.gz"
+        "description": null,
+        "homepage": null,
+        "owner": "tweag",
+        "repo": "npmlock2nix",
+        "rev": "32d6c291422cb1569debafe203aaed32ab72b158",
+        "sha256": "0gg2dyizz4qgpznybd3izm31bjdqb6g5zyqkchja7bqr386gdlrg",
+        "type": "tarball",
+        "url": "https://github.com/tweag/npmlock2nix/archive/32d6c291422cb1569debafe203aaed32ab72b158.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "pre-commit-hooks.nix": {
         "branch": "master",
@@ -139,10 +144,10 @@
         "homepage": "https://github.com/kemitix/thorp",
         "owner": "kemitix",
         "repo": "thorp",
-        "rev": "42634f9c09664ff9d5981fbd1212fe3b9b419afc",
-        "sha256": "0bxh4b3kkpm5ls3v3329gd3zljzfph5315z8plvi2ac8y2y10bs6",
+        "rev": "61ef2a6ce5b8f585a8d9bc198616dadc749dc2a4",
+        "sha256": "13j7vsnp95pnaqgk64zdjyl17hp33zq94a73kiy2ln3hig2ma794",
         "type": "tarball",
-        "url": "https://github.com/kemitix/thorp/archive/42634f9c09664ff9d5981fbd1212fe3b9b419afc.tar.gz",
+        "url": "https://github.com/kemitix/thorp/archive/61ef2a6ce5b8f585a8d9bc198616dadc749dc2a4.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     }
 }
