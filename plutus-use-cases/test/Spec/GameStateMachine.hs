@@ -12,13 +12,8 @@ module Spec.GameStateMachine where
 
 import           Control.Monad
 import           Control.Monad.Freer.Error
-import qualified Control.Monad.Freer.State                                 as Eff
-import           Control.Monad.Writer
 import           Data.Map                                                  (Map)
 import qualified Data.Map                                                  as Map
-import           Data.Row                                                  (Forall)
-import qualified Data.Text                                                 as Text
-import           Data.Text.Prettyprint.Doc
 import           Test.QuickCheck
 import           Test.QuickCheck.Monadic
 import           Test.Tasty
@@ -28,7 +23,6 @@ import qualified Spec.Lib                                                  as Li
 
 import qualified Language.PlutusTx                                         as PlutusTx
 
-import           Language.Plutus.Contract.Schema                           (Event (..), Handlers (..), Input, Output)
 import           Language.Plutus.Contract.Test
 import           Language.Plutus.Contract.Test.StateModel
 import           Language.PlutusTx.Coordination.Contracts.GameStateMachine as G
@@ -39,33 +33,6 @@ import           Ledger.Value                                              (Valu
 import qualified Wallet.Emulator                                           as EM
 
 -- * QuickCheck model
-
-type Tr = ContractTrace GameStateMachineSchema G.GameError ()
-
-runTr :: Tr Property -> Property
-runTr tr =
-    case runTraceWithDistribution defaultDist G.contract tr of
-        (Right (p, _), _) -> p
-        (Left err, _s)    -> whenFail (print err) False
-
-getEmulatorState :: ContractTrace s e a EM.EmulatorState
-getEmulatorState = Eff.get
-
-getContractTraceState :: ContractTrace s e a (ContractTraceState s (TraceError e) a)
-getContractTraceState = Eff.get
-
-assertPredicate :: forall s e a.
-    ( Show e
-    , Forall (Input s) Pretty
-    , Forall (Output s) Pretty
-    ) => TracePredicate s (TraceError e) a -> PropertyM (ContractTrace s e a) ()
-assertPredicate predicate = do
-    em <- run getEmulatorState
-    st <- run getContractTraceState
-    let r = ContractTraceResult em st
-        (result, testOutputs) = runWriter $ unPredF predicate (defaultDist, r)  -- TODO: remember dist used by runTr?
-    monitor (counterexample $ Text.unpack $ renderTraceContext testOutputs st)
-    assert result
 
 data GameModel = GameModel
     { gameValue     :: Integer
@@ -87,7 +54,7 @@ instance StateModel GameModel where
     data Ret GameModel = RetOk | RetFail (TraceError G.GameError)
         deriving (Show)
 
-    type ActionMonad GameModel = Tr
+    type ActionMonad GameModel = ContractTrace GameStateMachineSchema G.GameError ()
 
     initialState = GameModel
         { gameValue     = 0
@@ -201,17 +168,15 @@ genGuess = elements ["hello", "secret", "hunter2", "*******"]
 genValue :: Gen Integer
 genValue = getPositive <$> arbitrary
 
+delay :: Int -> ActionMonad GameModel ()
 delay n = do
-  replicateM n $ do
-    mapM handleBlockchainEvents wallets
+  replicateM_ n $ do
+    mapM_ handleBlockchainEvents wallets
     addBlocks 1
   return ()
 
 prop_Game :: Shrink2 (Script GameModel) -> Property
-prop_Game (Shrink2 s) = monadic runTr $ do
-    (st, _) <- runScript s
-    run $ delay 10
-    assertPredicate (finalPredicate st)
+prop_Game (Shrink2 s) = propRunScript finalPredicate G.contract s $ \ _ -> run (delay 10)
 
 -- Generic property to check that we don't get stuck. This only tests the model, but if the model
 -- thinks it's not stuck, but the actual implementation is, the property running the contract will
