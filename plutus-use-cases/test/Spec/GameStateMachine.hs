@@ -78,7 +78,7 @@ instance StateModel GameModel where
                                              , w /= w'
                                              -- , busy s == 0
                                              , gameValue s > 0 ] -- stops the test
-    precondition s Delay               = True
+    precondition _ Delay               = True
 
     nextState s (Lock w secret val)    _ = s { hasToken      = Just w
                                              , keeper        = Just w
@@ -112,15 +112,15 @@ instance StateModel GameModel where
         [ PassToken w <$> genWallet | Just w <- [hasToken s] ] ++
         [ return Delay ]
 
-    shrinkAction s (Lock w secret val) =
+    shrinkAction _s (Lock w secret val) =
         [Lock w' secret val | w' <- shrinkWallet w] ++
         [Lock w secret val' | val' <- shrink val]
-    shrinkAction s (PassToken w w') =
+    shrinkAction _s (PassToken w w') =
         [PassToken w w'' | w'' <- shrinkWallet w']
-    shrinkAction s (Guess w old new val) =
+    shrinkAction _s (Guess w old new val) =
         [Guess w' old new val | w' <- shrinkWallet w] ++
         [Guess w old new val' | val' <- shrink val]
-    shrinkAction s Delay = []
+    shrinkAction _s Delay = []
 
     perform cmd _env = handle $ case cmd of
         Lock w new val -> do
@@ -138,13 +138,16 @@ instance StateModel GameModel where
         where
             handle m = catchError (RetOk <$ m) (return . RetFail)
 
-    monitoring (_s,s) act _ res =
+    monitoring (s0, s1) act _env _res =
       case act of
-        PassToken _ _ | busy _s > 0 -> classify True "passing-while-busy"
+        PassToken _ _ | busy s0 > 0 -> classify True "passing-while-busy"
         _                           -> id
-      . (counterexample $ show s)
+      . (counterexample $ show s1)
 
+lessBusy :: GameModel -> GameModel
 lessBusy s = s { busy = 0 `max` (busy s - 1), tokenLock = 0 `max` (tokenLock s - 1) }
+
+busyFor :: Integer -> GameModel -> GameModel
 busyFor n s = s { busy = n `max` busy s, tokenLock = 1 `max` tokenLock s }
 
 finalPredicate :: GameModel -> TracePredicate GameStateMachineSchema (TraceError G.GameError) ()
@@ -155,11 +158,13 @@ finalPredicate s = Map.foldrWithKey change top $ balances s
                 gameTok | Just w == hasToken s = gameTokenVal
                         | otherwise            = mempty
 
+wallets :: [EM.Wallet]
 wallets = [w1, w2, w3]
 
 genWallet :: Gen EM.Wallet
 genWallet = elements wallets
 
+shrinkWallet :: EM.Wallet -> [EM.Wallet]
 shrinkWallet w = [w' | w' <- wallets, w' < w]
 
 genGuess :: Gen String
