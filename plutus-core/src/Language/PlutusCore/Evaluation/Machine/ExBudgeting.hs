@@ -1,3 +1,4 @@
+-- {-# OPTIONS_GHC -XStrictData       #-}
 {-# LANGUAGE ConstraintKinds        #-}
 {-# LANGUAGE DataKinds              #-}
 {-# LANGUAGE DeriveAnyClass         #-}

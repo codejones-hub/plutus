@@ -85,7 +85,7 @@ search square sex board ps     -- Occupied square
 search square sex board ps
   = case mapMaybe (try square sex board) choices of
         [] -> Fail     -- board square
-        ss -> prune ss -- discard failed paths
+        ss -> Choose ss -- discard failed paths
     where
       choices = [(pid, os, ps') |
                  (P pid ms fs, ps') <- pickOne ps,
@@ -294,9 +294,11 @@ bPiece = P 'b'  [ [(0,1),(0,2),(1,2)],
 unindent :: PLC.Doc ann -> [PLC.String]
 unindent d = map (dropWhile isSpace) $ (lines . show $ d)
 
-runLastPiece :: Solution
-runLastPiece = search (1,2) Female initialBoard initialPieces
+{-# INLINABLE runLastPiece #-}
+runLastPiece :: Integer
+runLastPiece = sizeOfSolution $ search (1,2) Female initialBoard initialPieces
 
+{-# INLINABLE mkLastPieceTerm #-}
 mkLastPieceTerm :: Term Name DefaultUni DefaultFun ()
 mkLastPieceTerm =
   let (Program _ _ code) = getPlc $ $$(compile [|| runLastPiece ||])

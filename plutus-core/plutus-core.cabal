@@ -41,7 +41,7 @@ common lang
                  -Wincomplete-uni-patterns -Wincomplete-record-updates
                  -Wredundant-constraints -Widentities
                  -Wnoncanonical-monoid-instances
-
+                 --enable-profiling --profiling-detail=none
 library
     import: lang
     exposed-modules:

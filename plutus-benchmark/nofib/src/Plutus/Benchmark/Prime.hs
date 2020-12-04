@@ -229,7 +229,7 @@ uniform (n:ns) (r:rs) = if t == n then t: uniform ns rs
     Interestingly, memory consumption on the CK machine is essentially flat and
     the times aren't much worse (maybe 10-20% greater). %-}
 
-data PrimeID = P5 | P8 | P10 | P20 | P30 | P40 | P50 | P60
+data PrimeID = P5 | P8 | P10 | P20 | P30 | P40 | P50 | P60 | P200
      deriving (Read, Show)
 
 {-# INLINABLE getPrime #-}
@@ -244,6 +244,7 @@ getPrime =
      P40 -> 5991810554633396517767024967580894321153
      P50 -> 22953686867719691230002707821868552601124472329079
      P60 -> 511704374946917490638851104912462284144240813125071454126151
+     P200 ->   58021664585639791181184025950440248398226136069516938232493687505822471836536824298822733710342250697739996825938232641940670857624514103125986134050997697160127301547995788468137887651823707102007839
 
 
 -- % Only for textual output of PLC scripts
@@ -301,13 +302,17 @@ mkPrimalityTestTerm n =
 runFixedPrimalityTest :: PrimeID -> Result
 runFixedPrimalityTest pid = runPrimalityTest (getPrime pid)
 
+
+{-# INLINABLE loop #-}
+loop :: () -> ()
+loop () = loop ()
+
 -- % Run the program on a number known to be prime, for benchmarking
 -- (primes take a long time, composite numbers generally don't).
 mkPrimalityBenchTerm :: PrimeID -> Term Name DefaultUni DefaultFun ()
 mkPrimalityBenchTerm pid =
   let (Program _ _ code) = Tx.getPlc $
-        $$(Tx.compile [|| runFixedPrimalityTest ||])
-        `Tx.applyCode` Tx.liftCode pid
+        $$(Tx.compile [|| loop () ||])
   in code
 
 Tx.makeLift ''PrimeID

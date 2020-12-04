@@ -13,6 +13,6 @@ validator, datum, redeemer, and context (in that order) according to the above
 table.  For example
 
 ```
-  plc apply Validator01.plc Datum03.plc Redeemer02.plc Context04.plc -o Validation3.plc
+  plc apply Validator01.plc Datum03.plc Redeemer02.plc Context04.plc -o Validation4.plc
 ```
 
