@@ -181,7 +181,7 @@ delay n = do
   return ()
 
 prop_Game :: Shrink2 (Script GameModel) -> Property
-prop_Game (Shrink2 s) = propRunScript finalPredicate G.contract s $ \ _ -> run (delay 10)
+prop_Game (Shrink2 s) = propRunScript finalPredicate G.contract (return ()) s $ \ _ -> run (delay 10)
 
 -- Generic property to check that we don't get stuck. This only tests the model, but if the model
 -- thinks it's not stuck, but the actual implementation is, the property running the contract will

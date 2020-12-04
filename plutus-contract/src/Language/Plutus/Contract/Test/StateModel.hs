@@ -56,6 +56,7 @@ class (Show (Action state), Monad (ActionMonad state)) =>
   monitoring      :: (state,state) -> Action state -> (Step -> Ret state) -> Ret state -> Property -> Property
   monitoring _ _ _ _ = id
   isFinal :: state -> Bool
+  isFinal _ = False
 
 newtype Step = Step Int
   deriving (Eq, Ord, Show)
@@ -190,6 +191,7 @@ propRunScript ::
   )
   => (state -> TracePredicate s (TraceError e) a)
   -> Contract s e a
+  -> PropertyM (ActionMonad state) ()
   -> Script state
   -> (state -> PropertyM (ActionMonad state) ())
   -> Property
@@ -209,11 +211,13 @@ propRunScriptWithDistribution ::
   => InitialDistribution
   -> (state -> TracePredicate s (TraceError e) a)
   -> Contract s e a
+  -> PropertyM (ActionMonad state) ()
   -> Script state
   -> (state -> PropertyM (ActionMonad state) ())
   -> Property
-propRunScriptWithDistribution dist finalPredicate contract script after =
+propRunScriptWithDistribution dist finalPredicate contract before script after =
   monadic (runTr defaultDist contract) $ do
+    before
     (st, _) <- runScript script
     after st
     assertPredicate dist (finalPredicate st)
