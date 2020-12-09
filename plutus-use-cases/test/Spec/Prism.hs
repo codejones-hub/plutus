@@ -174,5 +174,6 @@ prop_Prism script = propRunScript finalPredicate contract before script after
             callEndpoint @"role" user UnlockSTO
             callEndpoint @"role" mirror Mirror
             callEndpoint @"role" credentialManager CredMan
+            delay 5
         after _ = return ()
 
