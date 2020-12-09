@@ -17,11 +17,14 @@ module Language.PlutusTx.Coordination.Contracts.Prism.Mirror(
     , mirror
     ) where
 
+import           Control.Lens
 import           Control.Monad                                               (forever, void)
 import           Data.Aeson                                                  (FromJSON, ToJSON)
 import           GHC.Generics                                                (Generic)
 import           Language.Plutus.Contract
-import           Language.Plutus.Contract.StateMachine                       (SMContractError, runInitialise, runStep)
+import           Language.Plutus.Contract.StateMachine                       (AsSMContractError (..), SMContractError,
+                                                                              StateMachineTransition (..), mkStep,
+                                                                              runInitialise)
 import           Language.PlutusTx.Coordination.Contracts.Prism.Credential   (Credential (..), CredentialAuthority (..))
 import qualified Language.PlutusTx.Coordination.Contracts.Prism.Credential   as Credential
 import           Language.PlutusTx.Coordination.Contracts.Prism.StateMachine as StateMachine
@@ -88,7 +91,14 @@ revokeToken ::
 revokeToken authority = do
     CredentialOwnerReference{coTokenName, coOwner} <- mapError RevokeEndpointError $ endpoint @"revoke"
     let stateMachine = StateMachine.mkMachineClient authority (pubKeyHash $ walletPubKey coOwner) coTokenName
-    void $ mapError StateMachineError $ runStep stateMachine RevokeCredential
+        lookups = Constraints.monetaryPolicy (Credential.policy authority) <>
+                  Constraints.ownPubKeyHash  (Credential.unCredentialAuthority authority)
+    t <- mapError StateMachineError $ mkStep stateMachine RevokeCredential
+    case t of
+        Left{} -> return () -- Ignore invalid transitions
+        Right StateMachineTransition{smtConstraints=constraints, smtLookups=lookups'} -> do
+            tx <- submitTxConstraintsWith (lookups <> lookups') constraints
+            awaitTxConfirmed (txId tx)
 
 ---
 -- Errors and Logging
@@ -103,3 +113,12 @@ data MirrorError =
     | StateMachineError SMContractError
     deriving stock (Eq, Show, Generic)
     deriving anyclass (ToJSON, FromJSON)
+
+makeClassyPrisms ''MirrorError
+
+instance AsSMContractError MirrorError where
+    _SMContractError = _StateMachineError
+
+instance AsContractError MirrorError where
+    _ContractError =  _SMContractError . _ContractError
+
