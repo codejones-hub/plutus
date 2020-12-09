@@ -93,6 +93,8 @@ type family MinJoinR (l :: [LT k]) (r :: [LT k]) where
     TypeError ('TL.Text "The label " ':<>: 'ShowType h ':<>: 'TL.Text " has conflicting assignments."
          ':$$: 'TL.Text "Its type is both " ':<>: 'ShowType a ':<>: 'TL.Text " and " ':<>: 'ShowType b ':<>: 'TL.Text ".")
   MinJoinR (hl ':-> al ': tl) (hr ':-> ar ': tr) =
+    -- Here the row-types implementation uses a type-level if-then-else, which for some reason GHC
+    -- really doesn't like. Specializing it to the particular branches we want makes it not blow up.
     MinJoinRCont (CmpSymbol hl hr) hl al tl hr ar tr
 
 type family MinJoinRCont (o :: Ordering)
