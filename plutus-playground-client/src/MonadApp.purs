@@ -20,9 +20,10 @@ import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import FileEvents as FileEvents
 import Gist (Gist, GistId, NewGist)
-import Halogen (HalogenM, query, tell)
+import Halogen (HalogenM, RefLabel, query, tell)
 import Halogen as H
 import Halogen.Chartist as Chartist
+import Halogen.Extra as HE
 import Halogen.Monaco as Monaco
 import Language.Haskell.Interpreter (InterpreterError, SourceCode(SourceCode), InterpreterResult)
 import Monaco (IMarkerData)
@@ -59,6 +60,7 @@ class
   postContract :: SourceCode -> m (WebData (Either InterpreterError (InterpreterResult CompilationResult)))
   resizeEditor :: m Unit
   resizeBalancesChart :: m Unit
+  scrollIntoView :: RefLabel -> m Unit
 
 newtype HalogenApp m a
   = HalogenApp (HalogenM State HAction ChildSlots Void m a)
@@ -123,6 +125,7 @@ instance monadAppHalogenApp ::
   postContract source = runAjax $ Server.postContract source
   resizeEditor = wrap $ void $ H.query _editorSlot unit (Monaco.Resize unit)
   resizeBalancesChart = wrap $ void $ H.query _balancesChartSlot unit (Chartist.Resize unit)
+  scrollIntoView ref = wrap $ HE.scrollIntoView ref
 
 runAjax ::
   forall m a.
@@ -148,3 +151,4 @@ instance monadAppState :: MonadApp m => MonadApp (StateT s m) where
   postContract source = lift $ postContract source
   resizeEditor = lift resizeEditor
   resizeBalancesChart = lift resizeBalancesChart
+  scrollIntoView = lift <<< scrollIntoView
