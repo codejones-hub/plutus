@@ -8,10 +8,11 @@
 {-# LANGUAGE UndecidableInstances       #-}
 module Spec.Prism (tests, prop_Prism) where
 
+import           Control.Arrow                                             (first, second)
 import           Control.Monad
 import           Control.Monad.Freer.Error
 import           Data.Foldable                                             (traverse_)
-import           Language.Plutus.Contract.Test
+import           Language.Plutus.Contract.Test                             hiding (not)
 import           Language.Plutus.Contract.Test.StateModel
 import           Language.PlutusTx.Lattice
 import qualified Ledger.Ada                                                as Ada
@@ -27,7 +28,7 @@ import           Language.PlutusTx.Coordination.Contracts.Prism            hidin
 import qualified Language.PlutusTx.Coordination.Contracts.Prism.Credential as Credential
 import           Language.PlutusTx.Coordination.Contracts.Prism.STO        (STOData (..))
 import qualified Language.PlutusTx.Coordination.Contracts.Prism.STO        as STO
-import           Language.PlutusTx.Monoid
+import           Language.PlutusTx.Monoid                                  (inv)
 
 user, credentialManager, mirror, issuer :: Wallet
 user = Wallet 1
@@ -109,9 +110,34 @@ tests = testGroup "PRISM"
 -- * QuickCheck model
 
 data PrismModel = PrismModel
-    { isIssued    :: Bool
-    , pendingCall :: Bool
-    , balance     :: Integer }
+    { isIssued :: IssueState
+    , stoState :: STOState
+    , balance  :: Integer }
+    deriving (Show)
+
+data STOState = STOReady | STOPending | STODone
+    deriving (Eq, Ord, Show)
+
+data IssueState = NoIssue | PendingIssue | Revoked | Issued
+    deriving (Eq, Ord, Show)
+
+doIssue :: IssueState -> IssueState
+doIssue NoIssue      = PendingIssue
+doIssue PendingIssue = Issued
+doIssue Revoked      = Revoked
+doIssue Issued       = Issued
+
+doRevoke :: IssueState -> IssueState
+doRevoke NoIssue      = NoIssue
+doRevoke PendingIssue = Revoked
+doRevoke Revoked      = Revoked
+doRevoke Issued       = Issued
+
+hasKYC :: PrismModel -> Bool
+hasKYC s = isIssued s == Issued
+
+canSTO :: PrismModel -> Bool
+canSTO s = isIssued s `elem` [PendingIssue, Issued, Revoked]
 
 instance StateModel PrismModel where
 
@@ -130,27 +156,32 @@ instance StateModel PrismModel where
         , pure Call
         , pure Present ]
 
-    initialState = PrismModel { isIssued = False, pendingCall = False, balance = 0 }
+    initialState = PrismModel { isIssued = NoIssue, stoState = STOReady, balance = 0 }
 
-    nextState s Revoke  _           = s { isIssued = False }
-    nextState s Issue   _           = s { isIssued = True }
-    nextState s Call    _           = s { pendingCall = True }
+    precondition _ _      = True
+
+    nextState s Revoke  _          = s { isIssued = doRevoke $ isIssued s }
+    nextState s Issue   _          = s { isIssued = doIssue  $ isIssued s }
+    nextState s Call    _
+        | stoState s == STOReady   = s { stoState = STOPending }
     nextState s Present _
-        | pendingCall s, isIssued s = s { pendingCall = False, balance = balance s + 1 }
-    nextState s _       _           = s
+        | stoState s == STOPending = s { stoState = STODone, balance = balance s + if canSTO s then 1 else 0 }
+    nextState s _       _          = s
 
                                  -- v Wait a generous amount of blocks between calls
     perform cmd _env = handle $ (>> delay 5) $ case cmd of
         Delay   -> return ()
-        Issue   -> callEndpoint @"issue" mirror CredentialOwnerReference{coTokenName=kyc, coOwner=user}
-        Revoke  -> callEndpoint @"revoke" mirror CredentialOwnerReference{coTokenName=kyc, coOwner=user}
-        Call    -> callEndpoint @"sto" user stoSubscriber
+        Issue   -> callEndpoint @"issue"              mirror CredentialOwnerReference{coTokenName=kyc, coOwner=user}
+        Revoke  -> callEndpoint @"revoke"             mirror CredentialOwnerReference{coTokenName=kyc, coOwner=user}
+        Call    -> callEndpoint @"sto"                user stoSubscriber
         Present -> callEndpoint @"credential manager" user (walletInstanceId credentialManager)
         where
             handle m = catchError (RetOk <$ m) (return . RetFail)
 
     shrinkAction _ Delay = []
     shrinkAction _ _     = [Delay]
+
+    monitoring (_, s) _ _ _ = counterexample (show s)
 
 delay :: Int -> ActionMonad PrismModel ()
 delay n = do
@@ -161,11 +192,15 @@ delay n = do
 
 finalPredicate :: PrismModel -> TracePredicate PrismSchema (TraceError PrismError) ()
 finalPredicate s = walletFundsChange issuer ada /\
-                   walletFundsChange user (inv ada <> coin)
+                   walletFundsChange user (inv ada <> coin) /\
+                   walletFundsChange mirror kyc /\
+                   walletFundsChange credentialManager mempty
     where
         n    = numTokens * balance s
         ada  = Ada.lovelaceValueOf n
         coin = STO.coins stoData n
+        kyc | hasKYC s = Credential.token credential
+            | otherwise = mempty
 
 prop_Prism :: Script PrismModel -> Property
 prop_Prism script = propRunScript finalPredicate contract before script after
