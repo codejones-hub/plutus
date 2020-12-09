@@ -118,26 +118,26 @@ data PrismModel = PrismModel
 data STOState = STOReady | STOPending | STODone
     deriving (Eq, Ord, Show)
 
-data IssueState = NoIssue | PendingIssue | Revoked | Issued
+data IssueState = NoIssue | Revoked | Issued | Broken Bool
     deriving (Eq, Ord, Show)
 
 doIssue :: IssueState -> IssueState
-doIssue NoIssue      = PendingIssue
-doIssue PendingIssue = Issued
-doIssue Revoked      = Revoked
-doIssue Issued       = Issued
+doIssue s@Broken{} = s
+doIssue NoIssue    = Issued
+doIssue Revoked    = Revoked
+doIssue Issued     = Broken True
 
 doRevoke :: IssueState -> IssueState
-doRevoke NoIssue      = NoIssue
-doRevoke PendingIssue = Revoked
-doRevoke Revoked      = Revoked
-doRevoke Issued       = Issued
+doRevoke s@Broken{} = s
+doRevoke NoIssue    = NoIssue
+doRevoke Revoked    = Revoked
+doRevoke Issued     = Broken False
 
 hasKYC :: PrismModel -> Bool
-hasKYC s = isIssued s == Issued
+hasKYC s = isIssued s `elem` [Broken True]
 
 canSTO :: PrismModel -> Bool
-canSTO s = isIssued s `elem` [PendingIssue, Issued, Revoked]
+canSTO s = isIssued s `elem` [Issued, Broken True, Broken False]
 
 instance StateModel PrismModel where
 
