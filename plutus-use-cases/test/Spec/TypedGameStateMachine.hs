@@ -54,7 +54,7 @@ instance StateModel GameModel where
     data Action GameModel a where
       Lock      :: EM.Wallet -> String -> Integer           -> Action GameModel Ret
       Guess     :: EM.Wallet -> String -> String -> Integer -> Action GameModel Ret
-      PassToken :: EM.Wallet -> EM.Wallet                   -> Action GameModel Ret
+      GiveToken :: EM.Wallet                                -> Action GameModel Ret
       Delay     ::                                             Action GameModel Ret
 
     type ActionMonad GameModel = ContractTrace GameStateMachineSchema G.GameError ()
@@ -77,9 +77,7 @@ instance StateModel GameModel where
                                              -- , _old == currentSecret s
                                              -- , busy s == 0   -- <== precondition to avoid inactive endpoint
                                              , Just w /= keeper s ]
-    precondition s (PassToken w w')    = and [ Just w == hasToken s
-                                             , w /= w'
-                                             -- , busy s == 0
+    precondition s (GiveToken w)       = and [ hasToken s `notElem` [Nothing, Just w]
                                              , gameValue s > 0 ] -- stops the test
     precondition _ Delay               = True
 
@@ -98,7 +96,7 @@ instance StateModel GameModel where
                                              -- , balances      = Map.insert w val $ balances s    -- <== BUG
                                              , balances      = Map.insertWith (+) w val $ balances s
                                              }
-    nextState s (PassToken _ w) _
+    nextState s (GiveToken w) _
       | tokenLock s > 0 = lessBusy s
       | otherwise       = lessBusy $ s { hasToken = Just w }
     nextState s Delay _ = lessBusy s
@@ -107,27 +105,27 @@ instance StateModel GameModel where
       | w == w' = busy s > 0
     postcondition _ (Lock _ _ _)    _ ok = isOK ok
     postcondition _ (Guess _ _ _ _) _ ok = isOK ok
-    postcondition _ (PassToken _ _) _ ok = isOK ok
+    postcondition _ (GiveToken _)   _ ok = isOK ok
     postcondition _ Delay           _ ok = isOK ok
 
     arbitraryAction s = oneof $
         [ Action <$> (Lock        <$> genWallet <*> genGuess <*> genValue) | Nothing == hasToken s ] ++
         [ Action <$> (Guess w     <$> genGuess <*> genGuess <*> choose (1, gameValue s))
           | Just w <- [hasToken s], hasToken s /= keeper s, gameValue s > 0 ] ++
-        [ Action <$> (PassToken w <$> genWallet) | Just w <- [hasToken s] ] ++
+        [ Action <$> (GiveToken   <$> genWallet) | hasToken s /= Nothing ] ++
         [ Action <$> return Delay ]
 
     shrinkAction _s (Lock w secret val) =
         [Action $ Lock w' secret val | w' <- shrinkWallet w] ++
         [Action $ Lock w secret val' | val' <- shrink val]
-    shrinkAction _s (PassToken w w') =
-        [Action $ PassToken w w'' | w'' <- shrinkWallet w']
+    shrinkAction _s (GiveToken w) =
+        [Action $ GiveToken w' | w' <- shrinkWallet w]
     shrinkAction _s (Guess w old new val) =
         [Action $ Guess w' old new val | w' <- shrinkWallet w] ++
         [Action $ Guess w old new val' | val' <- shrink val]
     shrinkAction _s Delay = []
 
-    perform _s cmd _env = case cmd of
+    perform s cmd _env = case cmd of
         Lock w new val -> handle $ do
             callEndpoint @"lock" w LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
             handleBlockchainEvents w
@@ -136,7 +134,8 @@ instance StateModel GameModel where
             addBlocks 1
         Guess w old new val -> handle $ do
             callEndpoint @"guess" w GuessArgs{guessArgsOldSecret = old, guessArgsNewSecret = new, guessArgsValueTakenOut = Ada.lovelaceValueOf val}
-        PassToken w w' -> handle $ do
+        GiveToken w' -> handle $ do
+            let Just w = hasToken s
             payToWallet w w' gameTokenVal
             delay 1
         Delay -> handle $ delay 1
@@ -145,8 +144,11 @@ instance StateModel GameModel where
 
     monitoring (s0, s1) act _env _res =
       case act of
-        PassToken _ _ | busy s0 > 0 -> classify True "passing-while-busy"
-        _                           -> id
+        GiveToken _ | busy s0 > 0 -> classify True "passing-while-busy"
+        Guess _ guess _ _
+          | currentSecret s0 == guess -> classify True "guessing-correctly"
+          | currentSecret s0 /= guess -> classify True "guessing-wrongly"
+        _                         -> id
       . (counterexample $ show s1)
 
 lessBusy :: GameModel -> GameModel
