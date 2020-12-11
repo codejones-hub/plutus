@@ -75,7 +75,7 @@ subscribeSTO :: forall s.
     , HasEndpoint "credential manager" ContractInstanceId s
     )
     => Contract s UnlockError ()
-subscribeSTO = forever $ do
+subscribeSTO = forever $ handleError (const $ return ()) $ do
     STOSubscriber{wCredential, wSTOIssuer, wSTOTokenName, wSTOAmount} <-
         mapError WithdrawEndpointError
         $ endpoint @"sto"
