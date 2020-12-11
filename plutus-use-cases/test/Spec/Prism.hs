@@ -118,26 +118,23 @@ data PrismModel = PrismModel
 data STOState = STOReady | STOPending | STODone
     deriving (Eq, Ord, Show)
 
-data IssueState = NoIssue | Revoked | Issued | Broken Bool
+data IssueState = NoIssue | Revoked | Issued | Broken
     deriving (Eq, Ord, Show)
 
 doIssue :: IssueState -> IssueState
-doIssue s@Broken{} = s
-doIssue NoIssue    = Issued
-doIssue Revoked    = Revoked
-doIssue Issued     = Broken True
+doIssue Broken  = Broken
+doIssue NoIssue = Issued
+doIssue Revoked = Issued
+doIssue Issued  = Broken
 
 doRevoke :: IssueState -> IssueState
-doRevoke s@Broken{} = s
-doRevoke NoIssue    = NoIssue
-doRevoke Revoked    = Revoked
-doRevoke Issued     = Broken False
-
-hasKYC :: PrismModel -> Bool
-hasKYC s = isIssued s `elem` [Broken True]
+doRevoke Broken  = Broken
+doRevoke NoIssue = NoIssue
+doRevoke Revoked = Revoked
+doRevoke Issued  = Revoked
 
 canSTO :: PrismModel -> Bool
-canSTO s = isIssued s `elem` [Issued, Broken True, Broken False]
+canSTO s = isIssued s == Issued
 
 instance StateModel PrismModel where
 
@@ -158,14 +155,15 @@ instance StateModel PrismModel where
 
     initialState = PrismModel { isIssued = NoIssue, stoState = STOReady, balance = 0 }
 
-    precondition _ _      = True
+    precondition s Issue = isIssued s /= Issued -- Multiple Issue (without Revoke) breaks the contract
+    precondition _ _     = True
 
     nextState s Revoke  _          = s { isIssued = doRevoke $ isIssued s }
     nextState s Issue   _          = s { isIssued = doIssue  $ isIssued s }
     nextState s Call    _
         | stoState s == STOReady   = s { stoState = STOPending }
     nextState s Present _
-        | stoState s == STOPending = s { stoState = STODone, balance = balance s + if canSTO s then 1 else 0 }
+        | stoState s == STOPending = s { stoState = STOReady, balance = balance s + if canSTO s then 1 else 0 }
     nextState s _       _          = s
 
                                  -- v Wait a generous amount of blocks between calls
@@ -193,14 +191,15 @@ delay n = do
 finalPredicate :: PrismModel -> TracePredicate PrismSchema (TraceError PrismError) ()
 finalPredicate s = walletFundsChange issuer ada /\
                    walletFundsChange user (inv ada <> coin) /\
-                   walletFundsChange mirror kyc /\
-                   walletFundsChange credentialManager mempty
+                   walletFundsChange mirror mempty /\
+                   walletFundsChange credentialManager mempty /\
+                   logs
     where
         n    = numTokens * balance s
         ada  = Ada.lovelaceValueOf n
         coin = STO.coins stoData n
-        kyc | hasKYC s = Credential.token credential
-            | otherwise = mempty
+        logs | Broken <- isIssued s = top -- emulatorLog (const False) "the log"
+             | otherwise            = top
 
 prop_Prism :: Script PrismModel -> Property
 prop_Prism script = propRunScript finalPredicate contract before script after
