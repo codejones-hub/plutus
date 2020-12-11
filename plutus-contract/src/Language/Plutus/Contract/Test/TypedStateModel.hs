@@ -53,8 +53,8 @@ class (forall a. Show (Action state a), Monad (ActionMonad state)) =>
   nextState s _ _ = s
   precondition    :: state -> Action state a -> Bool
   precondition _ _ = True
-  perform         :: Action state a -> LookUp -> ActionMonad state a
-  perform _ _ = return undefined
+  perform         :: state -> Action state a -> LookUp -> ActionMonad state a
+  perform _ _ _ = return undefined
   postcondition   :: state -> Action state a -> LookUp -> a -> Bool
   postcondition _ _ _ _ = True
   monitoring      :: (state,state) -> Action state a -> LookUp -> a -> Property -> Property
@@ -155,7 +155,7 @@ runScript (Script script) = loop initialState [] script
     loop _s env [] = return (_s,reverse env)
     loop s env ((Var n := act):as) = do
       pre $ precondition s act
-      ret <- run (perform act (lookUpVar env))
+      ret <- run (perform s act (lookUpVar env))
       let name = actionName act
       monitor (tabulate "Actions" [name] . classify True ("contains "++name))
       monitor (counterexample ("Var "++show n++" := "++show act++" --> "++show ret))
