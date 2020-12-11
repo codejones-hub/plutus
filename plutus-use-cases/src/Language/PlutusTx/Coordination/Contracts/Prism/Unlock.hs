@@ -25,6 +25,7 @@ module Language.PlutusTx.Coordination.Contracts.Prism.Unlock(
     , UnlockError(..)
     ) where
 
+import           Control.Monad                                                    (forever)
 import           Data.Aeson                                                       (FromJSON, ToJSON)
 import           GHC.Generics                                                     (Generic)
 import           Language.Plutus.Contract
@@ -74,7 +75,7 @@ subscribeSTO :: forall s.
     , HasEndpoint "credential manager" ContractInstanceId s
     )
     => Contract s UnlockError ()
-subscribeSTO = do
+subscribeSTO = forever $ do
     STOSubscriber{wCredential, wSTOIssuer, wSTOTokenName, wSTOAmount} <-
         mapError WithdrawEndpointError
         $ endpoint @"sto"
