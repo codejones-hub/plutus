@@ -395,7 +395,7 @@ processConstraint = \case
         let value = Value.singleton (Value.mpsSymbol mpsHash) tn i
         unbalancedTx . tx . Tx.forgeScripts %= Set.insert monetaryPolicyScript
         unbalancedTx . tx . Tx.forge <>= value
-        valueSpentActual <>= value
+        valueSpentActual <>= if i < 0 then N.negate value else value
     MustPayToPubKey pk vl -> do
         unbalancedTx . tx . Tx.outputs %= (Tx.TxOut (PubKeyAddress pk) vl Tx.PayToPubKey :)
         -- we can subtract vl from 'valueSpentRequired' because
