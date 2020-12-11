@@ -29,6 +29,7 @@ import           Language.PlutusTx.Coordination.Contracts.Prism.Credential   (Cr
 import qualified Language.PlutusTx.Coordination.Contracts.Prism.Credential   as Credential
 import           Language.PlutusTx.Coordination.Contracts.Prism.StateMachine as StateMachine
 import           Ledger                                                      (txId)
+import qualified Ledger.Ada                                                  as Ada
 import qualified Ledger.Constraints                                          as Constraints
 import           Ledger.Crypto                                               (PubKeyHash, pubKeyHash)
 import qualified Ledger.Typed.Scripts                                        as Scripts
@@ -71,11 +72,14 @@ createTokens ::
     -> Contract s MirrorError ()
 createTokens authority = do
     CredentialOwnerReference{coTokenName, coOwner} <- mapError IssueEndpointError $ endpoint @"issue"
-    let lookups = Constraints.monetaryPolicy (Credential.policy authority)
+    let pk      = Credential.unCredentialAuthority authority
+        lookups = Constraints.monetaryPolicy (Credential.policy authority)
+                  <> Constraints.ownPubKeyHash pk
         theToken = Credential.token Credential{credAuthority=authority,credName=coTokenName}
         constraints =
             Constraints.mustForgeValue theToken
-            <> Constraints.mustBeSignedBy (Credential.unCredentialAuthority authority)
+            <> Constraints.mustBeSignedBy pk
+            <> Constraints.mustPayToPubKey pk (Ada.lovelaceValueOf 1)   -- Add self-spend to force an input
     _ <- mapError CreateTokenTxError $ do
             tx <- submitTxConstraintsWith @Scripts.Any lookups constraints
             awaitTxConfirmed (txId tx)
