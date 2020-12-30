@@ -9,6 +9,7 @@ import Data.BigInteger as BigInteger
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Lens (view)
+import Data.String (null)
 import Data.Tuple (Tuple(..), fst)
 import Data.Tuple.Nested ((/\))
 import Halogen.HTML (ClassName(ClassName), HTML, div, input, label, text)
@@ -74,9 +75,12 @@ balanceRow handler currencyIndex currencySymbol tokenIndex (Tuple tokenName amou
                       , placeholder "Amount"
                       , min zero
                       , onValueInput
-                          $ \str -> do
-                              newAmount <- BigInteger.fromString str
-                              pure $ handler $ SetBalance currencySymbol tokenName newAmount
+                          $ \str ->
+                              let
+                                newStr = if null str then "0" else str
+                              in do
+                                newAmount <- BigInteger.fromString newStr
+                                pure $ handler $ SetBalance currencySymbol tokenName newAmount
                       ]
                   ]
               ]
