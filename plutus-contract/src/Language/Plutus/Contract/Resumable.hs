@@ -38,6 +38,8 @@ module Language.Plutus.Contract.Resumable(
     ) where
 
 import           Control.Applicative
+import           Control.Monad                 ((<=<), (>=>))
+import           Control.Monad.Freer.Extras    (raiseUnderN)
 import           Data.Aeson                    (FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 import           Data.List.NonEmpty            (NonEmpty (..))
 import           Data.Map                      (Map)
@@ -217,6 +219,46 @@ handleResumable ::
 handleResumable = interpret $ \case
     RRequest o -> yield o id
     RSelect    -> send MPlus
+
+data SuspendedNonDet i o effs a =
+    SuspendedNonDet
+        { scContinuation  :: Either (NonDetCont i o effs a) a
+        }
+
+newtype NonDetCont i o effs a = NonDetCont { runNonDetCont :: Response i -> Eff effs (Maybe (SuspendedNonDet i o effs a)) }
+
+newtype SuspMap i o effs a = SuspMap { unSuspMap :: Map (RequestID, IterationID) (i -> Eff (SuspendingInterpreter i o effs a) a) }
+
+type SuspendingInterpreter i o effs a = ResumableInterpreter i o (State (SuspMap i o effs a) ': effs)
+
+suspendNonDet ::
+    forall i o a effs.
+    ( Member (State (Requests o)) effs
+    )
+    => Eff (Yield o i ': SuspendingInterpreter i o effs a) a
+    -> Eff effs (Maybe (SuspendedNonDet i o effs a))
+suspendNonDet e = runSuspInt mempty $ runC e >>= runStep where
+
+    runSuspInt :: IterationID -> Eff (SuspendingInterpreter i o effs a) a -> Eff effs (Maybe (SuspendedNonDet i o effs a))
+    runSuspInt i e = do
+        result <- runState (SuspMap Map.empty) $ evalState (RequestID 0) $ makeChoiceA @Maybe $ evalState i e
+        case  result of
+            (Nothing, SuspMap mp) ->
+                let cont rsp@Response{rspRqID, rspItID, rspResponse} = do
+                        case Map.lookup (rspRqID, rspItID) mp of
+                            Nothing -> pure Nothing
+                            Just k  -> runSuspInt (succ i) (k rspResponse)
+                in pure $ Just $ SuspendedNonDet{scContinuation = Left (NonDetCont cont) }
+            (Just a, _) -> pure $ Just $ SuspendedNonDet{scContinuation = Right a}
+
+    runStep :: Status (SuspendingInterpreter i o effs a) o i a -> Eff (SuspendingInterpreter i o effs a) a
+    runStep = \case
+        Done a -> pure a
+        Continue o k -> do
+            (iid,nid) <- nextRequestID o
+            let continue = k >=> runStep
+            modify @(SuspMap i o effs a) (\(SuspMap k) -> SuspMap $ Map.insert (nid, iid) continue k)
+            empty
 
 -- | Interpret 'Yield' as a prompt-type effect using 'NonDet' to
 --   branch out and choose a branch, and the 'State' effects to
