@@ -39,6 +39,7 @@ module Language.Plutus.Contract.Resumable(
     , suspendNonDet
     , SuspendedNonDet(..)
     , NonDetCont(..)
+    , SuspMap(..)
     ) where
 
 import           Control.Applicative

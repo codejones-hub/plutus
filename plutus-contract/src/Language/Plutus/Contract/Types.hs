@@ -39,9 +39,13 @@ module Language.Plutus.Contract.Types(
     , insertAndUpdate
     , runWithRecord
     , handleContractEffs
+    , handleContractEffsSuspend
     -- * State
     , ResumableResult(..)
-
+    -- * Run with continuations
+    , SuspendedContract(..)
+    , suspend
+    , runStep
     ) where
 
 import           Control.Applicative
@@ -60,6 +64,7 @@ import           Control.Monad.Freer.State
 import qualified Control.Monad.Freer.Writer          as W
 import           Data.Aeson                          (Value)
 import qualified Data.Aeson                          as Aeson
+import           Data.Maybe                          (fromMaybe)
 import           Data.Sequence                       (Seq)
 import           Data.Void                           (Void)
 import           GHC.Generics                        (Generic)
@@ -108,6 +113,34 @@ handleContractEffs =
 
 type ContractEnv = (IterationID, RequestID)
 
+handleContractEffsSuspend ::
+  forall s e effs a.
+  ( Member (Error e) effs
+  , Member (State (Responses (Event s))) effs
+  , Member (State CheckpointStore) effs
+  , Member (State CheckpointKey) effs
+  , Member (LogMsg CheckpointLogMsg) effs
+  , Member (LogMsg Value) effs
+  )
+  => Eff (ContractEffs s e) a
+  -> Eff effs (Maybe (SuspendedNonDet (Event s) (Handlers s) effs a))
+handleContractEffsSuspend =
+  suspendNonDet @(Event s) @(Handlers s) @a @effs
+  . handleResumable @(Event s) @(Handlers s)
+  . handleCheckpoint
+  . addEnvToCheckpoint
+  . subsume @(LogMsg Value)
+  . subsume @(Error e)
+  . raiseEnd4
+      @(Yield (Handlers s) (Event s)
+        ': State IterationID
+        ': NonDet
+        ': State RequestID
+        ': State (SuspMap (Event s) (Handlers s) effs a)
+        ': State (Requests (Handlers s))
+        ': effs
+        )
+
 getContractEnv ::
   forall effs.
   ( Member (State RequestID) effs
@@ -146,7 +179,6 @@ addEnvToCheckpoint = reinterpret @Checkpoint @Checkpoint @effs $ \case
         pure (Right (Just a))
       Left err -> pure (Left err)
       Right Nothing -> pure (Right Nothing)
-
 
 -- | @Contract s a@ is a contract with schema 's', producing a value of
 --  type 'a' or a 'ContractError'. See note [Contract Schema].
@@ -235,6 +267,100 @@ runWithRecord action store responses =
       $ runState @(Requests (Handlers s)) mempty
       $ E.runError  @e @_
       $ handleContractEffs @s @e @_ @a action
+
+type SuspendedContractEffects e i =
+  Error e
+  ': State CheckpointKey
+  ': State (Responses i)
+  ': State CheckpointStore
+  ': LogMsg CheckpointLogMsg
+  ': LogMsg Value
+  ': W.Writer (Seq (LogMessage Value))
+  ': '[]
+
+runSuspContractEffects ::
+  forall e i a.
+  CheckpointKey
+  -> Responses i
+  -> CheckpointStore
+  -> Eff (SuspendedContractEffects e i) a
+  -> ((((Either e a, CheckpointKey), Responses i), CheckpointStore), Seq (LogMessage Value))
+runSuspContractEffects checkpointKey responses checkpointStore =
+  run
+    . W.runWriter @(Seq (LogMessage Value))
+    . interpret (handleLogWriter @Value @(Seq (LogMessage Value)) $ unto return)
+    . handleLogIgnore @CheckpointLogMsg
+    . runState checkpointStore
+    . runState responses
+    . runState checkpointKey
+    . E.runError @e
+
+data SuspendedContract e i o a =
+  SuspendedContract
+    { scResumableResult :: ResumableResult e i o a
+    , scContinuations   :: Maybe (SuspendedNonDet i o (SuspendedContractEffects e i) a)
+    , scCheckpointKey   :: CheckpointKey
+    }
+
+-- | Run an action of @ContractEffs@ until it requests input for the first
+--   time, returning the 'SuspendedContract'
+suspend ::
+  forall s e a.
+  Eff (ContractEffs s e) a -- ^ The contract
+  -> SuspendedContract e (Event s) (Handlers s) a
+suspend action =
+  let ((((initialRes, checkpointKey), responses), checkpointStore), newLogs) =
+        runSuspContractEffects
+          (0 :: CheckpointKey)
+          (mempty @(Responses (Event s)))
+          (mempty @CheckpointStore)
+          (handleContractEffsSuspend @_ @_ @(SuspendedContractEffects e (Event s)) action)
+  in SuspendedContract
+      { scResumableResult =
+          ResumableResult
+            { wcsResponses = responses
+            , wcsRequests =
+                let getRequests = \case { AContinuation (NonDetCont{ndcRequests}) -> Just ndcRequests; _ -> Nothing }
+                in either mempty (fromMaybe mempty) $ fmap (>>= getRequests) initialRes
+            , wcsFinalState =
+                let getResult = \case { AResult a -> Just a; _ -> Nothing } in
+                fmap (>>= getResult) initialRes
+            , wcsLogs = newLogs
+            , wcsCheckpointStore = checkpointStore
+            }
+      , scContinuations = either (const Nothing) id initialRes
+      , scCheckpointKey = checkpointKey
+      }
+
+runStep ::
+  forall s e a.
+  SuspendedContract e (Event s) (Handlers s) a
+  -> Response (Event s)
+  -> Maybe (SuspendedContract e (Event s) (Handlers s) a)
+runStep SuspendedContract{scContinuations=Just (AContinuation NonDetCont{ndcCont}), scCheckpointKey, scResumableResult=ResumableResult{wcsResponses, wcsCheckpointStore, wcsLogs = oldLogs}} event =
+  let ((((newState, newCheckpointKey), responses), checkpointStore), newLogs) =
+        runSuspContractEffects
+          scCheckpointKey
+          wcsResponses
+          wcsCheckpointStore
+          $ ndcCont event
+  in Just SuspendedContract
+      { scResumableResult =
+          ResumableResult
+            { wcsResponses = responses
+            , wcsRequests =
+                let getRequests = \case { AContinuation (NonDetCont{ndcRequests}) -> Just ndcRequests; _ -> Nothing }
+                in either mempty (fromMaybe mempty) $ fmap (>>= getRequests) newState
+            , wcsFinalState =
+                let getResult = \case { AResult a -> Just a; _ -> Nothing } in
+                fmap (>>= getResult) newState
+            , wcsLogs = oldLogs <> newLogs
+            , wcsCheckpointStore = checkpointStore
+            }
+      , scContinuations = either (const Nothing) id newState
+      , scCheckpointKey = newCheckpointKey
+      }
+runStep _ _ = Nothing
 
 insertAndUpdate ::
   forall s e a.
