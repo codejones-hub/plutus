@@ -37,7 +37,7 @@ rec {
     plutus-atomic-swap
     plutus-pay-to-wallet;
 
-  webCommon = pkgs.callPackage ./web-common { };
+  webCommon = import ./web-common { inherit lib; };
 
   plutus-playground = pkgs.recurseIntoAttrs rec {
     tutorial = docs.site;
