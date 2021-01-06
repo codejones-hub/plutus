@@ -187,6 +187,7 @@ instance actionIsEvent :: IsEvent HAction where
   toEvent (GistAction (SetGistUrl _)) = Nothing
   toEvent (GistAction LoadGist) = Just $ (defaultEvent "LoadGist") { category = Just "Gist" }
   toEvent (GistAction (AjaxErrorPaneAction _)) = Nothing
+  toEvent ToggleDemoFilesMenu = Nothing
   toEvent (ChangeView view) = Just $ (defaultEvent "View") { label = Just $ show view }
   toEvent (LoadScript script) = Just $ (defaultEvent "LoadScript") { label = Just script }
   toEvent AddSimulationSlot = Just $ (defaultEvent "AddSimulationSlot") { category = Just "Simulation" }
