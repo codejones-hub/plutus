@@ -84,7 +84,7 @@ let
   # `set-git-rev` is a function that can be called on a haskellPackages
   # package to inject the git revision post-compile
   set-git-rev = pkgs.callPackage ./set-git-rev {
-    inherit (haskell.packages) ghcWithPackages;
+    inherit (haskell.project) ghcWithPackages;
     inherit git-rev;
   };
 
@@ -97,9 +97,13 @@ let
       inherit mvn2nix;
     };
 
-  # not available in 20.03 and we depend on several recent changes
-  # including stylish-haskell support
-  nix-pre-commit-hooks = import (sources."pre-commit-hooks.nix");
+  # By default pre-commit-hooks.nix uses its own pinned version of nixpkgs. In order to
+  # to get it to use our version we have to (somewhat awkwardly) use `nix/default.nix`
+  # to which both `nixpkgs` and `system` can be passed.
+  nix-pre-commit-hooks = (pkgs.callPackage ((sources."pre-commit-hooks.nix") + "/nix/default.nix") {
+    inherit system;
+    inherit (sources) nixpkgs;
+  }).packages;
 
   # purty is unable to process several files but that is what pre-commit
   # does. pre-commit-hooks.nix does provide a wrapper for that but when
@@ -127,6 +131,13 @@ let
 
   # ghc web service
   web-ghc = pkgs.callPackage ./web-ghc { inherit set-git-rev haskell; };
+
+  # Nixops version after 1.7 release that is on nixpkgs 20.09
+  # latest nixops uses nix flakes but unfortunately the below command won't work in restricted mode
+  # for now I have commented it out and you can still build `nix-build -A plutus.nixops` however it
+  # won't work in nix-shell. To get it to build on Hydra I think we will have to manually provide
+  # flake-compat with niv.
+  # nixops = (import sources.nixops).defaultPackage."${system}";
 
   # combined haddock documentation for all public plutus libraries
   plutus-haddock-combined =

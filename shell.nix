@@ -51,7 +51,7 @@ let
     shellcheck
     sqlite-interactive
     stack
-    terraform_0_12
+    terraform
     yubikey-manager
     z3
     zlib
@@ -76,8 +76,11 @@ let
   ]);
 
 in
-haskell.packages.shellFor {
+haskell.project.shellFor {
   nativeBuildInputs = nixpkgsInputs ++ localInputs ++ [ agdaWithStdlib sphinxTools ];
+  # We don't currently use this, and it's a pain to materialize, and otherwise
+  # costs a fair bit of eval time.
+  withHoogle = false;
 
   # we have a local passwords store that we use for deployments etc.
   PASSWORD_STORE_DIR = toString ./. + "/secrets";

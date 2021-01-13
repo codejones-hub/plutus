@@ -11,7 +11,7 @@ import Data.String as String
 import Effect.Aff.Class (class MonadAff)
 import Examples.Haskell.Contracts as HE
 import Halogen (ClassName(..), ComponentHTML, liftEffect)
-import Halogen.Classes (aHorizontal, analysisPanel, closeDrawerArrowIcon, codeEditor, collapsed, footerPanelBg, minimizeIcon)
+import Halogen.Classes (aHorizontal, analysisPanel, closeDrawerArrowIcon, codeEditor, collapsed, footerPanelBg, group, minimizeIcon)
 import Halogen.HTML (HTML, a, button, code_, div, div_, img, option, pre_, section, select, slot, text)
 import Halogen.HTML.Events (onClick, onSelectedIndexChange)
 import Halogen.HTML.Properties (alt, class_, classes, disabled, src)
@@ -21,10 +21,10 @@ import HaskellEditor.Types (Action(..), State, _compilationResult, _haskellEdito
 import Language.Haskell.Interpreter (CompilationError(..), InterpreterError(..), InterpreterResult(..))
 import Language.Haskell.Monaco as HM
 import LocalStorage as LocalStorage
+import MainFrame.Types (ChildSlots, _haskellEditorSlot)
 import Monaco (getModel, setValue) as Monaco
 import Network.RemoteData (RemoteData(..), _Loading, isLoading, isSuccess)
 import StaticData as StaticData
-import MainFrame.Types (ChildSlots, _haskellEditorSlot)
 
 render ::
   forall m.
@@ -42,11 +42,13 @@ render state =
 
 otherActions :: forall p. State -> HTML p Action
 otherActions state =
-  div [ classes [ ClassName "group" ] ]
+  div [ classes [ group ] ]
     [ editorOptions state
     , compileButton state
     , sendResultButton state "Send To Simulator" SendResultToSimulator
-    , sendResultButton state "Send To Blockly" SendResultToBlockly
+    -- FIXME: I think we want to change this action to be called from the simulator
+    --        with the action "soon to be implemented" ViewAsBlockly
+    -- , sendResultButton state "Send To Blockly" SendResultToBlockly
     ]
 
 editorOptions :: forall p. State -> HTML p Action
@@ -55,6 +57,7 @@ editorOptions state =
     [ select
         [ HTML.id_ "editor-options"
         , class_ (ClassName "dropdown-header")
+        , HTML.value $ show $ state ^. _haskellEditorKeybindings
         , onSelectedIndexChange (\idx -> ChangeKeyBindings <$> toEnum idx)
         ]
         (map keybindingItem (upFromIncluding bottom))
@@ -75,6 +78,7 @@ haskellEditor state = slot _haskellEditorSlot unit component unit (Just <<< Hand
   where
   setup editor =
     liftEffect do
+      -- TODO we shouldn't access local storage from the view
       mContents <- LocalStorage.getItem StaticData.bufferLocalStorageKey
       let
         contents = fromMaybe HE.escrow mContents

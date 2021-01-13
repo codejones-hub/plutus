@@ -23,13 +23,15 @@ import qualified Spec.Lib                                                  as Li
 
 import qualified Language.PlutusTx                                         as PlutusTx
 
+import           Control.Monad                                             (void)
 import           Language.Plutus.Contract.Test
 import           Language.Plutus.Contract.Test.StateModel
 import           Language.PlutusTx.Coordination.Contracts.GameStateMachine as G
-import           Language.PlutusTx.Lattice
 import qualified Ledger.Ada                                                as Ada
 import qualified Ledger.Typed.Scripts                                      as Scripts
 import           Ledger.Value                                              (Value)
+import           Plutus.Trace.Emulator                                     (EmulatorTrace)
+import qualified Plutus.Trace.Emulator                                     as Trace
 import qualified Wallet.Emulator                                           as EM
 
 -- * QuickCheck model
@@ -196,43 +198,24 @@ prop_notStuck (Shrink2 s) = notStuck s
 tests :: TestTree
 tests =
     testGroup "state machine tests"
-    [ checkPredicate @GameStateMachineSchema "run a successful game trace"
-        G.contract
+    [ checkPredicate "run a successful game trace"
         (walletFundsChange w2 (Ada.lovelaceValueOf 3 <> gameTokenVal)
-        /\ fundsAtAddress (Scripts.scriptAddress G.scriptInstance) (Ada.lovelaceValueOf 5 ==)
-        /\ walletFundsChange w1 (Ada.lovelaceValueOf (-8)))
+        .&&. valueAtAddress (Scripts.scriptAddress G.scriptInstance) (Ada.lovelaceValueOf 5 ==)
+        .&&. walletFundsChange w1 (Ada.lovelaceValueOf (-8)))
         successTrace
 
-    , checkPredicate @GameStateMachineSchema "run a 2nd successful game trace"
-        G.contract
+    , checkPredicate "run a 2nd successful game trace"
         (walletFundsChange w2 (Ada.lovelaceValueOf 3)
-        /\ fundsAtAddress (Scripts.scriptAddress G.scriptInstance) (Ada.lovelaceValueOf 1 ==)
-        /\ walletFundsChange w1 (Ada.lovelaceValueOf (-4) <> gameTokenVal))
-        ( successTrace
-        >> payToWallet w2 w1 gameTokenVal
-        >> addBlocks 1
-        >> handleBlockchainEvents w1
-        >> callEndpoint @"guess" w1 GuessArgs{guessArgsOldSecret="new secret", guessArgsNewSecret="hello", guessArgsValueTakenOut=Ada.lovelaceValueOf 4}
-        >> handleBlockchainEvents w1
-        >> addBlocks 1
-        )
+        .&&. valueAtAddress (Scripts.scriptAddress G.scriptInstance) (Ada.lovelaceValueOf 1 ==)
+        .&&. walletFundsChange w1 (Ada.lovelaceValueOf (-8))
+        .&&. walletFundsChange w3 (Ada.lovelaceValueOf 4 <> gameTokenVal))
+        successTrace2
 
-    , checkPredicate @GameStateMachineSchema "run a failed trace"
-        G.contract
+    , checkPredicate "run a failed trace"
         (walletFundsChange w2 gameTokenVal
-        /\ fundsAtAddress (Scripts.scriptAddress G.scriptInstance) (Ada.lovelaceValueOf 8 ==)
-        /\ walletFundsChange w1 (Ada.lovelaceValueOf (-8)))
-        ( callEndpoint @"lock" w1 LockArgs{lockArgsSecret="hello", lockArgsValue= Ada.lovelaceValueOf 8}
-        >> handleBlockchainEvents w1
-        >> addBlocks 1
-        >> handleBlockchainEvents w1
-        >> addBlocks 1
-        >> payToWallet w1 w2 gameTokenVal
-        >> addBlocks 1
-        >> callEndpoint @"guess" w2 GuessArgs{guessArgsOldSecret="hola", guessArgsNewSecret="new secret", guessArgsValueTakenOut=Ada.lovelaceValueOf 3}
-        >> handleBlockchainEvents w2
-        >> addBlocks 1)
-
+        .&&. valueAtAddress (Scripts.scriptAddress G.scriptInstance) (Ada.lovelaceValueOf 8 ==)
+        .&&. walletFundsChange w1 (Ada.lovelaceValueOf (-8)))
+        failTrace
 
     , Lib.goldenPir "test/Spec/gameStateMachine.pir" $$(PlutusTx.compile [|| mkValidator ||])
 
@@ -253,18 +236,44 @@ w2 = EM.Wallet 2
 w3 :: EM.Wallet
 w3 = EM.Wallet 3
 
-successTrace :: ContractTrace GameStateMachineSchema e a ()
+-- | Wallet 1 locks some funds, transfers the token to wallet 2
+--   which then makes a correct guess and locks the remaining
+--   funds with a new secret
+successTrace :: EmulatorTrace ()
 successTrace = do
-    callEndpoint @"lock" w1 LockArgs{lockArgsSecret="hello", lockArgsValue= Ada.lovelaceValueOf 8}
-    handleBlockchainEvents w1
-    addBlocks 1
-    handleBlockchainEvents w1
-    addBlocks 1
-    payToWallet w1 w2 gameTokenVal
-    addBlocks 1
-    callEndpoint @"guess" w2 GuessArgs{guessArgsOldSecret="hello", guessArgsNewSecret="new secret", guessArgsValueTakenOut=Ada.lovelaceValueOf 3}
-    handleBlockchainEvents w2
-    addBlocks 1
+    hdl <- Trace.activateContractWallet w1 G.contract
+    Trace.callEndpoint @"lock" hdl LockArgs{lockArgsSecret="hello", lockArgsValue= Ada.lovelaceValueOf 8}
+    _ <- Trace.waitNSlots 2
+    _ <- Trace.payToWallet w1 w2 gameTokenVal
+    _ <- Trace.waitNSlots 1
+    hdl2 <- Trace.activateContractWallet w2 G.contract
+    Trace.callEndpoint @"guess" hdl2 GuessArgs{guessArgsOldSecret="hello", guessArgsNewSecret="new secret", guessArgsValueTakenOut=Ada.lovelaceValueOf 3}
+    void $ Trace.waitNSlots 1
+
+-- | Run 'successTrace', then wallet 2 transfers the token to wallet 3, which
+--   makes another correct guess
+successTrace2 :: EmulatorTrace ()
+successTrace2 = do
+    successTrace
+    _ <- Trace.payToWallet w2 w3 gameTokenVal
+    _ <- Trace.waitNSlots 1
+    hdl3 <- Trace.activateContractWallet w3 G.contract
+    Trace.callEndpoint @"guess" hdl3 GuessArgs{guessArgsOldSecret="new secret", guessArgsNewSecret="hello", guessArgsValueTakenOut=Ada.lovelaceValueOf 4}
+    void $ Trace.waitNSlots 1
+
+
+-- | Wallet 1 locks some funds, transfers the token to wallet 2
+--   which then makes a wrong guess
+failTrace :: EmulatorTrace ()
+failTrace = do
+    hdl <- Trace.activateContractWallet w1 G.contract
+    Trace.callEndpoint @"lock" hdl LockArgs{lockArgsSecret="hello", lockArgsValue= Ada.lovelaceValueOf 8}
+    _ <- Trace.waitNSlots 2
+    _ <- Trace.payToWallet w1 w2 gameTokenVal
+    _ <- Trace.waitNSlots 1
+    hdl2 <- Trace.activateContractWallet w2 G.contract
+    _ <- Trace.callEndpoint @"guess" hdl2 GuessArgs{guessArgsOldSecret="hola", guessArgsNewSecret="new secret", guessArgsValueTakenOut=Ada.lovelaceValueOf 3}
+    void $ Trace.waitNSlots 1
 
 gameTokenVal :: Value
 gameTokenVal =

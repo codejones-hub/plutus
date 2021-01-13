@@ -1,4 +1,9 @@
-module HaskellEditor.State where
+module HaskellEditor.State
+  ( handleAction
+  , editorGetValue
+  -- TODO: This should probably be exposed by an action
+  , editorResize
+  ) where
 
 import Prelude hiding (div)
 import Control.Monad.Except (ExceptT, runExceptT)
@@ -6,7 +11,6 @@ import Control.Monad.Reader (runReaderT)
 import Data.Array (catMaybes)
 import Data.Either (Either(..))
 import Data.Lens (assign, use, view)
-import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.String as String
 import Effect.Aff.Class (class MonadAff)
@@ -16,16 +20,16 @@ import Halogen.Monaco (Message(..), Query(..)) as Monaco
 import HaskellEditor.Types (Action(..), State, _compilationResult, _haskellEditorKeybindings, _showBottomPanel)
 import Language.Haskell.Interpreter (CompilationError(..), InterpreterError(..), _InterpreterResult)
 import LocalStorage as LocalStorage
+import MainFrame.Types (ChildSlots, _blocklySlot, _haskellEditorSlot)
 import Marlowe (SPParams_, postRunghc)
 import Monaco (IMarkerData, markerSeverity)
 import Network.RemoteData (RemoteData(..))
 import Network.RemoteData as RemoteData
 import Servant.PureScript.Ajax (AjaxError)
 import Servant.PureScript.Settings (SPSettings_)
-import Simulation.Types (WebData, _result)
+import SimulationPage.Types (_result)
+import Types (WebData)
 import StaticData (bufferLocalStorageKey)
-import StaticData as StaticData
-import MainFrame.Types (ChildSlots, _blocklySlot, _haskellEditorSlot)
 import Webghc.Server (CompileRequest(..))
 
 handleAction ::
@@ -57,18 +61,14 @@ handleAction settings Compile = do
           _ -> []
       void $ query _haskellEditorSlot unit (Monaco.SetModelMarkers markers identity)
 
-handleAction _ (LoadScript key) = do
-  case Map.lookup key StaticData.demoFiles of
-    Nothing -> pure unit
-    Just contents -> do
-      editorSetValue contents
-
 handleAction _ (ShowBottomPanel val) = do
   assign _showBottomPanel val
   editorResize
 
 handleAction _ SendResultToSimulator = pure unit
 
+-- FIXME: I think we want to change this action to be called from the simulator
+--        with the action "soon to be implemented" ViewAsBlockly
 handleAction _ SendResultToBlockly = do
   mContract <- use _compilationResult
   case mContract of
@@ -77,6 +77,10 @@ handleAction _ SendResultToBlockly = do
         source = view (_InterpreterResult <<< _result) result
       void $ query _blocklySlot unit (Blockly.SetCode source unit)
     _ -> pure unit
+
+handleAction _ (InitHaskellProject contents) = do
+  editorSetValue contents
+  liftEffect $ LocalStorage.setItem bufferLocalStorageKey contents
 
 runAjax ::
   forall m a.

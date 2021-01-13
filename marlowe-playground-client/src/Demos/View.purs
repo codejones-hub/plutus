@@ -6,12 +6,12 @@ import Data.Newtype (wrap)
 import Demos.Types (Action(..), Demo)
 import Effect.Aff.Class (class MonadAff)
 import Halogen (ClassName(..), ComponentHTML)
-import Halogen.Classes (modalContent)
+import Halogen.Classes (group, modalContent)
 import Halogen.HTML (HTML, button, div, div_, h2_, hr_, span, text)
 import Halogen.HTML.Events (onClick)
 import Halogen.HTML.Properties (class_, classes)
 import MainFrame.Types (ChildSlots)
-import Modal.ViewHelpers (modalHeaderTitle)
+import Modal.ViewHelpers (modalHeader)
 import Projects.Types (Lang(..))
 
 render ::
@@ -21,7 +21,7 @@ render ::
   ComponentHTML Action ChildSlots m
 render state =
   div_
-    [ modalHeaderTitle "Demo Files"
+    [ modalHeader "Demo Files" (Just Cancel)
     , div [ classes [ modalContent, ClassName "projects-container" ] ]
         [ demoFile (wrap "Escrow") "Escrow" "Escrow is a financial arrangement where a third party holds and regulates payment of the funds required for two parties involved in a given transaction."
         , demoFile (wrap "ZeroCouponBond") "Zero Coupon Bond" "A zero-coupon bond is a debt security that does not pay interest but instead trades at a deep discount, rendering a profit at maturity, when the bond is redeemed for its full face value."
@@ -34,9 +34,9 @@ demoFile :: forall p. Demo -> String -> String -> HTML p Action
 demoFile key name description =
   div []
     [ h2_ [ text name ]
-    , div [ class_ (ClassName "group") ]
+    , div [ class_ group ]
         [ span [ class_ (ClassName "description") ] [ text description ]
-        , div [ classes [ ClassName "group", ClassName "open-buttons" ] ]
+        , div [ classes [ group, ClassName "open-buttons" ] ]
             [ button [ onClick $ const $ Just $ LoadDemo Haskell key ] [ text "Haskell" ]
             , button [ onClick $ const $ Just $ LoadDemo Javascript key ] [ text "Javascript" ]
             , button [ onClick $ const $ Just $ LoadDemo Marlowe key ] [ text "Marlowe" ]

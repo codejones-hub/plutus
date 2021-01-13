@@ -1,4 +1,8 @@
-module JavascriptEditor.State where
+module JavascriptEditor.State
+  ( handleAction
+  , mkEditor
+  , editorGetValue
+  ) where
 
 import Prelude hiding (div)
 import Control.Monad.Maybe.Extra (hoistMaybe)
@@ -8,7 +12,6 @@ import Data.Either (Either(..))
 import Data.Lens (assign, to, use, view)
 import Data.List ((:))
 import Data.List as List
-import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (drop, joinWith, length, take)
 import Effect.Aff.Class (class MonadAff, liftAff)
@@ -45,6 +48,18 @@ handleAction ::
   HalogenM State Action ChildSlots Void m Unit
 handleAction _ (HandleEditorMessage (Monaco.TextChanged text)) =
   ( do
+      -- TODO: This handler manages the logic of having a restricted range that cannot be modified. But the
+      --       current implementation uses editorSetValue to overwrite the editor contents with the last
+      --       correct value (taken from local storage). By using editorSetValue inside the TextChanged handler
+      --       the events get fired multiple times on init, which makes hasUnsavedChanges always true for a new
+      --       JS project or a project load.
+      --
+      --       Once the PR 2498 gets merged, I want to try changing the web-commons Monaco component so that the
+      --       TextChanged handler returns an IModelContentChangedEvent instead of a string. That event cointains
+      --       information of the range of the modifications, and if the action was triggered by an undo/redo
+      --       action. With that information we can reimplement this by firing an undo event if a "read only"
+      --       decoration. At this moment I'm not sure if that will solve the bubble problem but at least it will
+      --       allow us to decouple from local storage.
       let
         prunedText = pruneJSboilerplate text
 
@@ -97,12 +112,6 @@ handleAction settings Compile = do
   assign _showBottomPanel true
   editorResize
 
-handleAction _ (LoadScript key) = do
-  case Map.lookup key StaticData.demoFilesJS of
-    Nothing -> pure unit
-    Just contents -> do
-      editorSetValue contents
-
 handleAction _ (ShowBottomPanel val) = do
   assign _showBottomPanel val
   editorResize
@@ -117,6 +126,10 @@ handleAction _ SendResultToBlockly = do
         source = view (_result <<< to show) result
       void $ query _blocklySlot unit (Blockly.SetCode source unit)
     _ -> pure unit
+
+handleAction _ (InitJavascriptProject prunedContent) = do
+  editorSetValue prunedContent
+  liftEffect $ LocalStorage.setItem jsBufferLocalStorageKey prunedContent
 
 editorResize :: forall state action msg m. HalogenM state action ChildSlots msg m Unit
 editorResize = void $ query _jsEditorSlot unit (Monaco.Resize unit)
