@@ -16,20 +16,14 @@ module Language.Plutus.Contract.Test.StateModel
   , propRunScriptWithDistribution
   ) where
 
-import qualified Control.Monad.Freer.State       as Eff
+import           Control.Monad.Cont
 import           Control.Monad.Writer
-import           Data.Aeson                      (FromJSON)
-import           Data.Row                        (AllUniqueLabels, Forall)
-import           Data.Row.Internal               (Unconstrained1)
-import qualified Data.Text                       as Text
-import           Data.Text.Prettyprint.Doc
 
-import           Language.Plutus.Contract.Schema (Input, Output)
 import           Language.Plutus.Contract.Test
-import           Language.Plutus.Contract.Types  (Contract)
-import qualified Wallet.Emulator                 as EM
+import           Language.Plutus.Contract.Types (Contract)
+import           Plutus.Trace.Emulator          (EmulatorTrace)
 
-import           Test.QuickCheck
+import           Test.QuickCheck                as QC
 import           Test.QuickCheck.Monadic
 
 class (Show (Action state), Monad (ActionMonad state)) =>
@@ -49,8 +43,8 @@ class (Show (Action state), Monad (ActionMonad state)) =>
   precondition _ _ = True
   needs           :: Action state -> [Step]
   needs _ = []
-  perform         :: Action state -> [Ret state] -> ActionMonad state (Ret state)
-  perform _ _ = return undefined
+  perform         :: state -> Action state -> [Ret state] -> ActionMonad state (Ret state)
+  perform _ _ _ = return undefined
   postcondition   :: state -> Action state -> (Step -> Ret state) -> Ret state -> Bool
   postcondition _ _ _ _ = True
   monitoring      :: (state,state) -> Action state -> (Step -> Ret state) -> Ret state -> Property -> Property
@@ -113,13 +107,17 @@ stateAfter (Script script) = loop initialState script
 
 runScript :: (StateModel state, Show (Ret state)) =>
                 Script state -> PropertyM (ActionMonad state) (state, [(Step, Ret state)])
-runScript (Script script) = loop initialState [] script
+runScript = runScriptInState initialState
+
+runScriptInState :: (StateModel state, Show (Ret state)) =>
+                state -> Script state -> PropertyM (ActionMonad state) (state, [(Step, Ret state)])
+runScriptInState state (Script script) = loop state [] script
   where
     loop s steps [] = return (s, reverse steps)
     loop s steps ((n,a):as) = do
       pre $ precondition s a
       let deps = map (getStep steps) (needs a)
-      ret <- run (perform a deps)
+      ret <- run (perform s a deps)
       let name = head (words (show a))
       monitor (tabulate "Actions" [name] . classify True name)
       monitor (counterexample (show n++": "++show a++" "++show deps++" --> "++show ret))
@@ -143,55 +141,25 @@ notStuck script
 
 -- * Contract specifics
 
-runTr ::
-    ( Show e
-    , AllUniqueLabels (Input s)
-    , Forall (Input s) FromJSON
-    , Forall (Output s) Unconstrained1
-    ) =>
-    InitialDistribution -> Contract s e a -> ContractTrace s e a Property -> Property
-runTr distr contract tr =
-    case runTraceWithDistribution distr contract tr of
-        (Right (p, _), _) -> p
-        (Left err, _s)    -> whenFail (print err) False
+runTr :: InitialDistribution -> TracePredicate -> EmulatorTrace () -> Property
+runTr _distr predicate action =  -- TODO: distribution
+  flip runCont (const $ property True) $
+    checkPredicateInner defaultCheckOptions predicate action
+                        debugOutput assertResult
+  where
+    debugOutput :: String -> Cont Property ()
+    debugOutput out = cont $ \ k -> whenFail (putStrLn out) $ k ()
 
-getEmulatorState :: ContractTrace s e a EM.EmulatorState
-getEmulatorState = Eff.get
-
-getContractTraceState :: ContractTrace s e a (ContractTraceState s (TraceError e) a)
-getContractTraceState = Eff.get
-
-assertPredicate ::
-    forall s e a.
-    ( Show e
-    , Forall (Input s) Pretty
-    , Forall (Output s) Pretty
-    )
-    => InitialDistribution
-    -> TracePredicate s (TraceError e) a
-    -> PropertyM (ContractTrace s e a) ()
-assertPredicate dist predicate = do
-    em <- run getEmulatorState
-    st <- run getContractTraceState
-    let r = ContractTraceResult em st
-        (result, testOutputs) = runWriter $ unPredF predicate (dist, r)
-    monitor (counterexample $ Text.unpack $ renderTraceContext testOutputs st)
-    assert result
+    assertResult :: Bool -> Cont Property ()
+    assertResult ok = cont $ \ k -> ok QC..&&. k ()
 
 propRunScript ::
   ( StateModel state
-  , ActionMonad state ~ ContractTrace s e a
-  , Show e
+  , ActionMonad state ~ EmulatorTrace
   , Show (Ret state)
-  , AllUniqueLabels (Input s)
-  , Forall (Input s) FromJSON
-  , Forall (Input s) Pretty
-  , Forall (Output s) Pretty
-  , Forall (Output s) Unconstrained1
   )
-  => (state -> TracePredicate s (TraceError e) a)
-  -> Contract s e a
-  -> PropertyM (ActionMonad state) ()
+  => (state -> TracePredicate)
+  -> PropertyM (ActionMonad state) state
   -> Script state
   -> (state -> PropertyM (ActionMonad state) ())
   -> Property
@@ -199,26 +167,19 @@ propRunScript = propRunScriptWithDistribution defaultDist
 
 propRunScriptWithDistribution ::
   ( StateModel state
-  , ActionMonad state ~ ContractTrace s e a
-  , Show e
+  , ActionMonad state ~ EmulatorTrace
   , Show (Ret state)
-  , AllUniqueLabels (Input s)
-  , Forall (Input s) FromJSON
-  , Forall (Input s) Pretty
-  , Forall (Output s) Pretty
-  , Forall (Output s) Unconstrained1
   )
   => InitialDistribution
-  -> (state -> TracePredicate s (TraceError e) a)
-  -> Contract s e a
-  -> PropertyM (ActionMonad state) ()
+  -> (state -> TracePredicate)
+  -> PropertyM (ActionMonad state) state
   -> Script state
   -> (state -> PropertyM (ActionMonad state) ())
   -> Property
-propRunScriptWithDistribution dist finalPredicate contract before script after =
-  monadic (runTr defaultDist contract) $ do
-    before
-    (st, _) <- runScript script
+propRunScriptWithDistribution dist finalPredicate setup script after =
+  monadic (runTr dist predicate . void) $ do
+    initState <- setup
+    (st, _) <- runScriptInState initState script
     after st
-    assertPredicate dist (finalPredicate st)
-
+  where
+    predicate = finalPredicate $ stateAfter script

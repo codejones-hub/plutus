@@ -14,7 +14,7 @@ import           Control.Monad
 import           Control.Monad.Freer.Error
 import           Data.Map                                                  (Map)
 import qualified Data.Map                                                  as Map
-import           Test.QuickCheck
+import           Test.QuickCheck                                           hiding ((.&&.))
 import           Test.QuickCheck.Monadic
 import           Test.Tasty
 import qualified Test.Tasty.HUnit                                          as HUnit
@@ -38,6 +38,7 @@ import qualified Wallet.Emulator                                           as EM
 
 data GameModel = GameModel
     { gameValue     :: Integer
+    , handles       :: Map EM.Wallet Handle
     , keeper        :: Maybe EM.Wallet
     , hasToken      :: Maybe EM.Wallet
     , currentSecret :: String
@@ -45,6 +46,11 @@ data GameModel = GameModel
     , tokenLock     :: Integer
     , busy          :: Integer }
     deriving (Show)
+
+newtype Handle = Handle { unHandle :: Trace.ContractHandle GameStateMachineSchema G.GameError }
+
+instance Show Handle where
+    show _ = "()"
 
 instance StateModel GameModel where
     data Action GameModel = Lock EM.Wallet String Integer
@@ -56,10 +62,11 @@ instance StateModel GameModel where
     data Ret GameModel = RetOk | RetFail (TraceError G.GameError)
         deriving (Show)
 
-    type ActionMonad GameModel = ContractTrace GameStateMachineSchema G.GameError ()
+    type ActionMonad GameModel = EmulatorTrace
 
     initialState = GameModel
         { gameValue     = 0
+        , handles       = Map.empty
         , hasToken      = Nothing
         , keeper        = Nothing
         , currentSecret = ""
@@ -124,21 +131,19 @@ instance StateModel GameModel where
         [Guess w old new val' | val' <- shrink val]
     shrinkAction _s Delay = []
 
-    perform cmd _env = handle $ case cmd of
+    perform s cmd _env = handle $ case cmd of
         Lock w new val -> do
-            callEndpoint @"lock" w LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
-            handleBlockchainEvents w
-            addBlocks 1
-            handleBlockchainEvents w
-            addBlocks 1
+            Trace.callEndpoint @"lock" (ctHandle w) LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
+            delay 2
         Guess w old new val -> do
-            callEndpoint @"guess" w GuessArgs{guessArgsOldSecret = old, guessArgsNewSecret = new, guessArgsValueTakenOut = Ada.lovelaceValueOf val}
+            Trace.callEndpoint @"guess" (ctHandle w) GuessArgs{guessArgsOldSecret = old, guessArgsNewSecret = new, guessArgsValueTakenOut = Ada.lovelaceValueOf val}
         PassToken w w' -> do
-            payToWallet w w' gameTokenVal
+            Trace.payToWallet w w' gameTokenVal
             delay 1
         Delay -> delay 1
         where
-            handle m = catchError (RetOk <$ m) (return . RetFail)
+            handle m = RetOk <$ m -- catchError (RetOk <$ m) (return . RetFail)
+            ctHandle w = unHandle (handles s Map.! w)
 
     monitoring (s0, s1) act _env _res =
       case act of
@@ -152,10 +157,10 @@ lessBusy s = s { busy = 0 `max` (busy s - 1), tokenLock = 0 `max` (tokenLock s -
 busyFor :: Integer -> Integer -> GameModel -> GameModel
 busyFor n t s = s { busy = n `max` busy s, tokenLock = t `max` tokenLock s }
 
-finalPredicate :: GameModel -> TracePredicate GameStateMachineSchema (TraceError G.GameError) ()
-finalPredicate s = Map.foldrWithKey change top $ balances s
+finalPredicate :: GameModel -> TracePredicate
+finalPredicate s = Map.foldrWithKey change (pure True) $ balances s
     where
-        change w val rest = walletFundsChange w (Ada.lovelaceValueOf val <> gameTok) /\ rest
+        change w val rest = walletFundsChange w (Ada.lovelaceValueOf val <> gameTok) .&&. rest
             where
                 gameTok | Just w == hasToken s = gameTokenVal
                         | otherwise            = mempty
@@ -176,14 +181,14 @@ genValue :: Gen Integer
 genValue = getPositive <$> arbitrary
 
 delay :: Int -> ActionMonad GameModel ()
-delay n = do
-  replicateM_ n $ do
-    mapM_ handleBlockchainEvents wallets
-    addBlocks 1
-  return ()
+delay n = void $ Trace.waitNSlots (fromIntegral n)
 
 prop_Game :: Shrink2 (Script GameModel) -> Property
-prop_Game (Shrink2 s) = propRunScript finalPredicate G.contract (return ()) s $ \ _ -> run (delay 10)
+prop_Game (Shrink2 s) = propRunScript finalPredicate setup s $ \ _ -> run (delay 10)
+    where
+        setup = do
+            hs <- run $ mapM (flip Trace.activateContractWallet G.contract) wallets
+            return initialState{ handles = Map.fromList $ zip wallets $ map Handle hs }
 
 -- Generic property to check that we don't get stuck. This only tests the model, but if the model
 -- thinks it's not stuck, but the actual implementation is, the property running the contract will

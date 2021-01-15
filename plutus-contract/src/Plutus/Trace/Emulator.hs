@@ -94,14 +94,14 @@ import           Plutus.Trace.Emulator.Types             (ContractConstraints, C
 import           Streaming                               (Stream)
 import           Streaming.Prelude                       (Of)
 
-type EmulatorTrace a =
+type EmulatorTrace =
         Eff
             '[ RunContract
             , Waiting
             , EmulatorControl
             , EmulatedWalletAPI
             , LogMsg String
-            ] a
+            ]
 
 handleEmulatorTrace ::
     forall effs a.

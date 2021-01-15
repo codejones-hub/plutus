@@ -21,22 +21,13 @@ module Language.Plutus.Contract.Test.TypedStateModel(
   , propRunScriptWithDistribution
 ) where
 
-import qualified Control.Monad.Freer.State       as Eff
-import           Control.Monad.Writer
-import           Data.Aeson                      (FromJSON)
-import           Data.Row                        (AllUniqueLabels, Forall)
-import           Data.Row.Internal               (Unconstrained1)
-import qualified Data.Text                       as Text
-import           Data.Text.Prettyprint.Doc
-
+import           Control.Monad.Cont
 import           Data.Typeable
 
-import           Language.Plutus.Contract.Schema (Input, Output)
 import           Language.Plutus.Contract.Test
-import           Language.Plutus.Contract.Types  (Contract)
-import qualified Wallet.Emulator                 as EM
+import           Plutus.Trace.Emulator         (EmulatorTrace)
 
-import           Test.QuickCheck
+import           Test.QuickCheck               as QC
 import           Test.QuickCheck.Monadic
 
 class (forall a. Show (Action state a), Monad (ActionMonad state)) =>
@@ -150,7 +141,11 @@ stateAfter (Script script) = loop initialState script
 
 runScript :: StateModel state =>
                 Script state -> PropertyM (ActionMonad state) (state,Env)
-runScript (Script script) = loop initialState [] script
+runScript = runScriptInState initialState
+
+runScriptInState :: StateModel state =>
+                    state -> Script state -> PropertyM (ActionMonad state) (state,Env)
+runScriptInState state (Script script) = loop state [] script
   where
     loop _s env [] = return (_s,reverse env)
     loop s env ((Var n := act):as) = do
@@ -174,54 +169,24 @@ notStuck script
 
 -- * Contract specifics
 
-runTr ::
-    ( Show e
-    , AllUniqueLabels (Input s)
-    , Forall (Input s) FromJSON
-    , Forall (Output s) Unconstrained1
-    ) =>
-    InitialDistribution -> Contract s e a -> ContractTrace s e a Property -> Property
-runTr distr contract tr =
-    case runTraceWithDistribution distr contract tr of
-        (Right (p, _), _) -> p
-        (Left err, _s)    -> whenFail (print err) False
+runTr :: InitialDistribution -> TracePredicate -> EmulatorTrace () -> Property
+runTr _distr predicate action =  -- TODO: distribution
+  flip runCont (const $ property True) $
+    checkPredicateInner defaultCheckOptions predicate action
+                        debugOutput assertResult
+  where
+    debugOutput :: String -> Cont Property ()
+    debugOutput out = cont $ \ k -> whenFail (putStrLn out) $ k ()
 
-getEmulatorState :: ContractTrace s e a EM.EmulatorState
-getEmulatorState = Eff.get
-
-getContractTraceState :: ContractTrace s e a (ContractTraceState s (TraceError e) a)
-getContractTraceState = Eff.get
-
-assertPredicate ::
-    forall s e a.
-    ( Show e
-    , Forall (Input s) Pretty
-    , Forall (Output s) Pretty
-    )
-    => InitialDistribution
-    -> TracePredicate s (TraceError e) a
-    -> PropertyM (ContractTrace s e a) ()
-assertPredicate dist predicate = do
-    em <- run getEmulatorState
-    st <- run getContractTraceState
-    let r = ContractTraceResult em st
-        (result, testOutputs) = runWriter $ unPredF predicate (dist, r)
-    monitor (counterexample $ Text.unpack $ renderTraceContext testOutputs st)
-    assert result
+    assertResult :: Bool -> Cont Property ()
+    assertResult ok = cont $ \ k -> ok QC..&&. k ()
 
 propRunScript ::
   ( StateModel state
-  , ActionMonad state ~ ContractTrace s e a
-  , Show e
-  , AllUniqueLabels (Input s)
-  , Forall (Input s) FromJSON
-  , Forall (Input s) Pretty
-  , Forall (Output s) Pretty
-  , Forall (Output s) Unconstrained1
+  , ActionMonad state ~ EmulatorTrace
   )
-  => (state -> TracePredicate s (TraceError e) a)
-  -> Contract s e a
-  -> PropertyM (ActionMonad state) ()
+  => (state -> TracePredicate)
+  -> PropertyM (ActionMonad state) state
   -> Script state
   -> (state -> PropertyM (ActionMonad state) ())
   -> Property
@@ -229,25 +194,19 @@ propRunScript = propRunScriptWithDistribution defaultDist
 
 propRunScriptWithDistribution ::
   ( StateModel state
-  , ActionMonad state ~ ContractTrace s e a
-  , Show e
-  , AllUniqueLabels (Input s)
-  , Forall (Input s) FromJSON
-  , Forall (Input s) Pretty
-  , Forall (Output s) Pretty
-  , Forall (Output s) Unconstrained1
+  , ActionMonad state ~ EmulatorTrace
   )
   => InitialDistribution
-  -> (state -> TracePredicate s (TraceError e) a)
-  -> Contract s e a
-  -> PropertyM (ActionMonad state) ()
+  -> (state -> TracePredicate)
+  -> PropertyM (ActionMonad state) state
   -> Script state
   -> (state -> PropertyM (ActionMonad state) ())
   -> Property
-propRunScriptWithDistribution dist finalPredicate contract before script after =
-  monadic (runTr defaultDist contract) $ do
-    before
-    (st, _) <- runScript script
+propRunScriptWithDistribution dist finalPredicate setup script after =
+  monadic (runTr dist predicate . void) $ do
+    initState <- setup
+    (st, _) <- runScriptInState initState script
     after st
-    assertPredicate dist (finalPredicate st)
+  where
+    predicate = finalPredicate $ stateAfter script
 

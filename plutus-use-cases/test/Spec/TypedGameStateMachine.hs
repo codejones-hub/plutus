@@ -17,7 +17,7 @@ import           Control.Monad
 import           Control.Monad.Freer.Error
 import           Data.Map                                                  (Map)
 import qualified Data.Map                                                  as Map
-import           Test.QuickCheck
+import           Test.QuickCheck                                           hiding ((.&&.))
 import           Test.QuickCheck.Monadic
 import           Test.Tasty
 import qualified Test.Tasty.HUnit                                          as HUnit
@@ -33,6 +33,7 @@ import           Language.PlutusTx.Lattice
 import qualified Ledger.Ada                                                as Ada
 import qualified Ledger.Typed.Scripts                                      as Scripts
 import           Ledger.Value                                              (Value)
+import           Plutus.Trace.Emulator
 import qualified Wallet.Emulator                                           as EM
 
 -- * QuickCheck model
@@ -40,6 +41,7 @@ import qualified Wallet.Emulator                                           as EM
 
 data GameModel = GameModel
     { gameValue     :: Integer
+    , handles       :: Map EM.Wallet Handle
     , keeper        :: Maybe EM.Wallet
     , hasToken      :: Maybe EM.Wallet
     , currentSecret :: String
@@ -47,6 +49,11 @@ data GameModel = GameModel
     , tokenLock     :: Integer
     , busy          :: Integer }
     deriving (Show)
+
+newtype Handle = Handle { unHandle :: ContractHandle GameStateMachineSchema G.GameError }
+
+instance Show Handle where
+    show _ = "()"
 
 deriving instance Show (Action GameModel a)
 
@@ -57,10 +64,11 @@ instance StateModel GameModel where
       GiveToken :: EM.Wallet                                -> Action GameModel Ret
       Delay     ::                                             Action GameModel Ret
 
-    type ActionMonad GameModel = ContractTrace GameStateMachineSchema G.GameError ()
+    type ActionMonad GameModel = EmulatorTrace
 
     initialState = GameModel
         { gameValue     = 0
+        , handles       = Map.empty
         , hasToken      = Nothing
         , keeper        = Nothing
         , currentSecret = ""
@@ -127,20 +135,18 @@ instance StateModel GameModel where
 
     perform s cmd _env = case cmd of
         Lock w new val -> handle $ do
-            callEndpoint @"lock" w LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
-            handleBlockchainEvents w
-            addBlocks 1
-            handleBlockchainEvents w
-            addBlocks 1
+            callEndpoint @"lock" (ctHandle w) LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
+            delay 2
         Guess w old new val -> handle $ do
-            callEndpoint @"guess" w GuessArgs{guessArgsOldSecret = old, guessArgsNewSecret = new, guessArgsValueTakenOut = Ada.lovelaceValueOf val}
+            callEndpoint @"guess" (ctHandle w) GuessArgs{guessArgsOldSecret = old, guessArgsNewSecret = new, guessArgsValueTakenOut = Ada.lovelaceValueOf val}
         GiveToken w' -> handle $ do
             let Just w = hasToken s
             payToWallet w w' gameTokenVal
             delay 1
         Delay -> handle $ delay 1
         where
-            handle m = catchError (RetOk <$ m) (return . RetFail)
+            handle m = RetOk <$ m -- catchError (RetOk <$ m) (return . RetFail)
+            ctHandle w = unHandle (handles s Map.! w)
 
     monitoring (s0, s1) act _env _res =
       case act of
@@ -164,10 +170,10 @@ isOK :: Ret -> Bool
 isOK RetOk = True
 isOK _     = False
 
-finalPredicate :: GameModel -> TracePredicate GameStateMachineSchema (TraceError G.GameError) ()
-finalPredicate s = Map.foldrWithKey change top $ balances s
+finalPredicate :: GameModel -> TracePredicate
+finalPredicate s = Map.foldrWithKey change (pure True) $ balances s
     where
-        change w val rest = walletFundsChange w (Ada.lovelaceValueOf val <> gameTok) /\ rest
+        change w val rest = walletFundsChange w (Ada.lovelaceValueOf val <> gameTok) .&&. rest
             where
                 gameTok | Just w == hasToken s = gameTokenVal
                         | otherwise            = mempty
@@ -188,14 +194,14 @@ genValue :: Gen Integer
 genValue = getPositive <$> arbitrary
 
 delay :: Int -> ActionMonad GameModel ()
-delay n = do
-  replicateM_ n $ do
-    mapM_ handleBlockchainEvents wallets
-    addBlocks 1
-  return ()
+delay n = void $ waitNSlots (fromIntegral n)
 
 prop_Game :: Shrink2 (Script GameModel) -> Property
-prop_Game (Shrink2 s) = propRunScript finalPredicate G.contract (return ()) s $ \ _ -> run (delay 10)
+prop_Game (Shrink2 s) = propRunScript finalPredicate setup s $ \ _ -> run (delay 10)
+    where
+        setup = do
+            hs <- run $ mapM (flip activateContractWallet G.contract) wallets
+            return initialState{ handles = Map.fromList $ zip wallets $ map Handle hs }
 
 -- Generic property to check that we don't get stuck. This only tests the model, but if the model
 -- thinks it's not stuck, but the actual implementation is, the property running the contract will
@@ -204,56 +210,6 @@ prop_Game (Shrink2 s) = propRunScript finalPredicate G.contract (return ()) s $ 
 -- problem.
 prop_notStuck :: StateModel state => Shrink2 (Script state) -> Property
 prop_notStuck (Shrink2 s) = notStuck s
-
--- * Unit tests
-
-tests :: TestTree
-tests =
-    testGroup "state machine tests"
-    [ checkPredicate @GameStateMachineSchema "run a successful game trace"
-        G.contract
-        (walletFundsChange w2 (Ada.lovelaceValueOf 3 <> gameTokenVal)
-        /\ fundsAtAddress (Scripts.scriptAddress G.scriptInstance) (Ada.lovelaceValueOf 5 ==)
-        /\ walletFundsChange w1 (Ada.lovelaceValueOf (-8)))
-        successTrace
-
-    , checkPredicate @GameStateMachineSchema "run a 2nd successful game trace"
-        G.contract
-        (walletFundsChange w2 (Ada.lovelaceValueOf 3)
-        /\ fundsAtAddress (Scripts.scriptAddress G.scriptInstance) (Ada.lovelaceValueOf 1 ==)
-        /\ walletFundsChange w1 (Ada.lovelaceValueOf (-4) <> gameTokenVal))
-        ( successTrace
-        >> payToWallet w2 w1 gameTokenVal
-        >> addBlocks 1
-        >> handleBlockchainEvents w1
-        >> callEndpoint @"guess" w1 GuessArgs{guessArgsOldSecret="new secret", guessArgsNewSecret="hello", guessArgsValueTakenOut=Ada.lovelaceValueOf 4}
-        >> handleBlockchainEvents w1
-        >> addBlocks 1
-        )
-
-    , checkPredicate @GameStateMachineSchema "run a failed trace"
-        G.contract
-        (walletFundsChange w2 gameTokenVal
-        /\ fundsAtAddress (Scripts.scriptAddress G.scriptInstance) (Ada.lovelaceValueOf 8 ==)
-        /\ walletFundsChange w1 (Ada.lovelaceValueOf (-8)))
-        ( callEndpoint @"lock" w1 LockArgs{lockArgsSecret="hello", lockArgsValue= Ada.lovelaceValueOf 8}
-        >> handleBlockchainEvents w1
-        >> addBlocks 1
-        >> handleBlockchainEvents w1
-        >> addBlocks 1
-        >> payToWallet w1 w2 gameTokenVal
-        >> addBlocks 1
-        >> callEndpoint @"guess" w2 GuessArgs{guessArgsOldSecret="hola", guessArgsNewSecret="new secret", guessArgsValueTakenOut=Ada.lovelaceValueOf 3}
-        >> handleBlockchainEvents w2
-        >> addBlocks 1)
-
-
-    , Lib.goldenPir "test/Spec/gameStateMachine.pir" $$(PlutusTx.compile [|| mkValidator ||])
-
-    , HUnit.testCase "script size is reasonable"
-        (Lib.reasonable (Scripts.validatorScript G.scriptInstance) 49000)
-
-    ]
 
 initialVal :: Value
 initialVal = Ada.adaValueOf 10
@@ -266,19 +222,6 @@ w2 = EM.Wallet 2
 
 w3 :: EM.Wallet
 w3 = EM.Wallet 3
-
-successTrace :: ContractTrace GameStateMachineSchema e a ()
-successTrace = do
-    callEndpoint @"lock" w1 LockArgs{lockArgsSecret="hello", lockArgsValue= Ada.lovelaceValueOf 8}
-    handleBlockchainEvents w1
-    addBlocks 1
-    handleBlockchainEvents w1
-    addBlocks 1
-    payToWallet w1 w2 gameTokenVal
-    addBlocks 1
-    callEndpoint @"guess" w2 GuessArgs{guessArgsOldSecret="hello", guessArgsNewSecret="new secret", guessArgsValueTakenOut=Ada.lovelaceValueOf 3}
-    handleBlockchainEvents w2
-    addBlocks 1
 
 gameTokenVal :: Value
 gameTokenVal =
