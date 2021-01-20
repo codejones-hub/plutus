@@ -98,7 +98,6 @@ test-suite plutus-use-cases-test
         Spec.Future
         Spec.Game
         Spec.GameStateMachine
-        Spec.TypedGameStateMachine
         Spec.Lib
         Spec.MultiSig
         Spec.MultiSigStateMachine

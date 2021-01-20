@@ -1,63 +1,92 @@
 -- This is a simple state modelling library for use with Haskell
 -- QuickCheck. For documentation, see the associated slides.
 
-{-# LANGUAGE FlexibleContexts     #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
-module Language.Plutus.Contract.Test.StateModel
-  ( StateModel(..)
-  , Step(..)
-  , Script(..)
-  , runScript
+module Language.Plutus.Contract.Test.StateModel(
+  StateModel(..),AnyAction(..),
+  Step(..),Var(..), -- we export the constructors so that users can construct test cases
+  Script(..),runScript
   , notStuck
   -- * Contract specifics
   , propRunScript
   , propRunScriptWithDistribution
-  ) where
+) where
 
 import           Control.Monad.Cont
-import           Control.Monad.Writer
+import           Data.Typeable
 
 import           Language.Plutus.Contract.Test
-import           Language.Plutus.Contract.Types (Contract)
-import           Plutus.Trace.Emulator          (EmulatorTrace)
+import           Plutus.Trace.Emulator         (EmulatorTrace)
 
-import           Test.QuickCheck                as QC
+import           Test.QuickCheck               as QC
 import           Test.QuickCheck.Monadic
 
-class (Show (Action state), Monad (ActionMonad state)) =>
+class (forall a. Show (Action state a), Monad (ActionMonad state)) =>
         StateModel state where
-  data Action state
-  data Ret state
+  data Action state a
   type ActionMonad state :: * -> *
-  actionName      :: Action state -> String
+  actionName      :: Action state a -> String
   actionName = head . words . show
-  arbitraryAction :: state -> Gen (Action state)
-  shrinkAction    :: state -> Action state -> [Action state]
+  arbitraryAction :: state -> Gen (AnyAction state)
+  shrinkAction    :: state -> Action state a -> [AnyAction state]
   shrinkAction _ _ = []
   initialState    :: state
-  nextState       :: state -> Action state -> Step -> state
+  nextState       :: state -> Action state a -> Var a -> state
   nextState s _ _ = s
-  precondition    :: state -> Action state -> Bool
+  precondition    :: state -> Action state a -> Bool
   precondition _ _ = True
-  needs           :: Action state -> [Step]
-  needs _ = []
-  perform         :: state -> Action state -> [Ret state] -> ActionMonad state (Ret state)
+  perform         :: state -> Action state a -> LookUp -> ActionMonad state a
   perform _ _ _ = return undefined
-  postcondition   :: state -> Action state -> (Step -> Ret state) -> Ret state -> Bool
+  postcondition   :: state -> Action state a -> LookUp -> a -> Bool
   postcondition _ _ _ _ = True
-  monitoring      :: (state,state) -> Action state -> (Step -> Ret state) -> Ret state -> Property -> Property
+  monitoring      :: (state,state) -> Action state a -> LookUp -> a -> Property -> Property
   monitoring _ _ _ _ = id
   isFinal :: state -> Bool
   isFinal _ = False
 
-newtype Step = Step Int
+type LookUp = forall a. Typeable a => Var a -> a
+
+type Env = [EnvEntry]
+
+data EnvEntry where
+  (:==) :: (Show a,Typeable a) => Var a -> a -> EnvEntry
+
+infix 5 :==
+
+deriving instance Show EnvEntry
+
+lookUpVar :: Typeable a => Env -> Var a -> a
+lookUpVar [] v = error $ "Variable "++show v++" is not bound!"
+lookUpVar ((v' :== a) : env) v =
+  case cast (v',a) of
+    Just (v'',a') | v==v'' -> a'
+    _                      -> lookUpVar env v
+
+data AnyAction state where
+  Action :: (Show a, Typeable a) => Action state a -> AnyAction state
+
+deriving instance (forall a. Show (Action state a)) => Show (AnyAction state)
+
+data Step state where
+  (:=) :: (Show a, Typeable a) => Var a -> Action state a -> Step state
+
+infix 5 :=
+
+deriving instance (forall a. Show (Action state a)) => Show (Step state)
+
+newtype Var a = Var Int
   deriving (Eq, Ord, Show)
 
-newtype Script state = Script [(Step, Action state)]
+newtype Script state = Script [Step state]
 
-instance Show (Action state) => Show (Script state) where
+instance (forall a. Show (Action state a)) => Show (Script state) where
   showsPrec d (Script as)
     | d>10      = ("("++).showsPrec 0 (Script as).(")"++)
     | null as   = ("Script []"++)
@@ -65,77 +94,74 @@ instance Show (Action state) => Show (Script state) where
                   foldr (.) (showsPrec 0 (last as) . ("]"++))
                     [showsPrec 0 a . (",\n  "++) | a <- init as]
 
+
 instance StateModel state => Arbitrary (Script state) where
   arbitrary = Script <$> arbActions initialState 1
     where
-      arbActions :: state -> Int -> Gen [(Step, Action state)]
+      arbActions :: state -> Int -> Gen [Step state]
       arbActions s step = sized $ \n ->
         let w = n `div` 2 + 1 in
           frequency [(1, return []),
-                     (w, do mact <- arbitraryAction s `suchThatMaybe` precondition s
-                            case mact of
-                              Just act ->
-                                ((Step step,act):) <$> arbActions (nextState s act (Step step)) (step+1)
-                              Nothing ->
-                                return [])]
+                     (w, do mact <- arbitraryAction s `suchThatMaybe`
+                                      \(Action act) -> precondition s act
+		            case mact of
+			      Just (Action act) ->
+                                ((Var step := act):) <$> arbActions (nextState s act (Var step)) (step+1)
+		              Nothing ->
+			        return [])]
 
   shrink (Script as) =
     map (Script . prune . map fst) (shrinkList shrinker (withStates as))
-    where shrinker ((step,act),s) = [((step,act'),s) | act' <- shrinkAction s act]
+    where shrinker ((Var i := act),s) = [((Var i := act'),s) | Action act' <- shrinkAction s act]
 
-prune :: StateModel state => [(Step, Action state)] -> [(Step, Action state)]
-prune = loop initialState []
-  where loop _s _steps [] = []
-        loop s steps ((step,act):as)
+prune :: StateModel state => [Step state] -> [Step state]
+prune = loop initialState
+  where loop _s [] = []
+        loop s ((var := act):as)
           | precondition s act
-            = (step,act):loop (nextState s act step) (step:steps) as
+            = (var := act):loop (nextState s act var) as
           | otherwise
-            = loop s steps as
+            = loop s as
 
-withStates :: StateModel state => [(Step, Action state)] -> [((Step,Action state),state)]
+
+withStates :: StateModel state => [Step state] -> [(Step state,state)]
 withStates = loop initialState
   where
     loop _s [] = []
-    loop s ((step,act):as) =
-      ((step,act),s):loop (nextState s act step) as
+    loop s ((var := act):as) =
+      ((var := act),s):loop (nextState s act var) as
 
 stateAfter :: StateModel state => Script state -> state
 stateAfter (Script script) = loop initialState script
   where
-    loop s []                 = s
-    loop s ((step, act) : as) = loop (nextState s act step) as
+    loop s []                  = s
+    loop s ((var := act) : as) = loop (nextState s act var) as
 
-runScript :: (StateModel state, Show (Ret state)) =>
-                Script state -> PropertyM (ActionMonad state) (state, [(Step, Ret state)])
+runScript :: StateModel state =>
+                Script state -> PropertyM (ActionMonad state) (state,Env)
 runScript = runScriptInState initialState
 
-runScriptInState :: (StateModel state, Show (Ret state)) =>
-                state -> Script state -> PropertyM (ActionMonad state) (state, [(Step, Ret state)])
+runScriptInState :: StateModel state =>
+                    state -> Script state -> PropertyM (ActionMonad state) (state,Env)
 runScriptInState state (Script script) = loop state [] script
   where
-    loop s steps [] = return (s, reverse steps)
-    loop s steps ((n,a):as) = do
-      pre $ precondition s a
-      let deps = map (getStep steps) (needs a)
-      ret <- run (perform s a deps)
-      let name = head (words (show a))
-      monitor (tabulate "Actions" [name] . classify True name)
-      monitor (counterexample (show n++": "++show a++" "++show deps++" --> "++show ret))
-      let s'     = nextState s a n
-          steps' = (n,ret):steps
-      monitor (monitoring (s,s') a (getStep steps') ret)
-      assert $ postcondition s a (getStep steps) ret
-      loop s' steps' as
-
-getStep :: (Show step, Eq step) => [(step, ret)] -> step -> ret
-getStep steps n = case lookup n steps of
-  Just v  -> v
-  Nothing -> error ("Missing step "++show n)
+    loop _s env [] = return (_s,reverse env)
+    loop s env ((Var n := act):as) = do
+      pre $ precondition s act
+      ret <- run (perform s act (lookUpVar env))
+      let name = actionName act
+      monitor (tabulate "Actions" [name] . classify True ("contains "++name))
+      monitor (counterexample ("Var "++show n++" := "++show act++" --> "++show ret))
+      let s'   = nextState s act (Var n)
+          env' = (Var n :== ret):env
+      monitor (monitoring (s,s') act (lookUpVar env') ret)
+      assert $ postcondition s act (lookUpVar env) ret
+      loop s' env' as
 
 notStuck :: StateModel state => Script state -> Property
 notStuck script
   | isFinal s = property True
-  | otherwise = forAll (vectorOf 20 $ arbitraryAction s) $ any (precondition s)
+  | otherwise = forAll (vectorOf 20 $ arbitraryAction s) $ any (\(Action act) -> precondition s act)
   where
     s = stateAfter script
 
@@ -156,7 +182,6 @@ runTr _distr predicate action =  -- TODO: distribution
 propRunScript ::
   ( StateModel state
   , ActionMonad state ~ EmulatorTrace
-  , Show (Ret state)
   )
   => (state -> TracePredicate)
   -> PropertyM (ActionMonad state) state
@@ -168,7 +193,6 @@ propRunScript = propRunScriptWithDistribution defaultDist
 propRunScriptWithDistribution ::
   ( StateModel state
   , ActionMonad state ~ EmulatorTrace
-  , Show (Ret state)
   )
   => InitialDistribution
   -> (state -> TracePredicate)
@@ -183,3 +207,4 @@ propRunScriptWithDistribution dist finalPredicate setup script after =
     after st
   where
     predicate = finalPredicate $ stateAfter script
+

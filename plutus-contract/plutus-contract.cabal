@@ -149,7 +149,6 @@ library
         exposed-modules:
             Language.Plutus.Contract.Test
             Language.Plutus.Contract.Test.StateModel
-            Language.Plutus.Contract.Test.TypedStateModel
         build-depends:
             tasty -any,
             tasty-hunit -any,

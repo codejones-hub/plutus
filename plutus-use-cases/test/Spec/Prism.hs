@@ -1,9 +1,12 @@
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UndecidableInstances       #-}
@@ -150,17 +153,24 @@ maxSlots = 125 - waitSlots - 5 - 2      -- default emulator runs for 125
 tick :: PrismModel -> PrismModel
 tick s = s { slot = slot s + waitSlots }
 
+data Ret = RetOk | RetFail (TraceError PrismError)
+    deriving (Show)
+
+deriving instance Show (Action PrismModel a)
+deriving instance Eq   (Action PrismModel a)
+
 instance StateModel PrismModel where
 
-    data Action PrismModel = Delay | Issue | Revoke | Call | Present
-        deriving (Show, Eq)
-
-    data Ret PrismModel = RetOk | RetFail (TraceError PrismError)
-        deriving (Show)
+    data Action PrismModel a where
+        Delay   :: Action PrismModel Ret
+        Issue   :: Action PrismModel Ret
+        Revoke  :: Action PrismModel Ret
+        Call    :: Action PrismModel Ret
+        Present :: Action PrismModel Ret
 
     type ActionMonad PrismModel = Trace.EmulatorTrace
 
-    arbitraryAction _ = oneof $
+    arbitraryAction _ = oneof $ map (Action <$>)
         [ pure Delay
         , pure Revoke
         , pure Issue
@@ -174,8 +184,10 @@ instance StateModel PrismModel where
                               , slot = 0
                               }
 
-    precondition s cmd   = (isIssued s /= Issued || cmd /= Issue) && -- Multiple Issue (without Revoke) breaks the contract
+    precondition s cmd   = (isIssued s /= Issued || isIssue cmd) && -- Multiple Issue (without Revoke) breaks the contract
                            slot s < maxSlots
+        where isIssue Issue = True
+              isIssue _     = False
 
     nextState s Revoke  _          = tick s{ isIssued = doRevoke $ isIssued s }
     nextState s Issue   _          = tick s{ isIssued = doIssue  $ isIssued s }
@@ -185,18 +197,18 @@ instance StateModel PrismModel where
         | stoState s == STOPending = tick s{ stoState = STOReady, balance = balance s + if canSTO s then 1 else 0 }
     nextState s _       _          = tick s
 
-                                 -- v Wait a generous amount of blocks between calls
-    perform PrismModel{mirrorHandle, userHandle, managerHandle} cmd _env = handle $ (>> delay waitSlots) $ case cmd of
-        Delay   -> return ()
-        Issue   -> Trace.callEndpoint @"issue"              (unHandle mirrorHandle) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
-        Revoke  -> Trace.callEndpoint @"revoke"             (unHandle mirrorHandle) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
-        Call    -> Trace.callEndpoint @"sto"                (unHandle userHandle) stoSubscriber
-        Present -> Trace.callEndpoint @"credential manager" (unHandle userHandle) (Trace.chInstanceId $ unHandle managerHandle)
+    perform PrismModel{mirrorHandle, userHandle, managerHandle} cmd _env = case cmd of
+        Delay   -> wrap $ return ()
+        Issue   -> wrap $ Trace.callEndpoint @"issue"              (unHandle mirrorHandle) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
+        Revoke  -> wrap $ Trace.callEndpoint @"revoke"             (unHandle mirrorHandle) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
+        Call    -> wrap $ Trace.callEndpoint @"sto"                (unHandle userHandle) stoSubscriber
+        Present -> wrap $ Trace.callEndpoint @"credential manager" (unHandle userHandle) (Trace.chInstanceId $ unHandle managerHandle)
         where
-            handle m = RetOk <$ m -- catchError (RetOk <$ m) (return . RetFail)
+                                  -- v Wait a generous amount of blocks between calls
+            wrap m   = RetOk <$ m <* delay waitSlots    -- TODO catch errors
 
     shrinkAction _ Delay = []
-    shrinkAction _ _     = [Delay]
+    shrinkAction _ _     = [Action Delay]
 
     monitoring (_, s) _ _ _ = counterexample (show s)
 

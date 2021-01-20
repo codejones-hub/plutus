@@ -1,9 +1,12 @@
 {-# LANGUAGE DataKinds            #-}
 {-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
 {-# LANGUAGE MonoLocalBinds       #-}
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeFamilies         #-}
@@ -23,18 +26,18 @@ import qualified Spec.Lib                                                  as Li
 
 import qualified Language.PlutusTx                                         as PlutusTx
 
-import           Control.Monad                                             (void)
 import           Language.Plutus.Contract.Test
 import           Language.Plutus.Contract.Test.StateModel
 import           Language.PlutusTx.Coordination.Contracts.GameStateMachine as G
+import           Language.PlutusTx.Lattice
 import qualified Ledger.Ada                                                as Ada
 import qualified Ledger.Typed.Scripts                                      as Scripts
 import           Ledger.Value                                              (Value)
-import           Plutus.Trace.Emulator                                     (EmulatorTrace)
-import qualified Plutus.Trace.Emulator                                     as Trace
+import           Plutus.Trace.Emulator                                     as Trace
 import qualified Wallet.Emulator                                           as EM
 
 -- * QuickCheck model
+
 
 data GameModel = GameModel
     { gameValue     :: Integer
@@ -47,20 +50,19 @@ data GameModel = GameModel
     , busy          :: Integer }
     deriving (Show)
 
-newtype Handle = Handle { unHandle :: Trace.ContractHandle GameStateMachineSchema G.GameError }
+newtype Handle = Handle { unHandle :: ContractHandle GameStateMachineSchema G.GameError }
 
 instance Show Handle where
     show _ = "()"
 
-instance StateModel GameModel where
-    data Action GameModel = Lock EM.Wallet String Integer
-                          | Guess EM.Wallet String String Integer
-                          | PassToken EM.Wallet EM.Wallet
-                          | Delay
-        deriving (Show)
+deriving instance Show (Action GameModel a)
 
-    data Ret GameModel = RetOk | RetFail (TraceError G.GameError)
-        deriving (Show)
+instance StateModel GameModel where
+    data Action GameModel a where
+      Lock      :: EM.Wallet -> String -> Integer           -> Action GameModel Ret
+      Guess     :: EM.Wallet -> String -> String -> Integer -> Action GameModel Ret
+      GiveToken :: EM.Wallet                                -> Action GameModel Ret
+      Delay     ::                                             Action GameModel Ret
 
     type ActionMonad GameModel = EmulatorTrace
 
@@ -78,14 +80,12 @@ instance StateModel GameModel where
     isFinal _ = False
 
     precondition s (Lock _ _ _)        = Nothing == hasToken s
-    precondition s (Guess w old _ val) = and [ Just w == hasToken s
+    precondition s (Guess w _old _ val)= and [ Just w == hasToken s
                                              , val <= gameValue s
-                                             -- , old == currentSecret s
+                                             -- , _old == currentSecret s
                                              -- , busy s == 0   -- <== precondition to avoid inactive endpoint
                                              , Just w /= keeper s ]
-    precondition s (PassToken w w')    = and [ Just w == hasToken s
-                                             , w /= w'
-                                             -- , busy s == 0
+    precondition s (GiveToken w)       = and [ hasToken s `notElem` [Nothing, Just w]
                                              , gameValue s > 0 ] -- stops the test
     precondition _ Delay               = True
 
@@ -104,51 +104,57 @@ instance StateModel GameModel where
                                              -- , balances      = Map.insert w val $ balances s    -- <== BUG
                                              , balances      = Map.insertWith (+) w val $ balances s
                                              }
-    nextState s (PassToken _ w) _
+    nextState s (GiveToken w) _
       | tokenLock s > 0 = lessBusy s
       | otherwise       = lessBusy $ s { hasToken = Just w }
     nextState s Delay _ = lessBusy s
 
     postcondition s (Guess w _ _ _) _ (RetFail (HookError (EndpointNotActive (Just w') _)))
       | w == w' = busy s > 0
-    postcondition _ _ _ RetOk     = True
-    postcondition _ _ _ RetFail{} = False
+    postcondition _ (Lock _ _ _)    _ ok = isOK ok
+    postcondition _ (Guess _ _ _ _) _ ok = isOK ok
+    postcondition _ (GiveToken _)   _ ok = isOK ok
+    postcondition _ Delay           _ ok = isOK ok
 
     arbitraryAction s = oneof $
-        [ Lock        <$> genWallet <*> genGuess <*> genValue | Nothing == hasToken s ] ++
-        [ Guess w     <$> genGuess <*> genGuess <*> choose (1, gameValue s)
+        [ Action <$> (Lock        <$> genWallet <*> genGuess <*> genValue) | Nothing == hasToken s ] ++
+        [ Action <$> (Guess w     <$> genGuess <*> genGuess <*> choose (1, gameValue s))
           | Just w <- [hasToken s], hasToken s /= keeper s, gameValue s > 0 ] ++
-        [ PassToken w <$> genWallet | Just w <- [hasToken s] ] ++
-        [ return Delay ]
+        [ Action <$> (GiveToken   <$> genWallet) | hasToken s /= Nothing ] ++
+        [ Action <$> return Delay ]
 
     shrinkAction _s (Lock w secret val) =
-        [Lock w' secret val | w' <- shrinkWallet w] ++
-        [Lock w secret val' | val' <- shrink val]
-    shrinkAction _s (PassToken w w') =
-        [PassToken w w'' | w'' <- shrinkWallet w']
+        [Action $ Lock w' secret val | w' <- shrinkWallet w] ++
+        [Action $ Lock w secret val' | val' <- shrink val]
+    shrinkAction _s (GiveToken w) =
+        [Action $ GiveToken w' | w' <- shrinkWallet w]
     shrinkAction _s (Guess w old new val) =
-        [Guess w' old new val | w' <- shrinkWallet w] ++
-        [Guess w old new val' | val' <- shrink val]
+        [Action $ Guess w' old new val | w' <- shrinkWallet w] ++
+        [Action $ Guess w old new val' | val' <- shrink val]
     shrinkAction _s Delay = []
 
-    perform s cmd _env = handle $ case cmd of
-        Lock w new val -> do
-            Trace.callEndpoint @"lock" (ctHandle w) LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
+    perform s cmd _env = case cmd of
+        Lock w new val -> handle $ do
+            callEndpoint @"lock" (ctHandle w) LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
             delay 2
-        Guess w old new val -> do
-            Trace.callEndpoint @"guess" (ctHandle w) GuessArgs{guessArgsOldSecret = old, guessArgsNewSecret = new, guessArgsValueTakenOut = Ada.lovelaceValueOf val}
-        PassToken w w' -> do
-            Trace.payToWallet w w' gameTokenVal
+        Guess w old new val -> handle $ do
+            callEndpoint @"guess" (ctHandle w) GuessArgs{guessArgsOldSecret = old, guessArgsNewSecret = new, guessArgsValueTakenOut = Ada.lovelaceValueOf val}
+        GiveToken w' -> handle $ do
+            let Just w = hasToken s
+            payToWallet w w' gameTokenVal
             delay 1
-        Delay -> delay 1
+        Delay -> handle $ delay 1
         where
             handle m = RetOk <$ m -- catchError (RetOk <$ m) (return . RetFail)
             ctHandle w = unHandle (handles s Map.! w)
 
     monitoring (s0, s1) act _env _res =
       case act of
-        PassToken _ _ | busy s0 > 0 -> classify True "passing-while-busy"
-        _                           -> id
+        GiveToken _ | busy s0 > 0 -> classify True "passing-while-busy"
+        Guess _ guess _ _
+          | currentSecret s0 == guess -> classify True "guessing-correctly"
+          | currentSecret s0 /= guess -> classify True "guessing-wrongly"
+        _                         -> id
       . (counterexample $ show s1)
 
 lessBusy :: GameModel -> GameModel
@@ -156,6 +162,13 @@ lessBusy s = s { busy = 0 `max` (busy s - 1), tokenLock = 0 `max` (tokenLock s -
 
 busyFor :: Integer -> Integer -> GameModel -> GameModel
 busyFor n t s = s { busy = n `max` busy s, tokenLock = t `max` tokenLock s }
+
+data Ret = RetOk | RetFail (TraceError G.GameError)
+  deriving Show
+
+isOK :: Ret -> Bool
+isOK RetOk = True
+isOK _     = False
 
 finalPredicate :: GameModel -> TracePredicate
 finalPredicate s = Map.foldrWithKey change (pure True) $ balances s
@@ -181,13 +194,13 @@ genValue :: Gen Integer
 genValue = getPositive <$> arbitrary
 
 delay :: Int -> ActionMonad GameModel ()
-delay n = void $ Trace.waitNSlots (fromIntegral n)
+delay n = void $ waitNSlots (fromIntegral n)
 
 prop_Game :: Shrink2 (Script GameModel) -> Property
 prop_Game (Shrink2 s) = propRunScript finalPredicate setup s $ \ _ -> run (delay 10)
     where
         setup = do
-            hs <- run $ mapM (flip Trace.activateContractWallet G.contract) wallets
+            hs <- run $ mapM (flip activateContractWallet G.contract) wallets
             return initialState{ handles = Map.fromList $ zip wallets $ map Handle hs }
 
 -- Generic property to check that we don't get stuck. This only tests the model, but if the model
