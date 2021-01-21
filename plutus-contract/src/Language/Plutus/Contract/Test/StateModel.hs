@@ -16,7 +16,7 @@ module Language.Plutus.Contract.Test.StateModel(
   , notStuck
   -- * Contract specifics
   , propRunScript
-  , propRunScriptWithDistribution
+  , propRunScriptWithOptions
 ) where
 
 import           Control.Monad.Cont
@@ -167,10 +167,10 @@ notStuck script
 
 -- * Contract specifics
 
-runTr :: InitialDistribution -> TracePredicate -> EmulatorTrace () -> Property
-runTr _distr predicate action =  -- TODO: distribution
+runTr :: CheckOptions -> TracePredicate -> EmulatorTrace () -> Property
+runTr opts predicate action =
   flip runCont (const $ property True) $
-    checkPredicateInner defaultCheckOptions predicate action
+    checkPredicateInner opts predicate action
                         debugOutput assertResult
   where
     debugOutput :: String -> Cont Property ()
@@ -188,20 +188,20 @@ propRunScript ::
   -> Script state
   -> (state -> PropertyM (ActionMonad state) ())
   -> Property
-propRunScript = propRunScriptWithDistribution defaultDist
+propRunScript = propRunScriptWithOptions defaultCheckOptions
 
-propRunScriptWithDistribution ::
+propRunScriptWithOptions ::
   ( StateModel state
   , ActionMonad state ~ EmulatorTrace
   )
-  => InitialDistribution
+  => CheckOptions
   -> (state -> TracePredicate)
   -> PropertyM (ActionMonad state) state
   -> Script state
   -> (state -> PropertyM (ActionMonad state) ())
   -> Property
-propRunScriptWithDistribution dist finalPredicate setup script after =
-  monadic (runTr dist predicate . void) $ do
+propRunScriptWithOptions opts finalPredicate setup script after =
+  monadic (runTr opts predicate . void) $ do
     initState <- setup
     (st, _) <- runScriptInState initState script
     after st

@@ -13,8 +13,10 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Spec.GameStateMachine where
 
+import           Control.Lens                                              (set)
 import           Control.Monad
 import           Control.Monad.Freer.Error
+import           Control.Monad.Freer.Log                                   (LogLevel (..))
 import           Data.Map                                                  (Map)
 import qualified Data.Map                                                  as Map
 import           Test.QuickCheck                                           hiding ((.&&.))
@@ -197,7 +199,10 @@ delay :: Int -> ActionMonad GameModel ()
 delay n = void $ waitNSlots (fromIntegral n)
 
 prop_Game :: Shrink2 (Script GameModel) -> Property
-prop_Game (Shrink2 s) = propRunScript finalPredicate setup s $ \ _ -> run (delay 10)
+prop_Game = propGame' Info
+
+propGame' :: LogLevel -> Shrink2 (Script GameModel) -> Property
+propGame' l (Shrink2 s) = propRunScriptWithOptions (set minLogLevel l defaultCheckOptions) finalPredicate setup s $ \ _ -> run (delay 10)
     where
         setup = do
             hs <- run $ mapM (flip activateContractWallet G.contract) wallets
