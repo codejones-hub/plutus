@@ -160,7 +160,9 @@ busyFor n t s = s { busy = n `max` busy s, tokenLock = t `max` tokenLock s }
 finalPredicate :: GameModel -> TracePredicate
 finalPredicate s = Map.foldrWithKey change (pure True) $ balances s
     where
-        change w val rest = walletFundsChange w (Ada.lovelaceValueOf val <> gameTok) .&&. rest
+        change w val rest = walletFundsChange w (Ada.lovelaceValueOf val <> gameTok) .&&.
+                            assertNotDone G.contract (walletInstanceTag w) "done" .&&.
+                            rest
             where
                 gameTok | Just w == hasToken s = gameTokenVal
                         | otherwise            = mempty

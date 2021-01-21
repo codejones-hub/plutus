@@ -126,17 +126,10 @@ instance Show Handle where
 data STOState = STOReady | STOPending | STODone
     deriving (Eq, Ord, Show)
 
-data IssueState = NoIssue | Revoked | Issued | Broken
+data IssueState = NoIssue | Revoked | Issued
     deriving (Eq, Ord, Show)
 
-doIssue :: IssueState -> IssueState
-doIssue Broken  = Broken
-doIssue NoIssue = Issued
-doIssue Revoked = Issued
-doIssue Issued  = Broken
-
 doRevoke :: IssueState -> IssueState
-doRevoke Broken  = Broken
 doRevoke NoIssue = NoIssue
 doRevoke Revoked = Revoked
 doRevoke Issued  = Revoked
@@ -187,7 +180,7 @@ instance StateModel PrismModel where
               isIssue _     = False
 
     nextState s Revoke  _          = tick s{ isIssued = doRevoke $ isIssued s }
-    nextState s Issue   _          = tick s{ isIssued = doIssue  $ isIssued s }
+    nextState s Issue   _          = tick s{ isIssued = Issued }
     nextState s Call    _
         | stoState s == STOReady   = tick s{ stoState = STOPending }
     nextState s Present _
@@ -212,17 +205,17 @@ delay :: Int -> ActionMonad PrismModel ()
 delay n = void $ Trace.waitNSlots $ fromIntegral n
 
 finalPredicate :: PrismModel -> TracePredicate
-finalPredicate s = walletFundsChange issuer ada .&&.
-                   walletFundsChange user (inv ada <> coin) .&&.
-                   walletFundsChange mirror mempty .&&.
-                   walletFundsChange credentialManager mempty .&&.
-                   logs
+finalPredicate s =
+    foldr (.&&.) (pure True)
+        [ walletFundsChange w v .&&. assertNotDone contract (Trace.walletInstanceTag w) "Contract stopped"
+        | (w, v) <- [ (issuer, ada)
+                    , (user, inv ada <> coin)
+                    , (mirror, mempty)
+                    , (credentialManager, mempty) ] ]
     where
         n    = numTokens * balance s
         ada  = Ada.lovelaceValueOf n
         coin = STO.coins stoData n
-        logs | Broken <- isIssued s = pure True -- emulatorLog (const False) "the log"
-             | otherwise            = pure True
 
 prop_Prism :: Script PrismModel -> Property
 prop_Prism script = propRunScript finalPredicate before script after
