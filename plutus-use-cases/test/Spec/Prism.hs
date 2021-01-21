@@ -153,20 +153,17 @@ maxSlots = 125 - waitSlots - 5 - 2      -- default emulator runs for 125
 tick :: PrismModel -> PrismModel
 tick s = s { slot = slot s + waitSlots }
 
-data Ret = RetOk | RetFail (TraceError PrismError)
-    deriving (Show)
-
 deriving instance Show (Action PrismModel a)
 deriving instance Eq   (Action PrismModel a)
 
 instance StateModel PrismModel where
 
     data Action PrismModel a where
-        Delay   :: Action PrismModel Ret
-        Issue   :: Action PrismModel Ret
-        Revoke  :: Action PrismModel Ret
-        Call    :: Action PrismModel Ret
-        Present :: Action PrismModel Ret
+        Delay   :: Action PrismModel ()
+        Issue   :: Action PrismModel ()
+        Revoke  :: Action PrismModel ()
+        Call    :: Action PrismModel ()
+        Present :: Action PrismModel ()
 
     type ActionMonad PrismModel = Trace.EmulatorTrace
 
@@ -203,9 +200,8 @@ instance StateModel PrismModel where
         Revoke  -> wrap $ Trace.callEndpoint @"revoke"             (unHandle mirrorHandle) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
         Call    -> wrap $ Trace.callEndpoint @"sto"                (unHandle userHandle) stoSubscriber
         Present -> wrap $ Trace.callEndpoint @"credential manager" (unHandle userHandle) (Trace.chInstanceId $ unHandle managerHandle)
-        where
-                                  -- v Wait a generous amount of blocks between calls
-            wrap m   = RetOk <$ m <* delay waitSlots    -- TODO catch errors
+        where                     -- v Wait a generous amount of blocks between calls
+            wrap m   = m *> delay waitSlots
 
     shrinkAction _ Delay = []
     shrinkAction _ _     = [Action Delay]

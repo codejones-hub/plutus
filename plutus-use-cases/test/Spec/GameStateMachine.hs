@@ -61,10 +61,10 @@ deriving instance Show (Action GameModel a)
 
 instance StateModel GameModel where
     data Action GameModel a where
-      Lock      :: EM.Wallet -> String -> Integer           -> Action GameModel Ret
-      Guess     :: EM.Wallet -> String -> String -> Integer -> Action GameModel Ret
-      GiveToken :: EM.Wallet                                -> Action GameModel Ret
-      Delay     ::                                             Action GameModel Ret
+      Lock      :: EM.Wallet -> String -> Integer           -> Action GameModel ()
+      Guess     :: EM.Wallet -> String -> String -> Integer -> Action GameModel ()
+      GiveToken :: EM.Wallet                                -> Action GameModel ()
+      Delay     ::                                             Action GameModel ()
 
     type ActionMonad GameModel = EmulatorTrace
 
@@ -111,13 +111,6 @@ instance StateModel GameModel where
       | otherwise       = lessBusy $ s { hasToken = Just w }
     nextState s Delay _ = lessBusy s
 
-    postcondition s (Guess w _ _ _) _ (RetFail (HookError (EndpointNotActive (Just w') _)))
-      | w == w' = busy s > 0
-    postcondition _ (Lock _ _ _)    _ ok = isOK ok
-    postcondition _ (Guess _ _ _ _) _ ok = isOK ok
-    postcondition _ (GiveToken _)   _ ok = isOK ok
-    postcondition _ Delay           _ ok = isOK ok
-
     arbitraryAction s = oneof $
         [ Action <$> (Lock        <$> genWallet <*> genGuess <*> genValue) | Nothing == hasToken s ] ++
         [ Action <$> (Guess w     <$> genGuess <*> genGuess <*> choose (1, gameValue s))
@@ -136,18 +129,17 @@ instance StateModel GameModel where
     shrinkAction _s Delay = []
 
     perform s cmd _env = case cmd of
-        Lock w new val -> handle $ do
+        Lock w new val -> do
             callEndpoint @"lock" (ctHandle w) LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
             delay 2
-        Guess w old new val -> handle $ do
+        Guess w old new val -> do
             callEndpoint @"guess" (ctHandle w) GuessArgs{guessArgsOldSecret = old, guessArgsNewSecret = new, guessArgsValueTakenOut = Ada.lovelaceValueOf val}
-        GiveToken w' -> handle $ do
+        GiveToken w' -> do
             let Just w = hasToken s
             payToWallet w w' gameTokenVal
             delay 1
-        Delay -> handle $ delay 1
+        Delay -> delay 1
         where
-            handle m = RetOk <$ m -- catchError (RetOk <$ m) (return . RetFail)
             ctHandle w = unHandle (handles s Map.! w)
 
     monitoring (s0, s1) act _env _res =
@@ -164,13 +156,6 @@ lessBusy s = s { busy = 0 `max` (busy s - 1), tokenLock = 0 `max` (tokenLock s -
 
 busyFor :: Integer -> Integer -> GameModel -> GameModel
 busyFor n t s = s { busy = n `max` busy s, tokenLock = t `max` tokenLock s }
-
-data Ret = RetOk | RetFail (TraceError G.GameError)
-  deriving Show
-
-isOK :: Ret -> Bool
-isOK RetOk = True
-isOK _     = False
 
 finalPredicate :: GameModel -> TracePredicate
 finalPredicate s = Map.foldrWithKey change (pure True) $ balances s
