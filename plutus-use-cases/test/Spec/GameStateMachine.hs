@@ -13,13 +13,14 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Spec.GameStateMachine where
 
-import           Control.Lens                                              (set)
+import           Control.Lens
 import           Control.Monad
 import           Control.Monad.Freer.Error
 import           Control.Monad.Freer.Log                                   (LogLevel (..))
 import           Data.Map                                                  (Map)
 import qualified Data.Map                                                  as Map
-import           Test.QuickCheck                                           hiding ((.&&.))
+import           Data.Maybe
+import           Test.QuickCheck                                           as QC hiding ((.&&.))
 import           Test.QuickCheck.Monadic
 import           Test.Tasty
 import qualified Test.Tasty.HUnit                                          as HUnit
@@ -28,8 +29,8 @@ import qualified Spec.Lib                                                  as Li
 
 import qualified Language.PlutusTx                                         as PlutusTx
 
-import           Language.Plutus.Contract.Test
-import           Language.Plutus.Contract.Test.StateModel
+import           Language.Plutus.Contract.Test                             hiding (not)
+import           Language.Plutus.Contract.Test.ContractModel
 import           Language.PlutusTx.Coordination.Contracts.GameStateMachine as G
 import           Language.PlutusTx.Lattice
 import qualified Ledger.Ada                                                as Ada
@@ -42,166 +43,155 @@ import qualified Wallet.Emulator                                           as EM
 
 
 data GameModel = GameModel
-    { gameValue     :: Integer
-    , handles       :: Map EM.Wallet Handle
-    , keeper        :: Maybe EM.Wallet
-    , hasToken      :: Maybe EM.Wallet
-    , currentSecret :: String
-    , balances      :: Map EM.Wallet Integer
-    , tokenLock     :: Integer
-    , busy          :: Integer }
+    { _gameValue     :: Integer
+    , _keeper        :: Maybe EM.Wallet
+    , _hasToken      :: Maybe EM.Wallet
+    , _currentSecret :: String
+    , _tokenLock     :: Integer
+    , _busy          :: Integer }
     deriving (Show)
 
-newtype Handle = Handle { unHandle :: ContractHandle GameStateMachineSchema G.GameError }
+makeLenses 'GameModel
 
-instance Show Handle where
-    show _ = "()"
+deriving instance Show (Command GameModel a)
 
-deriving instance Show (Action GameModel a)
+instance ContractModel GameModel where
 
-instance StateModel GameModel where
-    data Action GameModel a where
-      Lock      :: EM.Wallet -> String -> Integer           -> Action GameModel ()
-      Guess     :: EM.Wallet -> String -> String -> Integer -> Action GameModel ()
-      GiveToken :: EM.Wallet                                -> Action GameModel ()
-      Delay     ::                                             Action GameModel ()
+    data Command GameModel a where
+      Lock      :: EM.Wallet -> String -> Integer           -> Command GameModel ()
+      Guess     :: EM.Wallet -> String -> String -> Integer -> Command GameModel ()
+      GiveToken :: EM.Wallet                                -> Command GameModel ()
+      Delay     ::                                             Command GameModel ()
 
-    type ActionMonad GameModel = EmulatorTrace
+    type Schema GameModel = GameStateMachineSchema
+    type Err    GameModel = GameError
 
     initialState = GameModel
-        { gameValue     = 0
-        , handles       = Map.empty
-        , hasToken      = Nothing
-        , keeper        = Nothing
-        , currentSecret = ""
-        , balances      = Map.empty
-        , tokenLock     = 0
-        , busy          = 0
+        { _gameValue     = 0
+        , _hasToken      = Nothing
+        , _keeper        = Nothing
+        , _currentSecret = ""
+        , _tokenLock     = 0
+        , _busy          = 0
         }
 
-    isFinal _ = False
-
-    precondition s (Lock _ _ _)        = Nothing == hasToken s
-    precondition s (Guess w _old _ val)= and [ Just w == hasToken s
-                                             , val <= gameValue s
-                                             -- , _old == currentSecret s
-                                             -- , busy s == 0   -- <== precondition to avoid inactive endpoint
-                                             , Just w /= keeper s ]
-    precondition s (GiveToken w)       = and [ hasToken s `notElem` [Nothing, Just w]
-                                             , gameValue s > 0 ] -- stops the test
+    precondition s (Lock _ _ _)        = Nothing == s ^. modelState . hasToken
+    precondition s (Guess w _old _ val)= and [ Just w == s ^. modelState . hasToken
+                                             , val <= s ^. modelState . gameValue
+                                             , Just w /= s ^. modelState . keeper ]
+    precondition s (GiveToken w)       = and [ (s ^. modelState . hasToken) `notElem` [Nothing, Just w]
+                                             , s ^. modelState . gameValue > 0 ] -- stops the test
     precondition _ Delay               = True
 
-    nextState s (Lock w secret val)    _ = s { hasToken      = Just w
-                                             , keeper        = Just w
-                                             , currentSecret = secret
-                                             , gameValue     = val
-                                             , balances      = Map.singleton w (-val) }
-    nextState s (Guess w old new val) _
-        | busy s > 0                     = s
-        | old /= currentSecret s         = busyFor 1 0 s
-        | otherwise                      = busyFor 1 1 $ s
-                                             { keeper        = Just w
-                                             , currentSecret = new
-                                             , gameValue     = gameValue s - val
-                                             -- , balances      = Map.insert w val $ balances s    -- <== BUG
-                                             , balances      = Map.insertWith (+) w val $ balances s
-                                             }
-    nextState s (GiveToken w) _
-      | tokenLock s > 0 = lessBusy s
-      | otherwise       = lessBusy $ s { hasToken = Just w }
-    nextState s Delay _ = lessBusy s
+    nextState (Lock w secret val) _ = do
+        hasToken      $= Just w
+        keeper        $= Just w
+        currentSecret $= secret
+        gameValue     $= val
+        deposit  w gameTokenVal
+        withdraw w $ Ada.lovelaceValueOf val
 
-    arbitraryAction s = oneof $
-        [ Action <$> (Lock        <$> genWallet <*> genGuess <*> genValue) | Nothing == hasToken s ] ++
-        [ Action <$> (Guess w     <$> genGuess <*> genGuess <*> choose (1, gameValue s))
-          | Just w <- [hasToken s], hasToken s /= keeper s, gameValue s > 0 ] ++
-        [ Action <$> (GiveToken   <$> genWallet) | hasToken s /= Nothing ] ++
-        [ Action <$> return Delay ]
+    nextState (Guess w old new val) _ = do
+        b <- getModelState busy
+        when (b == 0) $ do
+            correct <- (old ==) <$> getModelState currentSecret
+            if not correct then busyFor 1 0 else do
+                busyFor 1 1
+                keeper        $= Just w
+                currentSecret $= new
+                gameValue     $~ subtract val
+                deposit w $ Ada.lovelaceValueOf val
+    nextState (GiveToken w) _ = do
+        lock <- (> 0) <$> getModelState tokenLock
+        lessBusy
+        unless lock $ do
+            w0 <- fromJust <$> getModelState hasToken
+            transfer w0 w gameTokenVal
+            hasToken $= Just w
+    nextState Delay _ = lessBusy
 
-    shrinkAction _s (Lock w secret val) =
-        [Action $ Lock w' secret val | w' <- shrinkWallet w] ++
-        [Action $ Lock w secret val' | val' <- shrink val]
-    shrinkAction _s (GiveToken w) =
-        [Action $ GiveToken w' | w' <- shrinkWallet w]
-    shrinkAction _s (Guess w old new val) =
-        [Action $ Guess w' old new val | w' <- shrinkWallet w] ++
-        [Action $ Guess w old new val' | val' <- shrink val]
-    shrinkAction _s Delay = []
+    arbitraryCommand s0 = oneof $
+        [ Some <$> (Lock        <$> genWallet <*> genGuess <*> genValue) | Nothing == s ^. hasToken ] ++
+        [ Some <$> (Guess w     <$> genGuess <*> genGuess <*> choose (1, s ^. gameValue))
+          | Just w <- [s ^. hasToken], s ^. hasToken /= s ^. keeper, s ^. gameValue > 0 ] ++
+        [ Some <$> (GiveToken   <$> genWallet) | s ^. hasToken /= Nothing ] ++
+        [ Some <$> return Delay ]
+        where s = s0 ^. modelState
+
+    shrinkCommand _s (Lock w secret val) =
+        [Some $ Lock w' secret val | w' <- shrinkWallet w] ++
+        [Some $ Lock w secret val' | val' <- shrink val]
+    shrinkCommand _s (GiveToken w) =
+        [Some $ GiveToken w' | w' <- shrinkWallet w]
+    shrinkCommand _s (Guess w old new val) =
+        [Some $ Guess w' old new val | w' <- shrinkWallet w] ++
+        [Some $ Guess w old new val' | val' <- shrink val]
+    shrinkCommand _s Delay = []
 
     perform s cmd _env = case cmd of
         Lock w new val -> do
-            callEndpoint @"lock" (ctHandle w) LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
+            callEndpoint @"lock" (handle s w) LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
             delay 2
         Guess w old new val -> do
-            callEndpoint @"guess" (ctHandle w) GuessArgs{guessArgsOldSecret = old, guessArgsNewSecret = new, guessArgsValueTakenOut = Ada.lovelaceValueOf val}
+            callEndpoint @"guess" (handle s w) GuessArgs{guessArgsOldSecret = old, guessArgsNewSecret = new, guessArgsValueTakenOut = Ada.lovelaceValueOf val}
         GiveToken w' -> do
-            let Just w = hasToken s
+            let w = s ^?! modelState . hasToken . _Just
             payToWallet w w' gameTokenVal
             delay 1
         Delay -> delay 1
-        where
-            ctHandle w = unHandle (handles s Map.! w)
 
     monitoring (s0, s1) act _env _res =
       case act of
-        GiveToken _ | busy s0 > 0 -> classify True "passing-while-busy"
+        GiveToken _ | s0 ^. modelState . busy > 0     -> classify True "passing-while-busy"
         Guess _ guess _ _
-          | currentSecret s0 == guess -> classify True "guessing-correctly"
-          | currentSecret s0 /= guess -> classify True "guessing-wrongly"
+          | s0 ^. modelState . currentSecret == guess -> classify True "guessing-correctly"
+          | otherwise                                 -> classify True "guessing-wrongly"
         _                         -> id
       . (counterexample $ show s1)
 
-lessBusy :: GameModel -> GameModel
-lessBusy s = s { busy = 0 `max` (busy s - 1), tokenLock = 0 `max` (tokenLock s - 1) }
+lessBusy :: Spec GameModel ()
+lessBusy = do
+    let dec n = max 0 (n - 1)
+    busy      $~ dec
+    tokenLock $~ dec
 
-busyFor :: Integer -> Integer -> GameModel -> GameModel
-busyFor n t s = s { busy = n `max` busy s, tokenLock = t `max` tokenLock s }
+busyFor :: Integer -> Integer -> Spec GameModel ()
+busyFor n t = do
+    busy      $~ max n
+    tokenLock $~ max t
 
-finalPredicate :: GameModel -> TracePredicate
-finalPredicate s = Map.foldrWithKey change (pure True) $ balances s
+finalPredicate :: ModelState GameModel -> TracePredicate
+finalPredicate s = foldr (.&&.) (pure True) $ map notDone wallets
     where
-        change w val rest = walletFundsChange w (Ada.lovelaceValueOf val <> gameTok) .&&.
-                            assertNotDone G.contract (walletInstanceTag w) "done" .&&.
-                            rest
-            where
-                gameTok | Just w == hasToken s = gameTokenVal
-                        | otherwise            = mempty
+        notDone w = assertNotDone G.contract (walletInstanceTag w) "done"
 
 wallets :: [EM.Wallet]
 wallets = [w1, w2, w3]
 
 genWallet :: Gen EM.Wallet
-genWallet = elements wallets
+genWallet = QC.elements wallets
 
 shrinkWallet :: EM.Wallet -> [EM.Wallet]
 shrinkWallet w = [w' | w' <- wallets, w' < w]
 
 genGuess :: Gen String
-genGuess = elements ["hello", "secret", "hunter2", "*******"]
+genGuess = QC.elements ["hello", "secret", "hunter2", "*******"]
 
 genValue :: Gen Integer
 genValue = getPositive <$> arbitrary
 
-delay :: Int -> ActionMonad GameModel ()
+delay :: Int -> EmulatorTrace ()
 delay n = void $ waitNSlots (fromIntegral n)
 
 prop_Game :: Shrink2 (Script GameModel) -> Property
 prop_Game = propGame' Info
 
 propGame' :: LogLevel -> Shrink2 (Script GameModel) -> Property
-propGame' l (Shrink2 s) = propRunScriptWithOptions (set minLogLevel l defaultCheckOptions) finalPredicate setup s $ \ _ -> run (delay 10)
+propGame' l (Shrink2 s) = propRunScriptWithOptions (set minLogLevel l defaultCheckOptions)
+                                                   wallets G.contract finalPredicate before s $ after
     where
-        setup = do
-            hs <- run $ mapM (flip activateContractWallet G.contract) wallets
-            return initialState{ handles = Map.fromList $ zip wallets $ map Handle hs }
-
--- Generic property to check that we don't get stuck. This only tests the model, but if the model
--- thinks it's not stuck, but the actual implementation is, the property running the contract will
--- fail. Except: this is only true if the precondition does not admit invalid transactions. At the
--- moment the off-chain contract breaks if you try to take an invalid transaction, so this isn't a
--- problem.
-prop_notStuck :: StateModel state => Shrink2 (Script state) -> Property
-prop_notStuck (Shrink2 s) = notStuck s
+        before _ = return ()
+        after  _ = run (delay 10)
 
 -- * Unit tests
 

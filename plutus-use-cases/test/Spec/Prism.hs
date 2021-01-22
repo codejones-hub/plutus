@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes        #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -6,18 +7,25 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UndecidableInstances       #-}
-module Spec.Prism (tests, prismTrace, prop_Prism) where
+module Spec.Prism where -- (tests, prismTrace, prop_Prism) where
 
 import           Control.Arrow                                             (first, second)
+import           Control.Lens
 import           Control.Monad
 import           Control.Monad.Freer.Error
+import           Control.Monad.Freer.State
 import           Data.Foldable                                             (traverse_)
+import           Data.Maybe
+import           Language.Plutus.Contract                                  (HasEndpoint)
 import           Language.Plutus.Contract.Test                             hiding (not)
-import           Language.Plutus.Contract.Test.StateModel
+import           Language.Plutus.Contract.Test.ContractModel               as ContractModel
 import           Language.PlutusTx.Lattice
 import qualified Ledger.Ada                                                as Ada
 import           Ledger.Crypto                                             (pubKeyHash)
@@ -33,6 +41,8 @@ import           Language.PlutusTx.Coordination.Contracts.Prism.STO        (STOD
 import qualified Language.PlutusTx.Coordination.Contracts.Prism.STO        as STO
 import           Language.PlutusTx.Monoid                                  (inv)
 import qualified Plutus.Trace.Emulator                                     as Trace
+
+import           Debug.Trace
 
 user, credentialManager, mirror, issuer :: Wallet
 user = Wallet 1
@@ -107,127 +117,103 @@ prismTrace = do
 
 -- * QuickCheck model
 
-data PrismModel = PrismModel
-    { isIssued      :: IssueState
-    , stoState      :: STOState
-    , balance       :: Integer
-    , userHandle    :: Handle
-    , mirrorHandle  :: Handle
-    , managerHandle :: Handle
-    , slot          :: Int
-    }
-    deriving (Show)
-
-newtype Handle = Handle { unHandle :: Trace.ContractHandle PrismSchema PrismError }
-
-instance Show Handle where
-    show _ = "()"
-
 data STOState = STOReady | STOPending | STODone
     deriving (Eq, Ord, Show)
 
 data IssueState = NoIssue | Revoked | Issued
     deriving (Eq, Ord, Show)
 
+data PrismModel = PrismModel
+    { _isIssued :: IssueState
+    , _stoState :: STOState
+    }
+    deriving (Show)
+
+makeLenses 'PrismModel
+
 doRevoke :: IssueState -> IssueState
 doRevoke NoIssue = NoIssue
 doRevoke Revoked = Revoked
 doRevoke Issued  = Revoked
 
-canSTO :: PrismModel -> Bool
-canSTO s = isIssued s == Issued
-
 waitSlots :: Int
 waitSlots = 2
 
-maxSlots :: Int
-maxSlots = 125 - waitSlots - 5 - 2      -- default emulator runs for 125
+deriving instance Show (Command PrismModel a)
+deriving instance Eq   (Command PrismModel a)
 
-tick :: PrismModel -> PrismModel
-tick s = s { slot = slot s + waitSlots }
+instance ContractModel PrismModel where
 
-deriving instance Show (Action PrismModel a)
-deriving instance Eq   (Action PrismModel a)
+    data Command PrismModel a where
+        Delay   :: Command PrismModel ()
+        Issue   :: Command PrismModel ()
+        Revoke  :: Command PrismModel ()
+        Call    :: Command PrismModel ()
+        Present :: Command PrismModel ()
 
-instance StateModel PrismModel where
+    type Schema PrismModel = PrismSchema
+    type Err    PrismModel = PrismError
 
-    data Action PrismModel a where
-        Delay   :: Action PrismModel ()
-        Issue   :: Action PrismModel ()
-        Revoke  :: Action PrismModel ()
-        Call    :: Action PrismModel ()
-        Present :: Action PrismModel ()
-
-    type ActionMonad PrismModel = Trace.EmulatorTrace
-
-    arbitraryAction _ = oneof $ map (Action <$>)
+    arbitraryCommand _ = oneof $ map (Some <$>)
         [ pure Delay
         , pure Revoke
         , pure Issue
         , pure Call
         , pure Present ]
 
-    initialState = PrismModel { isIssued = NoIssue, stoState = STOReady, balance = 0
-                              , userHandle    = error "filled in later"
-                              , mirrorHandle  = error "filled in later"
-                              , managerHandle = error "filled in later"
-                              , slot = 0
-                              }
+    initialState = PrismModel { _isIssued = NoIssue, _stoState = STOReady }
 
-    precondition s cmd   = (isIssued s /= Issued || isIssue cmd) && -- Multiple Issue (without Revoke) breaks the contract
-                           slot s < maxSlots
-        where isIssue Issue = True
-              isIssue _     = False
+    precondition s Issue = (s ^. modelState . isIssued) /= Issued  -- Multiple Issue (without Revoke) breaks the contract
+    precondition _ _     = True
 
-    nextState s Revoke  _          = tick s{ isIssued = doRevoke $ isIssued s }
-    nextState s Issue   _          = tick s{ isIssued = Issued }
-    nextState s Call    _
-        | stoState s == STOReady   = tick s{ stoState = STOPending }
-    nextState s Present _
-        | stoState s == STOPending = tick s{ stoState = STOReady, balance = balance s + if canSTO s then 1 else 0 }
-    nextState s _       _          = tick s
+    nextState cmd v = do
+        wait waitSlots
+        case cmd of
+            Delay   -> wait 1
+            Revoke  -> isIssued $~ doRevoke
+            Issue   -> isIssued $= Issued
+            Call    -> stoState $~ \ case STOReady -> STOPending; sto -> sto
+            Present -> do
+                iss <- (== Issued)     <$> getModelState isIssued
+                sto <- (== STOPending) <$> getModelState stoState
+                stoState $= STOReady
+                when (iss && sto) $ do
+                    transfer user issuer (Ada.lovelaceValueOf numTokens)
+                    deposit user $ STO.coins stoData numTokens
+                return ()
 
-    perform PrismModel{mirrorHandle, userHandle, managerHandle} cmd _env = case cmd of
-        Delay   -> wrap $ return ()
-        Issue   -> wrap $ Trace.callEndpoint @"issue"              (unHandle mirrorHandle) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
-        Revoke  -> wrap $ Trace.callEndpoint @"revoke"             (unHandle mirrorHandle) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
-        Call    -> wrap $ Trace.callEndpoint @"sto"                (unHandle userHandle) stoSubscriber
-        Present -> wrap $ Trace.callEndpoint @"credential manager" (unHandle userHandle) (Trace.chInstanceId $ unHandle managerHandle)
+    perform s cmd _env = case cmd of
+        Delay   -> wrap $ delay 1
+        Issue   -> wrap $ Trace.callEndpoint @"issue"              (handle s mirror) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
+        Revoke  -> wrap $ Trace.callEndpoint @"revoke"             (handle s mirror) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
+        Call    -> wrap $ Trace.callEndpoint @"sto"                (handle s user) stoSubscriber
+        Present -> wrap $ Trace.callEndpoint @"credential manager" (handle s user) (contractInstanceId s credentialManager)
         where                     -- v Wait a generous amount of blocks between calls
             wrap m   = m *> delay waitSlots
 
-    shrinkAction _ Delay = []
-    shrinkAction _ _     = [Action Delay]
+    shrinkCommand _ Delay = []
+    shrinkCommand _ _     = [Some Delay]
 
     monitoring (_, s) _ _ _ = counterexample (show s)
 
-delay :: Int -> ActionMonad PrismModel ()
+delay :: Int -> Trace.EmulatorTrace ()
 delay n = void $ Trace.waitNSlots $ fromIntegral n
 
-finalPredicate :: PrismModel -> TracePredicate
-finalPredicate s =
+finalPredicate :: ModelState PrismModel -> TracePredicate
+finalPredicate _ =
     foldr (.&&.) (pure True)
-        [ walletFundsChange w v .&&. assertNotDone contract (Trace.walletInstanceTag w) "Contract stopped"
-        | (w, v) <- [ (issuer, ada)
-                    , (user, inv ada <> coin)
-                    , (mirror, mempty)
-                    , (credentialManager, mempty) ] ]
-    where
-        n    = numTokens * balance s
-        ada  = Ada.lovelaceValueOf n
-        coin = STO.coins stoData n
+        [ assertNotDone contract (Trace.walletInstanceTag w) "Contract stopped"
+        | w <- [ issuer, user, mirror, credentialManager ] ]
 
 prop_Prism :: Script PrismModel -> Property
-prop_Prism script = propRunScript finalPredicate before script after
+prop_Prism script = propRunScript @PrismModel wallets contract finalPredicate before script after
     where
-        before = run $ do
-            userH    <- Trace.activateContractWallet user contract
-            mirrorH  <- Trace.activateContractWallet mirror contract
-            managerH <- Trace.activateContractWallet credentialManager contract
-            Trace.callEndpoint @"role" userH    UnlockSTO
-            Trace.callEndpoint @"role" mirrorH  Mirror
-            Trace.callEndpoint @"role" managerH CredMan
+        wallets = [user, mirror, credentialManager] -- , issuer]
+        before :: ModelState PrismModel -> Trace.EmulatorTrace ()
+        before s = do
+            Trace.callEndpoint @"role" (handle s user)              UnlockSTO
+            Trace.callEndpoint @"role" (handle s mirror)            Mirror
+            Trace.callEndpoint @"role" (handle s credentialManager) CredMan
             delay 5
-            return initialState{ userHandle = Handle userH, mirrorHandle = Handle mirrorH, managerHandle = Handle managerH }
-        after _ = return ()
+        after _ = return () -- monitor $ collect $ s ^. balances . at user
 

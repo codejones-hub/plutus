@@ -148,6 +148,7 @@ library
     if !(impl(ghcjs) || os(ghcjs))
         exposed-modules:
             Language.Plutus.Contract.Test
+            Language.Plutus.Contract.Test.ContractModel
             Language.Plutus.Contract.Test.StateModel
         build-depends:
             tasty -any,

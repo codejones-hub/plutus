@@ -2,6 +2,7 @@
 -- QuickCheck. For documentation, see the associated slides.
 
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes            #-}
@@ -10,22 +11,20 @@
 {-# LANGUAGE UndecidableInstances  #-}
 
 module Language.Plutus.Contract.Test.StateModel(
-  StateModel(..),AnyAction(..),
-  Step(..),Var(..), -- we export the constructors so that users can construct test cases
-  Script(..),runScript
+    StateModel(..)
+  , Any(..)
+  , Step(..)
+  , LookUp, Var(..) -- we export the constructors so that users can construct test cases
+  , Script(..)
+  , stateAfter
+  , runScript
+  , runScriptInState
   , notStuck
-  -- * Contract specifics
-  , propRunScript
-  , propRunScriptWithOptions
 ) where
 
-import           Control.Monad.Cont
 import           Data.Typeable
 
-import           Language.Plutus.Contract.Test
-import           Plutus.Trace.Emulator         (EmulatorTrace)
-
-import           Test.QuickCheck               as QC
+import           Test.QuickCheck         as QC
 import           Test.QuickCheck.Monadic
 
 class (forall a. Show (Action state a), Monad (ActionMonad state)) =>
@@ -34,8 +33,8 @@ class (forall a. Show (Action state a), Monad (ActionMonad state)) =>
   type ActionMonad state :: * -> *
   actionName      :: Action state a -> String
   actionName = head . words . show
-  arbitraryAction :: state -> Gen (AnyAction state)
-  shrinkAction    :: state -> Action state a -> [AnyAction state]
+  arbitraryAction :: state -> Gen (Any (Action state))
+  shrinkAction    :: state -> Action state a -> [Any (Action state)]
   shrinkAction _ _ = []
   initialState    :: state
   nextState       :: state -> Action state a -> Var a -> state
@@ -69,10 +68,10 @@ lookUpVar ((v' :== a) : env) v =
     Just (v'',a') | v==v'' -> a'
     _                      -> lookUpVar env v
 
-data AnyAction state where
-  Action :: (Show a, Typeable a) => Action state a -> AnyAction state
+data Any f where
+  Some :: (Show a, Typeable a) => f a -> Any f
 
-deriving instance (forall a. Show (Action state a)) => Show (AnyAction state)
+deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
 
 data Step state where
   (:=) :: (Show a, Typeable a) => Var a -> Action state a -> Step state
@@ -103,16 +102,16 @@ instance StateModel state => Arbitrary (Script state) where
         let w = n `div` 2 + 1 in
           frequency [(1, return []),
                      (w, do mact <- arbitraryAction s `suchThatMaybe`
-                                      \(Action act) -> precondition s act
-		            case mact of
-			      Just (Action act) ->
+                                      \(Some act) -> precondition s act
+                            case mact of
+                              Just (Some act) ->
                                 ((Var step := act):) <$> arbActions (nextState s act (Var step)) (step+1)
-		              Nothing ->
-			        return [])]
+                              Nothing ->
+                                return [])]
 
   shrink (Script as) =
     map (Script . prune . map fst) (shrinkList shrinker (withStates as))
-    where shrinker ((Var i := act),s) = [((Var i := act'),s) | Action act' <- shrinkAction s act]
+    where shrinker ((Var i := act),s) = [((Var i := act'),s) | Some act' <- shrinkAction s act]
 
 prune :: StateModel state => [Step state] -> [Step state]
 prune = loop initialState
@@ -161,50 +160,7 @@ runScriptInState state (Script script) = loop state [] script
 notStuck :: StateModel state => Script state -> Property
 notStuck script
   | isFinal s = property True
-  | otherwise = forAll (vectorOf 20 $ arbitraryAction s) $ any (\(Action act) -> precondition s act)
+  | otherwise = forAll (vectorOf 20 $ arbitraryAction s) $ any (\(Some act) -> precondition s act)
   where
     s = stateAfter script
-
--- * Contract specifics
-
-runTr :: CheckOptions -> TracePredicate -> EmulatorTrace () -> Property
-runTr opts predicate action =
-  flip runCont (const $ property True) $
-    checkPredicateInner opts predicate action
-                        debugOutput assertResult
-  where
-    debugOutput :: String -> Cont Property ()
-    debugOutput out = cont $ \ k -> whenFail (putStrLn out) $ k ()
-
-    assertResult :: Bool -> Cont Property ()
-    assertResult ok = cont $ \ k -> ok QC..&&. k ()
-
-propRunScript ::
-  ( StateModel state
-  , ActionMonad state ~ EmulatorTrace
-  )
-  => (state -> TracePredicate)
-  -> PropertyM (ActionMonad state) state
-  -> Script state
-  -> (state -> PropertyM (ActionMonad state) ())
-  -> Property
-propRunScript = propRunScriptWithOptions defaultCheckOptions
-
-propRunScriptWithOptions ::
-  ( StateModel state
-  , ActionMonad state ~ EmulatorTrace
-  )
-  => CheckOptions
-  -> (state -> TracePredicate)
-  -> PropertyM (ActionMonad state) state
-  -> Script state
-  -> (state -> PropertyM (ActionMonad state) ())
-  -> Property
-propRunScriptWithOptions opts finalPredicate setup script after =
-  monadic (runTr opts predicate . void) $ do
-    initState <- setup
-    (st, _) <- runScriptInState initState script
-    after st
-  where
-    predicate = finalPredicate $ stateAfter script
 
