@@ -1,21 +1,21 @@
 module MainFrame.Lenses
   ( _demoFilesMenuVisible
   , _gistErrorPaneVisible
-  , _currentView
   , _contractDemos
   , _currentDemoName
-  , _editorState
-  , _simulations
-  , _actionDrag
-  , _evaluationResult
-  , _successfulEvaluationResult
-  , _lastEvaluatedSimulation
-  , _compilationResult
-  , _successfulCompilationResult
-  , _lastSuccessfulCompilationResult
   , _authStatus
   , _createGistResult
   , _gistUrl
+  , _currentView
+  , _editorState
+  , _compilationResult
+  , _successfulCompilationResult
+  , _lastSuccessfulCompilationResult
+  , _actionDrag
+  , _simulations
+  , _evaluationResult
+  , _successfulEvaluationResult
+  , _lastEvaluatedSimulation
   , _blockchainVisualisationState
   , _editorSlot
   , _balancesChartSlot
@@ -46,8 +46,8 @@ import Data.Maybe (Maybe, fromMaybe)
 import Data.Symbol (SProxy(..))
 import Editor.Types (State) as Editor
 import Gist (Gist)
-import Language.Haskell.Interpreter (InterpreterResult, SourceCode, _InterpreterResult)
-import MainFrame.Types (State, View, WebCompilationResult, WebData)
+import Language.Haskell.Interpreter (InterpreterError, InterpreterResult, SourceCode, _InterpreterResult)
+import MainFrame.Types (State, View, WebData)
 import Network.RemoteData (_Success)
 import Playground.Types (CompilationResult, ContractCall, ContractDemo, EvaluationResult, FunctionSchema, KnownCurrency, PlaygroundError, Simulation, SimulatorWallet)
 import Plutus.V1.Ledger.Crypto (PubKeyHash)
@@ -63,41 +63,11 @@ _demoFilesMenuVisible = _Newtype <<< prop (SProxy :: SProxy "demoFilesMenuVisibl
 _gistErrorPaneVisible :: Lens' State Boolean
 _gistErrorPaneVisible = _Newtype <<< prop (SProxy :: SProxy "gistErrorPaneVisible")
 
-_currentView :: Lens' State View
-_currentView = _Newtype <<< prop (SProxy :: SProxy "currentView")
-
 _contractDemos :: Lens' State (Array ContractDemo)
 _contractDemos = _Newtype <<< prop (SProxy :: SProxy "contractDemos")
 
 _currentDemoName :: Lens' State (Maybe String)
 _currentDemoName = _Newtype <<< prop (SProxy :: SProxy "currentDemoName")
-
-_editorState :: Lens' State Editor.State
-_editorState = _Newtype <<< prop (SProxy :: SProxy "editorState")
-
-_simulations :: Lens' State (Cursor Simulation)
-_simulations = _Newtype <<< prop (SProxy :: SProxy "simulations")
-
-_actionDrag :: Lens' State (Maybe Int)
-_actionDrag = _Newtype <<< prop (SProxy :: SProxy "actionDrag")
-
-_evaluationResult :: Lens' State (WebData (Either PlaygroundError EvaluationResult))
-_evaluationResult = _Newtype <<< prop (SProxy :: SProxy "evaluationResult")
-
-_successfulEvaluationResult :: Traversal' State EvaluationResult
-_successfulEvaluationResult = _evaluationResult <<< _Success <<< _Right
-
-_lastEvaluatedSimulation :: Lens' State (Maybe Simulation)
-_lastEvaluatedSimulation = _Newtype <<< prop (SProxy :: SProxy "lastEvaluatedSimulation")
-
-_compilationResult :: Lens' State WebCompilationResult
-_compilationResult = _Newtype <<< prop (SProxy :: SProxy "compilationResult")
-
-_successfulCompilationResult :: Traversal' State CompilationResult
-_successfulCompilationResult = _compilationResult <<< _Success <<< _Right <<< _InterpreterResult <<< _result
-
-_lastSuccessfulCompilationResult :: Lens' State (Maybe (InterpreterResult CompilationResult))
-_lastSuccessfulCompilationResult = _Newtype <<< prop (SProxy :: SProxy "lastSuccessfulCompilationResult")
 
 _authStatus :: Lens' State (WebData AuthStatus)
 _authStatus = _Newtype <<< prop (SProxy :: SProxy "authStatus")
@@ -107,6 +77,36 @@ _createGistResult = _Newtype <<< prop (SProxy :: SProxy "createGistResult")
 
 _gistUrl :: Lens' State (Maybe String)
 _gistUrl = _Newtype <<< prop (SProxy :: SProxy "gistUrl")
+
+_currentView :: Lens' State View
+_currentView = _Newtype <<< prop (SProxy :: SProxy "currentView")
+
+_editorState :: Lens' State Editor.State
+_editorState = _Newtype <<< prop (SProxy :: SProxy "editorState")
+
+_compilationResult :: Lens' State (WebData (Either InterpreterError (InterpreterResult CompilationResult)))
+_compilationResult = _Newtype <<< prop (SProxy :: SProxy "compilationResult")
+
+_successfulCompilationResult :: Traversal' State CompilationResult
+_successfulCompilationResult = _compilationResult <<< _Success <<< _Right <<< _InterpreterResult <<< _result
+
+_lastSuccessfulCompilationResult :: Lens' State (Maybe (InterpreterResult CompilationResult))
+_lastSuccessfulCompilationResult = _Newtype <<< prop (SProxy :: SProxy "lastSuccessfulCompilationResult")
+
+_actionDrag :: Lens' State (Maybe Int)
+_actionDrag = _Newtype <<< prop (SProxy :: SProxy "actionDrag")
+
+_simulations :: Lens' State (Cursor Simulation)
+_simulations = _Newtype <<< prop (SProxy :: SProxy "simulations")
+
+_evaluationResult :: Lens' State (WebData (Either PlaygroundError EvaluationResult))
+_evaluationResult = _Newtype <<< prop (SProxy :: SProxy "evaluationResult")
+
+_successfulEvaluationResult :: Traversal' State EvaluationResult
+_successfulEvaluationResult = _evaluationResult <<< _Success <<< _Right
+
+_lastEvaluatedSimulation :: Lens' State (Maybe Simulation)
+_lastEvaluatedSimulation = _Newtype <<< prop (SProxy :: SProxy "lastEvaluatedSimulation")
 
 _blockchainVisualisationState :: Lens' State Chain.State
 _blockchainVisualisationState = _Newtype <<< prop (SProxy :: SProxy "blockchainVisualisationState")

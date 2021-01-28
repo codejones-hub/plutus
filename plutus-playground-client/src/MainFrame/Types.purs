@@ -47,19 +47,24 @@ newtype State
   = State
   { demoFilesMenuVisible :: Boolean
   , gistErrorPaneVisible :: Boolean
-  , currentView :: View
+  -- Demo files.
   , contractDemos :: Array ContractDemo
   , currentDemoName :: Maybe String
-  , editorState :: Editor.State
-  , compilationResult :: WebCompilationResult
-  , lastSuccessfulCompilationResult :: Maybe (InterpreterResult CompilationResult)
-  , simulations :: Cursor Simulation
-  , actionDrag :: Maybe Int
-  , evaluationResult :: WebEvaluationResult
-  , lastEvaluatedSimulation :: Maybe Simulation
+  -- Gist support.
   , authStatus :: WebData AuthStatus
   , createGistResult :: WebData Gist
   , gistUrl :: Maybe String
+  -- Navigation.
+  , currentView :: View
+  -- Editor.
+  , editorState :: Editor.State
+  , compilationResult :: WebCompilationResult
+  , lastSuccessfulCompilationResult :: Maybe (InterpreterResult CompilationResult)
+  -- Simulator.
+  , actionDrag :: Maybe Int
+  , simulations :: Cursor Simulation
+  , evaluationResult :: WebEvaluationResult
+  , lastEvaluatedSimulation :: Maybe Simulation
   , blockchainVisualisationState :: Chain.State
   }
 
@@ -106,30 +111,26 @@ data Query a
 data HAction
   = Init
   | Mounted
-  -- SubEvents.
-  | ActionDragAndDrop Int DragAndDropEventType DragEvent
-  | HandleBalancesChartMessage Chartist.Message
+  -- Demo files.
+  | ToggleDemoFilesMenu
+  | LoadScript String
   -- Gist support.
   | CheckAuthStatus
   | GistAction GistAction
-  -- Demo files menu.
-  | ToggleDemoFilesMenu
-  -- Tabs.
+  -- Navigation.
   | ChangeView View
   -- Editor.
   | EditorAction Editor.Action
   | CompileProgram
-  -- Simulations.
-  | LoadScript String
+  -- Simulator.
   | AddSimulationSlot
   | SetSimulationSlot Int
   | RemoveSimulationSlot Int
-  -- Wallets.
   | ModifyWallets WalletEvent
-  -- Actions.
   | ChangeSimulation SimulationAction
   | EvaluateActions
-  -- Chain.
+  | ActionDragAndDrop Int DragAndDropEventType DragEvent
+  | HandleBalancesChartMessage Chartist.Message
   | ChainAction (Chain.Action)
 
 data WalletEvent
@@ -163,26 +164,22 @@ type ChildSlots
 instance actionIsEvent :: IsEvent HAction where
   toEvent Init = Nothing
   toEvent Mounted = Just $ defaultEvent "Mounted"
-  toEvent (EditorAction (Editor.HandleDropEvent _)) = Just $ defaultEvent "DropScript"
-  toEvent (EditorAction action) = Just $ (defaultEvent "ConfigureEditor")
-  toEvent CompileProgram = Just $ defaultEvent "CompileProgram"
-  toEvent (HandleBalancesChartMessage _) = Nothing
+  -- Demo files.
+  toEvent ToggleDemoFilesMenu = Nothing
+  toEvent (LoadScript script) = Just $ (defaultEvent "LoadScript") { label = Just script }
+  -- Gist support.
   toEvent CheckAuthStatus = Nothing
   toEvent (GistAction PublishGist) = Just $ (defaultEvent "Publish") { category = Just "Gist" }
   toEvent (GistAction (SetGistUrl _)) = Nothing
   toEvent (GistAction LoadGist) = Just $ (defaultEvent "LoadGist") { category = Just "Gist" }
   toEvent (GistAction (AjaxErrorPaneAction _)) = Nothing
-  toEvent ToggleDemoFilesMenu = Nothing
+  -- Navigation.
   toEvent (ChangeView view) = Just $ (defaultEvent "View") { label = Just $ show view }
-  toEvent (LoadScript script) = Just $ (defaultEvent "LoadScript") { label = Just script }
-  toEvent AddSimulationSlot = Just $ (defaultEvent "AddSimulationSlot") { category = Just "Simulation" }
-  toEvent (SetSimulationSlot _) = Just $ (defaultEvent "SetSimulationSlot") { category = Just "Simulation" }
-  toEvent (RemoveSimulationSlot _) = Just $ (defaultEvent "RemoveSimulationSlot") { category = Just "Simulation" }
-  toEvent (ModifyWallets AddWallet) = Just $ (defaultEvent "AddWallet") { category = Just "Wallet" }
-  toEvent (ModifyWallets (RemoveWallet _)) = Just $ (defaultEvent "RemoveWallet") { category = Just "Wallet" }
-  toEvent (ModifyWallets (ModifyBalance _ (SetBalance _ _ _))) = Just $ (defaultEvent "SetBalance") { category = Just "Wallet" }
-  toEvent (ActionDragAndDrop _ eventType _) = Just $ (defaultEvent (show eventType)) { category = Just "Action" }
-  toEvent EvaluateActions = Just $ (defaultEvent "EvaluateActions") { category = Just "Action" }
+  -- Editor.
+  toEvent (EditorAction (Editor.HandleDropEvent _)) = Just $ defaultEvent "DropScript"
+  toEvent (EditorAction action) = Just $ (defaultEvent "ConfigureEditor")
+  toEvent CompileProgram = Just $ defaultEvent "CompileProgram"
+  -- Simulator.
   toEvent (ChangeSimulation (PopulateAction _ _)) = Just $ (defaultEvent "PopulateAction") { category = Just "Action" }
   toEvent (ChangeSimulation (ModifyActions (AddAction _))) = Just $ (defaultEvent "AddAction") { category = Just "Action" }
   toEvent (ChangeSimulation (ModifyActions (AddWaitAction _))) = Just $ (defaultEvent "AddWaitAction") { category = Just "Action" }
@@ -191,6 +188,15 @@ instance actionIsEvent :: IsEvent HAction where
   toEvent (ChangeSimulation (ModifyActions (SetPayToWalletRecipient _ _))) = Just $ (defaultEvent "SetPayToWalletRecipient") { category = Just "Action" }
   toEvent (ChangeSimulation (ModifyActions (SetWaitTime _ _))) = Just $ (defaultEvent "SetWaitTime") { category = Just "Action" }
   toEvent (ChangeSimulation (ModifyActions (SetWaitUntilTime _ _))) = Just $ (defaultEvent "SetWaitUntilTime") { category = Just "Action" }
+  toEvent AddSimulationSlot = Just $ (defaultEvent "AddSimulationSlot") { category = Just "Simulation" }
+  toEvent (SetSimulationSlot _) = Just $ (defaultEvent "SetSimulationSlot") { category = Just "Simulation" }
+  toEvent (RemoveSimulationSlot _) = Just $ (defaultEvent "RemoveSimulationSlot") { category = Just "Simulation" }
+  toEvent (ModifyWallets AddWallet) = Just $ (defaultEvent "AddWallet") { category = Just "Wallet" }
+  toEvent (ModifyWallets (RemoveWallet _)) = Just $ (defaultEvent "RemoveWallet") { category = Just "Wallet" }
+  toEvent (ModifyWallets (ModifyBalance _ (SetBalance _ _ _))) = Just $ (defaultEvent "SetBalance") { category = Just "Wallet" }
+  toEvent EvaluateActions = Just $ (defaultEvent "EvaluateActions") { category = Just "Action" }
+  toEvent (ActionDragAndDrop _ eventType _) = Just $ (defaultEvent (show eventType)) { category = Just "Action" }
+  toEvent (HandleBalancesChartMessage _) = Nothing
   toEvent (ChainAction (FocusTx (Just _))) = Just $ (defaultEvent "BlockchainFocus") { category = Just "Transaction" }
   toEvent (ChainAction (FocusTx Nothing)) = Nothing
   toEvent (ChainAction (ClipboardAction (Clipboard.CopyToClipboard _))) = Just $ (defaultEvent "ClipboardAction") { category = Just "CopyToClipboard" }

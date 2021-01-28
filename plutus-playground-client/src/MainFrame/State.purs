@@ -99,19 +99,19 @@ mkInitialState editorState = do
     $ State
         { demoFilesMenuVisible: false
         , gistErrorPaneVisible: true
-        , currentView: Editor
-        , editorState
         , contractDemos
         , currentDemoName: Nothing
-        , compilationResult: NotAsked
-        , lastSuccessfulCompilationResult: Nothing
-        , simulations: Cursor.empty
-        , actionDrag: Nothing
-        , evaluationResult: NotAsked
-        , lastEvaluatedSimulation: Nothing
         , authStatus: NotAsked
         , createGistResult: NotAsked
         , gistUrl: Nothing
+        , currentView: Editor
+        , editorState
+        , compilationResult: NotAsked
+        , lastSuccessfulCompilationResult: Nothing
+        , actionDrag: Nothing
+        , simulations: Cursor.empty
+        , evaluationResult: NotAsked
+        , lastEvaluatedSimulation: Nothing
         , blockchainVisualisationState: Chain.initialState
         }
 
@@ -167,81 +167,7 @@ handleAction Init = do
 
 handleAction Mounted = pure unit
 
-handleAction (EditorAction action) = editorHandleAction action
-
-handleAction (ActionDragAndDrop index DragStart event) = do
-  setDataTransferData event textPlain (show index)
-  assign _actionDrag (Just index)
-
-handleAction (ActionDragAndDrop _ DragEnd event) = assign _actionDrag Nothing
-
-handleAction (ActionDragAndDrop _ DragEnter event) = do
-  preventDefault event
-  setDropEffect DataTransfer.Move event
-
-handleAction (ActionDragAndDrop _ DragOver event) = do
-  preventDefault event
-  setDropEffect DataTransfer.Move event
-
-handleAction (ActionDragAndDrop _ DragLeave event) = pure unit
-
-handleAction (ActionDragAndDrop destination Drop event) = do
-  use _actionDrag
-    >>= case _ of
-        Just source -> modifying (_simulations <<< _current <<< _simulationActions) (Array.move source destination)
-        _ -> pure unit
-  preventDefault event
-  assign _actionDrag Nothing
-
--- We just ignore most Chartist events.
-handleAction (HandleBalancesChartMessage _) = pure unit
-
-handleAction CheckAuthStatus = do
-  assign _authStatus Loading
-  authResult <- getOauthStatus
-  assign _authStatus authResult
-
-handleAction (GistAction subEvent) = handleGistAction subEvent
-
 handleAction ToggleDemoFilesMenu = modifying _demoFilesMenuVisible not
-
-handleAction (ChangeView view) = do
-  assign _currentView view
-  when (view == Editor) resizeEditor
-  when (view == Transactions) resizeBalancesChart
-
-handleAction EvaluateActions =
-  void
-    $ runMaybeT
-    $ do
-        simulation <- peruse (_simulations <<< _current)
-        evaluation <-
-          MaybeT do
-            contents <- editorGetContents
-            pure $ join $ toEvaluation <$> contents <*> simulation
-        assign _evaluationResult Loading
-        result <- lift $ postEvaluation evaluation
-        assign _evaluationResult result
-        case result of
-          Success (Right _) -> do
-            -- on successful evaluation, update last evaluated simulation, and reset and show transactions
-            when (isSuccess result) do
-              assign _lastEvaluatedSimulation simulation
-              assign _blockchainVisualisationState Chain.initialState
-              -- preselect the first transaction (if any)
-              mAnnotatedBlockchain <- peruse (_successfulEvaluationResult <<< _resultRollup <<< to AnnotatedBlockchain)
-              txId <- (gets <<< lastOf) (_successfulEvaluationResult <<< _resultRollup <<< traversed <<< traversed <<< _txIdOf)
-              lift $ zoomStateT _blockchainVisualisationState $ Chain.handleAction (FocusTx txId) mAnnotatedBlockchain
-            replaceViewOnSuccess result Simulations Transactions
-            lift $ scrollIntoView simulatorTitleRefLabel
-          Success (Left _) -> do
-            -- on failed evaluation, scroll the error pane into view
-            lift $ scrollIntoView simulationsErrorRefLabel
-          Failure _ -> do
-            -- on failed response, scroll the ajax error pane into view
-            lift $ scrollIntoView ajaxErrorRefLabel
-          _ -> pure unit
-        pure unit
 
 handleAction (LoadScript key) = do
   contractDemos <- use _contractDemos
@@ -260,6 +186,65 @@ handleAction (LoadScript key) = do
       assign _lastSuccessfulCompilationResult (Just contractDemoContext)
       assign _evaluationResult NotAsked
       assign _createGistResult NotAsked
+
+handleAction CheckAuthStatus = do
+  assign _authStatus Loading
+  authResult <- getOauthStatus
+  assign _authStatus authResult
+
+handleAction (GistAction subEvent) = handleGistAction subEvent
+
+handleAction (ChangeView view) = do
+  assign _currentView view
+  when (view == Editor) resizeEditor
+  when (view == Transactions) resizeBalancesChart
+
+handleAction (EditorAction action) = editorHandleAction action
+
+handleAction CompileProgram = do
+  mContents <- editorGetContents
+  case mContents of
+    Nothing -> pure unit
+    Just contents -> do
+      assign (_editorState <<< _feedbackPaneMinimised) true
+      assign _compilationResult Loading
+      lastSuccessfulCompilationResult <- use _lastSuccessfulCompilationResult
+      newCompilationResult <- postContract contents
+      assign _compilationResult newCompilationResult
+      case newCompilationResult of
+        Success (Left errors) -> do
+          -- If there are compilation errors, add editor annotations and expand the feedback pane.
+          editorSetAnnotations $ toAnnotations errors
+          assign (_editorState <<< _feedbackPaneMinimised) false
+        Success (Right compilationResult) ->
+          -- If compilation was successful, clear editor annotations and save the successful result.
+          when (isSuccess newCompilationResult) do
+            editorSetAnnotations []
+            assign (_editorState <<< _currentCodeIsCompiled) true
+            assign (_editorState <<< _lastCompiledCode) (Just contents)
+            assign _lastSuccessfulCompilationResult (Just compilationResult)
+            -- If we have a result with new signatures, we can only hold onto any old actions if
+            -- the signatures still match. Any change means we'll have to clear out the existing
+            -- simulation. Same thing for currencies. Potentially we could be smarter about this.
+            -- But for now, let's at least be correct.
+            -- Note we test against the last _successful_ compilation result, so that a failed
+            -- compilation in between times doesn't unnecessarily wipe the old actions.
+            let
+              newSignatures = preview (_details <<< _functionSchema) newCompilationResult
+
+              newCurrencies = preview (_details <<< _knownCurrencies) newCompilationResult
+            case lastSuccessfulCompilationResult of
+              Nothing -> assign _simulations $ defaultSimulations newCurrencies
+              Just oldCompilationResult -> do
+                let
+                  oldSignatures = preview (_result <<< _functionSchema) (unwrap oldCompilationResult)
+
+                  oldCurrencies = preview (_result <<< _knownCurrencies) (unwrap oldCompilationResult)
+                unless
+                  (oldSignatures == newSignatures && oldCurrencies == newCurrencies)
+                  (assign _simulations $ defaultSimulations newCurrencies)
+        _ -> pure unit
+      pure unit
 
 -- Note: the following three cases involve some temporary fudges that should become
 -- unnecessary when we remodel and have one evaluationResult per simulation. In
@@ -317,6 +302,66 @@ handleAction (ChangeSimulation subaction) = do
     initialValue = mkInitialValue knownCurrencies zero
   modifying (_simulations <<< _current <<< _simulationActions) (handleSimulationAction initialValue subaction)
 
+handleAction EvaluateActions =
+  void
+    $ runMaybeT
+    $ do
+        simulation <- peruse (_simulations <<< _current)
+        evaluation <-
+          MaybeT do
+            contents <- editorGetContents
+            pure $ join $ toEvaluation <$> contents <*> simulation
+        assign _evaluationResult Loading
+        result <- lift $ postEvaluation evaluation
+        assign _evaluationResult result
+        case result of
+          Success (Right _) -> do
+            -- on successful evaluation, update last evaluated simulation, and reset and show transactions
+            when (isSuccess result) do
+              assign _lastEvaluatedSimulation simulation
+              assign _blockchainVisualisationState Chain.initialState
+              -- preselect the first transaction (if any)
+              mAnnotatedBlockchain <- peruse (_successfulEvaluationResult <<< _resultRollup <<< to AnnotatedBlockchain)
+              txId <- (gets <<< lastOf) (_successfulEvaluationResult <<< _resultRollup <<< traversed <<< traversed <<< _txIdOf)
+              lift $ zoomStateT _blockchainVisualisationState $ Chain.handleAction (FocusTx txId) mAnnotatedBlockchain
+            replaceViewOnSuccess result Simulations Transactions
+            lift $ scrollIntoView simulatorTitleRefLabel
+          Success (Left _) -> do
+            -- on failed evaluation, scroll the error pane into view
+            lift $ scrollIntoView simulationsErrorRefLabel
+          Failure _ -> do
+            -- on failed response, scroll the ajax error pane into view
+            lift $ scrollIntoView ajaxErrorRefLabel
+          _ -> pure unit
+        pure unit
+
+handleAction (ActionDragAndDrop index DragStart event) = do
+  setDataTransferData event textPlain (show index)
+  assign _actionDrag (Just index)
+
+handleAction (ActionDragAndDrop _ DragEnd event) = assign _actionDrag Nothing
+
+handleAction (ActionDragAndDrop _ DragEnter event) = do
+  preventDefault event
+  setDropEffect DataTransfer.Move event
+
+handleAction (ActionDragAndDrop _ DragOver event) = do
+  preventDefault event
+  setDropEffect DataTransfer.Move event
+
+handleAction (ActionDragAndDrop _ DragLeave event) = pure unit
+
+handleAction (ActionDragAndDrop destination Drop event) = do
+  use _actionDrag
+    >>= case _ of
+        Just source -> modifying (_simulations <<< _current <<< _simulationActions) (Array.move source destination)
+        _ -> pure unit
+  preventDefault event
+  assign _actionDrag Nothing
+
+-- We just ignore most Chartist events.
+handleAction (HandleBalancesChartMessage _) = pure unit
+
 handleAction (ChainAction subaction) = do
   mAnnotatedBlockchain <-
     peruse (_successfulEvaluationResult <<< _resultRollup <<< to AnnotatedBlockchain)
@@ -327,51 +372,6 @@ handleAction (ChainAction subaction) = do
   wrapper
     $ zoomStateT _blockchainVisualisationState
     $ Chain.handleAction subaction mAnnotatedBlockchain
-
-handleAction CompileProgram = do
-  mContents <- editorGetContents
-  case mContents of
-    Nothing -> pure unit
-    Just contents -> do
-      assign (_editorState <<< _feedbackPaneMinimised) true
-      assign _compilationResult Loading
-      lastSuccessfulCompilationResult <- use _lastSuccessfulCompilationResult
-      newCompilationResult <- postContract contents
-      assign _compilationResult newCompilationResult
-      case newCompilationResult of
-        Success (Left errors) -> do
-          -- If there are compilation errors, add editor annotations and expand the feedback pane.
-          editorSetAnnotations $ toAnnotations errors
-          assign (_editorState <<< _feedbackPaneMinimised) false
-        Success (Right compilationResult) ->
-          -- If compilation was successful, clear editor annotations and save the successful result.
-          when (isSuccess newCompilationResult) do
-            editorSetAnnotations []
-            assign (_editorState <<< _currentCodeIsCompiled) true
-            assign (_editorState <<< _lastCompiledCode) (Just contents)
-            assign _lastSuccessfulCompilationResult (Just compilationResult)
-            -- If we have a result with new signatures, we can only hold onto any old actions if
-            -- the signatures still match. Any change means we'll have to clear out the existing
-            -- simulation. Same thing for currencies. Potentially we could be smarter about this.
-            -- But for now, let's at least be correct.
-            -- Note we test against the last _successful_ compilation result, so that a failed
-            -- compilation in between times doesn't unnecessarily wipe the old actions.
-            let
-              newSignatures = preview (_details <<< _functionSchema) newCompilationResult
-
-              newCurrencies = preview (_details <<< _knownCurrencies) newCompilationResult
-            case lastSuccessfulCompilationResult of
-              Nothing -> assign _simulations $ defaultSimulations newCurrencies
-              Just oldCompilationResult -> do
-                let
-                  oldSignatures = preview (_result <<< _functionSchema) (unwrap oldCompilationResult)
-
-                  oldCurrencies = preview (_result <<< _knownCurrencies) (unwrap oldCompilationResult)
-                unless
-                  (oldSignatures == newSignatures && oldCurrencies == newCurrencies)
-                  (assign _simulations $ defaultSimulations newCurrencies)
-        _ -> pure unit
-      pure unit
 
 defaultSimulations :: Maybe (Array KnownCurrency) -> Cursor Simulation
 defaultSimulations newCurrencies = case newCurrencies of
