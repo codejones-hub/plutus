@@ -53,15 +53,13 @@ data GameModel = GameModel
 
 makeLenses 'GameModel
 
-deriving instance Show (Command GameModel a)
-
 instance ContractModel GameModel where
 
-    data Command GameModel a where
-      Lock      :: EM.Wallet -> String -> Integer           -> Command GameModel ()
-      Guess     :: EM.Wallet -> String -> String -> Integer -> Command GameModel ()
-      GiveToken :: EM.Wallet                                -> Command GameModel ()
-      Delay     ::                                             Command GameModel ()
+    data Command GameModel = Lock      EM.Wallet String Integer
+                           | Guess     EM.Wallet String String Integer
+                           | GiveToken EM.Wallet
+                           | Delay
+        deriving (Eq, Show)
 
     type Schema GameModel = GameStateMachineSchema
     type Err    GameModel = GameError
@@ -75,15 +73,15 @@ instance ContractModel GameModel where
         , _busy          = 0
         }
 
-    precondition s (Lock _ _ _)        = Nothing == s ^. modelState . hasToken
-    precondition s (Guess w _old _ val)= and [ Just w == s ^. modelState . hasToken
-                                             , val <= s ^. modelState . gameValue
-                                             , Just w /= s ^. modelState . keeper ]
-    precondition s (GiveToken w)       = and [ (s ^. modelState . hasToken) `notElem` [Nothing, Just w]
-                                             , s ^. modelState . gameValue > 0 ] -- stops the test
-    precondition _ Delay               = True
+    precondition s (Lock _ _ _)         = Nothing == s ^. modelState . hasToken
+    precondition s (Guess w _old _ val) = and [ Just w == s ^. modelState . hasToken
+                                              , val <= s ^. modelState . gameValue
+                                              , Just w /= s ^. modelState . keeper ]
+    precondition s (GiveToken w)        = and [ (s ^. modelState . hasToken) `notElem` [Nothing, Just w]
+                                              , s ^. modelState . gameValue > 0 ] -- stops the test
+    precondition _ Delay                = True
 
-    nextState (Lock w secret val) _ = do
+    nextState (Lock w secret val) = do
         hasToken      $= Just w
         keeper        $= Just w
         currentSecret $= secret
@@ -91,7 +89,7 @@ instance ContractModel GameModel where
         deposit  w gameTokenVal
         withdraw w $ Ada.lovelaceValueOf val
 
-    nextState (Guess w old new val) _ = do
+    nextState (Guess w old new val) = do
         b <- getModelState busy
         when (b == 0) $ do
             correct <- (old ==) <$> getModelState currentSecret
@@ -101,34 +99,36 @@ instance ContractModel GameModel where
                 currentSecret $= new
                 gameValue     $~ subtract val
                 deposit w $ Ada.lovelaceValueOf val
-    nextState (GiveToken w) _ = do
+    nextState (GiveToken w) = do
         lock <- (> 0) <$> getModelState tokenLock
         lessBusy
         unless lock $ do
             w0 <- fromJust <$> getModelState hasToken
             transfer w0 w gameTokenVal
             hasToken $= Just w
-    nextState Delay _ = lessBusy
+    nextState Delay = lessBusy
 
     arbitraryCommand s0 = oneof $
-        [ Some <$> (Lock        <$> genWallet <*> genGuess <*> genValue) | Nothing == s ^. hasToken ] ++
-        [ Some <$> (Guess w     <$> genGuess <*> genGuess <*> choose (1, s ^. gameValue))
-          | Just w <- [s ^. hasToken], s ^. hasToken /= s ^. keeper, s ^. gameValue > 0 ] ++
-        [ Some <$> (GiveToken   <$> genWallet) | s ^. hasToken /= Nothing ] ++
-        [ Some <$> return Delay ]
+        [ Lock      <$> genWallet <*> genGuess <*> genValue
+            | Nothing == s ^. hasToken ] ++
+        [ Guess w   <$> genGuess <*> genGuess <*> choose (1, s ^. gameValue)
+            | Just w <- [s ^. hasToken], s ^. hasToken /= s ^. keeper, s ^. gameValue > 0 ] ++
+        [ GiveToken <$> genWallet
+            | s ^. hasToken /= Nothing ] ++
+        [ return Delay ]
         where s = s0 ^. modelState
 
     shrinkCommand _s (Lock w secret val) =
-        [Some $ Lock w' secret val | w' <- shrinkWallet w] ++
-        [Some $ Lock w secret val' | val' <- shrink val]
+        [Lock w' secret val | w' <- shrinkWallet w] ++
+        [Lock w secret val' | val' <- shrink val]
     shrinkCommand _s (GiveToken w) =
-        [Some $ GiveToken w' | w' <- shrinkWallet w]
+        [GiveToken w' | w' <- shrinkWallet w]
     shrinkCommand _s (Guess w old new val) =
-        [Some $ Guess w' old new val | w' <- shrinkWallet w] ++
-        [Some $ Guess w old new val' | val' <- shrink val]
+        [Guess w' old new val | w' <- shrinkWallet w] ++
+        [Guess w old new val' | val' <- shrink val]
     shrinkCommand _s Delay = []
 
-    perform s cmd _env = case cmd of
+    perform s cmd = case cmd of
         Lock w new val -> do
             callEndpoint @"lock" (handle s w) LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
             delay 2
@@ -140,7 +140,7 @@ instance ContractModel GameModel where
             delay 1
         Delay -> delay 1
 
-    monitoring (s0, s1) act _env _res =
+    monitoring (s0, s1) act =
       case act of
         GiveToken _ | s0 ^. modelState . busy > 0     -> classify True "passing-while-busy"
         Guess _ guess _ _

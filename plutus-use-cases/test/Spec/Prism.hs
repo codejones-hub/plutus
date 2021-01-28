@@ -31,7 +31,7 @@ import qualified Ledger.Ada                                                as Ad
 import           Ledger.Crypto                                             (pubKeyHash)
 import           Ledger.Value                                              (TokenName)
 
-import           Test.QuickCheck                                           hiding ((.&&.))
+import           Test.QuickCheck                                           as QC hiding ((.&&.))
 import           Test.QuickCheck.Monadic
 import           Test.Tasty
 
@@ -139,34 +139,22 @@ doRevoke Issued  = Revoked
 waitSlots :: Int
 waitSlots = 2
 
-deriving instance Show (Command PrismModel a)
-deriving instance Eq   (Command PrismModel a)
-
 instance ContractModel PrismModel where
 
-    data Command PrismModel a where
-        Delay   :: Command PrismModel ()
-        Issue   :: Command PrismModel ()
-        Revoke  :: Command PrismModel ()
-        Call    :: Command PrismModel ()
-        Present :: Command PrismModel ()
+    data Command PrismModel = Delay | Issue | Revoke | Call | Present
+        deriving (Eq, Show)
 
     type Schema PrismModel = PrismSchema
     type Err    PrismModel = PrismError
 
-    arbitraryCommand _ = oneof $ map (Some <$>)
-        [ pure Delay
-        , pure Revoke
-        , pure Issue
-        , pure Call
-        , pure Present ]
+    arbitraryCommand _ = QC.elements [Delay, Revoke, Issue, Call, Present]
 
     initialState = PrismModel { _isIssued = NoIssue, _stoState = STOReady }
 
     precondition s Issue = (s ^. modelState . isIssued) /= Issued  -- Multiple Issue (without Revoke) breaks the contract
     precondition _ _     = True
 
-    nextState cmd v = do
+    nextState cmd = do
         wait waitSlots
         case cmd of
             Delay   -> wait 1
@@ -182,7 +170,7 @@ instance ContractModel PrismModel where
                     deposit user $ STO.coins stoData numTokens
                 return ()
 
-    perform s cmd _env = case cmd of
+    perform s cmd = case cmd of
         Delay   -> wrap $ delay 1
         Issue   -> wrap $ Trace.callEndpoint @"issue"              (handle s mirror) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
         Revoke  -> wrap $ Trace.callEndpoint @"revoke"             (handle s mirror) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
@@ -192,9 +180,9 @@ instance ContractModel PrismModel where
             wrap m   = m *> delay waitSlots
 
     shrinkCommand _ Delay = []
-    shrinkCommand _ _     = [Some Delay]
+    shrinkCommand _ _     = [Delay]
 
-    monitoring (_, s) _ _ _ = counterexample (show s)
+    monitoring (_, s) _ = counterexample (show s)
 
 delay :: Int -> Trace.EmulatorTrace ()
 delay n = void $ Trace.waitNSlots $ fromIntegral n

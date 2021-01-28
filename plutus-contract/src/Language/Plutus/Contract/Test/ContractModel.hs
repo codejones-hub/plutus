@@ -12,10 +12,7 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 
-module Language.Plutus.Contract.Test.ContractModel
-    ( module Language.Plutus.Contract.Test.ContractModel     -- TODO
-    , Any(..) )
-    where
+module Language.Plutus.Contract.Test.ContractModel where
 
 import           Control.Lens
 import           Control.Monad.Cont
@@ -57,28 +54,28 @@ type Handle state = ContractHandle (Schema state) (Err state)
 
 type Spec state = Eff '[State (ModelState state)]
 
-class ( (forall a. Show (Command state a))
+class ( Show (Command state)
       , Show (Err state)
       , JSON.ToJSON (Err state)
       , JSON.FromJSON (Err state)
       ) => ContractModel state where
-    data Command state a
+    data Command state
     type Schema state :: Row *
     type Err state
 
-    arbitraryCommand :: ModelState state -> Gen (Any (Command state))
+    arbitraryCommand :: ModelState state -> Gen (Command state)
 
     initialState :: state
 
-    precondition :: ModelState state -> Command state a -> Bool
+    precondition :: ModelState state -> Command state -> Bool
 
-    nextState :: Command state a -> Var a -> Spec state ()
+    nextState :: Command state -> Spec state ()
 
-    perform :: ModelState state -> Command state a -> LookUp -> EmulatorTrace a
+    perform :: ModelState state -> Command state -> EmulatorTrace ()
 
-    monitoring :: (ModelState state, ModelState state) -> Command state a -> LookUp -> a -> Property -> Property
+    monitoring :: (ModelState state, ModelState state) -> Command state -> Property -> Property
 
-    shrinkCommand :: ModelState state -> Command state a -> [Any (Command state)]
+    shrinkCommand :: ModelState state -> Command state -> [Command state]
 
 makeLenses 'ModelState
 
@@ -129,31 +126,31 @@ instance ContractModel state => Show (Action (ModelState state) a) where
 
 instance ContractModel state => StateModel (ModelState state) where
 
-    data Action (ModelState state) a = ContractAction (Command state a)
+    data Action (ModelState state) a = ContractAction (Command state)
 
     type ActionMonad (ModelState state) = EmulatorTrace
 
     arbitraryAction s = do
-        Some a <- arbitraryCommand s
-        return (Some (ContractAction a))
+        a <- arbitraryCommand s
+        return (Some @() (ContractAction a))
 
-    shrinkAction s (ContractAction a) = [ Some (ContractAction a') | Some a' <- shrinkCommand s a ]
+    shrinkAction s (ContractAction a) = [ Some @() (ContractAction a') | a' <- shrinkCommand s a ]
 
     initialState = ModelState { _currentSlot   = 0
                               , _balances      = Map.empty
                               , _walletHandles = Map.empty
                               , _modelState    = initialState }
 
-    nextState s (ContractAction cmd) v = runSpec (nextState cmd v) s
+    nextState s (ContractAction cmd) _v = runSpec (nextState cmd) s
 
                                                 -- TODO: remember actual maxSlots
     precondition s (ContractAction cmd) = s ^. currentSlot < 100 && precondition s cmd
 
-    perform s (ContractAction cmd) env = perform s cmd env
+    perform s (ContractAction cmd) _env = error "unused" <$ perform s cmd
 
     postcondition _s _cmd _env _res = True
 
-    monitoring (s0, s1) (ContractAction cmd) env res = monitoring (s0, s1) cmd env res
+    monitoring (s0, s1) (ContractAction cmd) _env _res = monitoring (s0, s1) cmd
 
     isFinal _s = False
 
