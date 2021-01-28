@@ -12,7 +12,26 @@
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 
-module Language.Plutus.Contract.Test.ContractModel where
+module Language.Plutus.Contract.Test.ContractModel
+    -- * ContractModel
+    ( ModelState
+    , modelState, currentSlot, balances
+    , handle, contractInstanceId
+    , ContractModel(..)
+    -- * Spec monad
+    , Spec
+    , wait
+    , deposit
+    , withdraw
+    , transfer
+    , ($=), ($~)
+    , getState
+    , getModelState
+    -- * Running properties
+    , Script
+    , propRunScript
+    , propRunScriptWithOptions
+    ) where
 
 import           Control.Lens
 import           Control.Monad.Cont
@@ -21,7 +40,6 @@ import           Control.Monad.Freer.State
 import qualified Data.Aeson                               as JSON
 import           Data.Map                                 (Map)
 import qualified Data.Map                                 as Map
-import           Data.Maybe
 import           Data.Row                                 (Row)
 
 import           Language.Plutus.Contract                 (Contract, ContractInstanceId, HasBlockchainActions)
@@ -119,7 +137,7 @@ handle s w = s ^?! walletHandles . at w . _Just
 --         Just h  -> Trace.callEndpoint @l @ep @(Schema s) h v
 
 contractInstanceId :: ModelState s -> Wallet -> ContractInstanceId
-contractInstanceId s w = chInstanceId . fromJust $ s ^. walletHandles . at w
+contractInstanceId s w = chInstanceId $ handle s w
 
 instance ContractModel state => Show (Action (ModelState state) a) where
     showsPrec p (ContractAction a) = showsPrec p a
