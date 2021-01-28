@@ -55,9 +55,9 @@ import Halogen as H
 import Halogen.HTML (HTML)
 import Halogen.Query (HalogenM)
 import Language.Haskell.Interpreter (CompilationError(..), InterpreterError(..), InterpreterResult, SourceCode(..), _InterpreterResult)
-import MainFrame.Lenses (_actionDrag, _authStatus, _blockchainVisualisationState, _compilationResult, _contractDemos, _createGistResult, _currentDemoName, _currentView, _demoFilesMenuVisible, _editorState, _evaluationResult, _functionSchema, _gistErrorPaneVisible, _gistUrl, _lastEvaluatedSimulation, _lastSuccessfulCompilationResult, _knownCurrencies, _result, _resultRollup, _simulationActions, _simulationId, _simulationWallets, _simulations, _successfulCompilationResult, _successfulEvaluationResult, getKnownCurrencies)
+import MainFrame.Lenses (_actionDrag, _authStatus, _blockchainVisualisationState, _compilationResult, _contractDemos, _createGistResult, _currentDemoName, _currentView, _demoFilesMenuVisible, _editorState, _evaluationResult, _functionSchema, _gistErrorPaneVisible, _gistUrl, _lastEvaluatedSimulation, _lastSuccessfulCompilationResult, _knownCurrencies, _result, _resultRollup, _simulationActions, _simulationId, _simulationWallets, _simulations, _simulatorView, _successfulCompilationResult, _successfulEvaluationResult, getKnownCurrencies)
 import MainFrame.MonadApp (class MonadApp, editorGetContents, editorHandleAction, editorSetAnnotations, editorSetContents, getGistByGistId, getOauthStatus, patchGistByGistId, postContract, postEvaluation, postGist, preventDefault, resizeBalancesChart, resizeEditor, runHalogenApp, saveBuffer, scrollIntoView, setDataTransferData, setDropEffect)
-import MainFrame.Types (ChildSlots, DragAndDropEventType(..), HAction(..), Query, State(..), View(..), WalletEvent(..), WebData)
+import MainFrame.Types (ChildSlots, DragAndDropEventType(..), HAction(..), Query, SimulatorAction(..), SimulatorState(..), SimulatorView(..), State(..), View(..), WalletEvent(..), WebData)
 import MainFrame.View (render)
 import Monaco (IMarkerData, markerSeverity)
 import Network.RemoteData (RemoteData(..), _Success, isSuccess)
@@ -108,12 +108,19 @@ mkInitialState editorState = do
         , editorState
         , compilationResult: NotAsked
         , lastSuccessfulCompilationResult: Nothing
-        , actionDrag: Nothing
-        , simulations: Cursor.empty
-        , evaluationResult: NotAsked
-        , lastEvaluatedSimulation: Nothing
-        , blockchainVisualisationState: Chain.initialState
+        , simulatorState: initialSimulatorState
         }
+
+initialSimulatorState :: SimulatorState
+initialSimulatorState =
+  SimulatorState
+    { simulatorView: WalletsAndActions
+    , actionDrag: Nothing
+    , simulations: Cursor.empty
+    , evaluationResult: NotAsked
+    , lastEvaluatedSimulation: Nothing
+    , blockchainVisualisationState: Chain.initialState
+    }
 
 ------------------------------------------------------------
 ajaxSettings :: SPSettings_ SPParams_
@@ -197,7 +204,6 @@ handleAction (GistAction subEvent) = handleGistAction subEvent
 handleAction (ChangeView view) = do
   assign _currentView view
   when (view == Editor) resizeEditor
-  when (view == Transactions) resizeBalancesChart
 
 handleAction (EditorAction action) = editorHandleAction action
 
@@ -246,11 +252,25 @@ handleAction CompileProgram = do
         _ -> pure unit
       pure unit
 
+handleAction (SimulatorAction action) = handleSimulatorAction action
+
+handleSimulatorAction ::
+  forall m.
+  MonadState State m =>
+  MonadClipboard m =>
+  MonadAsk (SPSettings_ SPParams_) m =>
+  MonadApp m =>
+  MonadAnimate m State =>
+  SimulatorAction -> m Unit
+handleSimulatorAction (ChangeSimulatorView simulatorView) = do
+  assign _simulatorView simulatorView
+  when (simulatorView == Transactions) resizeBalancesChart
+
 -- Note: the following three cases involve some temporary fudges that should become
 -- unnecessary when we remodel and have one evaluationResult per simulation. In
 -- particular: we prevent simulation changes while the evaluationResult is Loading,
 -- and switch to the simulations view (from transactions) following any change
-handleAction AddSimulationSlot = do
+handleSimulatorAction AddSimulationSlot = do
   evaluationResult <- use _evaluationResult
   case evaluationResult of
     Loading -> pure unit
@@ -270,39 +290,39 @@ handleAction AddSimulationSlot = do
                     (mkSimulation knownCurrencies simulationId)
             )
         Nothing -> pure unit
-      assign _currentView Simulations
+      assign _simulatorView WalletsAndActions
 
-handleAction (SetSimulationSlot index) = do
+handleSimulatorAction (SetSimulationSlot index) = do
   evaluationResult <- use _evaluationResult
   case evaluationResult of
     Loading -> pure unit
     _ -> do
       modifying _simulations (Cursor.setIndex index)
-      assign _currentView Simulations
+      assign _simulatorView WalletsAndActions
 
-handleAction (RemoveSimulationSlot index) = do
+handleSimulatorAction (RemoveSimulationSlot index) = do
   evaluationResult <- use _evaluationResult
   case evaluationResult of
     Loading -> pure unit
     _ -> do
       simulations <- use _simulations
       if (Cursor.getIndex simulations) == index then
-        assign _currentView Simulations
+        assign _simulatorView WalletsAndActions
       else
         pure unit
       modifying _simulations (Cursor.deleteAt index)
 
-handleAction (ModifyWallets action) = do
+handleSimulatorAction (ModifyWallets action) = do
   knownCurrencies <- getKnownCurrencies
   modifying (_simulations <<< _current <<< _simulationWallets) (handleActionWalletEvent (mkSimulatorWallet knownCurrencies) action)
 
-handleAction (ChangeSimulation subaction) = do
+handleSimulatorAction (ChangeSimulation subaction) = do
   knownCurrencies <- getKnownCurrencies
   let
     initialValue = mkInitialValue knownCurrencies zero
   modifying (_simulations <<< _current <<< _simulationActions) (handleSimulationAction initialValue subaction)
 
-handleAction EvaluateActions =
+handleSimulatorAction EvaluateActions =
   void
     $ runMaybeT
     $ do
@@ -324,8 +344,8 @@ handleAction EvaluateActions =
               mAnnotatedBlockchain <- peruse (_successfulEvaluationResult <<< _resultRollup <<< to AnnotatedBlockchain)
               txId <- (gets <<< lastOf) (_successfulEvaluationResult <<< _resultRollup <<< traversed <<< traversed <<< _txIdOf)
               lift $ zoomStateT _blockchainVisualisationState $ Chain.handleAction (FocusTx txId) mAnnotatedBlockchain
-            replaceViewOnSuccess result Simulations Transactions
-            lift $ scrollIntoView simulatorTitleRefLabel
+              assign _simulatorView Transactions
+              lift $ scrollIntoView simulatorTitleRefLabel
           Success (Left _) -> do
             -- on failed evaluation, scroll the error pane into view
             lift $ scrollIntoView simulationsErrorRefLabel
@@ -335,23 +355,23 @@ handleAction EvaluateActions =
           _ -> pure unit
         pure unit
 
-handleAction (ActionDragAndDrop index DragStart event) = do
+handleSimulatorAction (ActionDragAndDrop index DragStart event) = do
   setDataTransferData event textPlain (show index)
   assign _actionDrag (Just index)
 
-handleAction (ActionDragAndDrop _ DragEnd event) = assign _actionDrag Nothing
+handleSimulatorAction (ActionDragAndDrop _ DragEnd event) = assign _actionDrag Nothing
 
-handleAction (ActionDragAndDrop _ DragEnter event) = do
+handleSimulatorAction (ActionDragAndDrop _ DragEnter event) = do
   preventDefault event
   setDropEffect DataTransfer.Move event
 
-handleAction (ActionDragAndDrop _ DragOver event) = do
+handleSimulatorAction (ActionDragAndDrop _ DragOver event) = do
   preventDefault event
   setDropEffect DataTransfer.Move event
 
-handleAction (ActionDragAndDrop _ DragLeave event) = pure unit
+handleSimulatorAction (ActionDragAndDrop _ DragLeave event) = pure unit
 
-handleAction (ActionDragAndDrop destination Drop event) = do
+handleSimulatorAction (ActionDragAndDrop destination Drop event) = do
   use _actionDrag
     >>= case _ of
         Just source -> modifying (_simulations <<< _current <<< _simulationActions) (Array.move source destination)
@@ -360,9 +380,9 @@ handleAction (ActionDragAndDrop destination Drop event) = do
   assign _actionDrag Nothing
 
 -- We just ignore most Chartist events.
-handleAction (HandleBalancesChartMessage _) = pure unit
+handleSimulatorAction (HandleBalancesChartMessage _) = pure unit
 
-handleAction (ChainAction subaction) = do
+handleSimulatorAction (ChainAction subaction) = do
   mAnnotatedBlockchain <-
     peruse (_successfulEvaluationResult <<< _resultRollup <<< to AnnotatedBlockchain)
   let
@@ -475,12 +495,6 @@ handleActionWalletEvent _ (ModifyBalance walletIndex action) wallets =
     (ix walletIndex <<< _simulatorWalletBalance)
     (handleValueEvent action)
     wallets
-
-replaceViewOnSuccess :: forall m e a. MonadState State m => RemoteData e a -> View -> View -> m Unit
-replaceViewOnSuccess result source target = do
-  currentView <- use _currentView
-  when (isSuccess result && currentView == source)
-    (assign _currentView target)
 
 ------------------------------------------------------------
 toEvaluation :: SourceCode -> Simulation -> Maybe Evaluation

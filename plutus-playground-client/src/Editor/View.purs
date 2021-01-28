@@ -72,7 +72,7 @@ simulateButton :: forall p. Boolean -> WebCompilationResult -> HTML p HAction
 simulateButton currentCodeIsCompiled compilationResult =
   button
     [ classes [ btn, ClassName "btn-turquoise" ]
-    , onClick $ const $ Just (ChangeView Simulations)
+    , onClick $ const $ Just (ChangeView Simulator)
     , disabled isDisabled
     ]
     [ text "Simulate" ]

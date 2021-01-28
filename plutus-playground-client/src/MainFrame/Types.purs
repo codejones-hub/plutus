@@ -1,20 +1,22 @@
 module MainFrame.Types
   ( State(..)
   , View(..)
+  , SimulatorState(..)
+  , SimulatorView(..)
   , ChainSlot
   , Blockchain
   , WebData
   , WebCompilationResult
   , WebEvaluationResult
-  , SimulatorAction
   , Query
   , HAction(..)
+  , SimulatorAction(..)
   , WalletEvent(..)
   , DragAndDropEventType(..)
   , ChildSlots
   ) where
 
-import Analytics (class IsEvent, defaultEvent)
+import Analytics (class IsEvent, defaultEvent, toEvent)
 import Auth (AuthStatus)
 import Chain.Types (Action(..))
 import Chain.Types as Chain
@@ -33,10 +35,10 @@ import Halogen.Chartist as Chartist
 import Halogen.Monaco as Monaco
 import Language.Haskell.Interpreter (InterpreterError, InterpreterResult)
 import Network.RemoteData (RemoteData)
-import Playground.Types (CompilationResult, ContractCall, ContractDemo, EvaluationResult, PlaygroundError, Simulation)
+import Playground.Types (CompilationResult, ContractDemo, EvaluationResult, PlaygroundError, Simulation)
 import Plutus.V1.Ledger.Tx (Tx)
 import Prelude (class Eq, class Show, Unit, show, ($))
-import Schema.Types (ActionEvent(..), FormArgument, SimulationAction(..))
+import Schema.Types (ActionEvent(..), SimulationAction(..))
 import Servant.PureScript.Ajax (AjaxError)
 import Test.QuickCheck.Arbitrary (class Arbitrary)
 import Test.QuickCheck.Gen as Gen
@@ -61,6 +63,29 @@ newtype State
   , compilationResult :: WebCompilationResult
   , lastSuccessfulCompilationResult :: Maybe (InterpreterResult CompilationResult)
   -- Simulator.
+  , simulatorState :: SimulatorState
+  }
+
+derive instance newtypeState :: Newtype State _
+
+data View
+  = Editor
+  | Simulator
+
+derive instance eqView :: Eq View
+
+derive instance genericView :: Generic View _
+
+instance arbitraryView :: Arbitrary View where
+  arbitrary = Gen.elements (Editor :| [ Simulator ])
+
+instance showView :: Show View where
+  show Editor = "Editor"
+  show Simulator = "Simulator"
+
+newtype SimulatorState
+  = SimulatorState
+  { simulatorView :: SimulatorView
   , actionDrag :: Maybe Int
   , simulations :: Cursor Simulation
   , evaluationResult :: WebEvaluationResult
@@ -68,23 +93,16 @@ newtype State
   , blockchainVisualisationState :: Chain.State
   }
 
-derive instance newtypeState :: Newtype State _
+derive instance newtypeSimulatorState :: Newtype SimulatorState _
 
-data View
-  = Editor
-  | Simulations
+data SimulatorView
+  = WalletsAndActions
   | Transactions
 
-derive instance eqView :: Eq View
+derive instance eqSimulatorView :: Eq SimulatorView
 
-derive instance genericView :: Generic View _
-
-instance arbitraryView :: Arbitrary View where
-  arbitrary = Gen.elements (Editor :| [ Simulations, Transactions ])
-
-instance showView :: Show View where
-  show Editor = "Editor"
-  show Simulations = "Simulation"
+instance showSimulatorView :: Show SimulatorView where
+  show WalletsAndActions = "WalletsAndActions"
   show Transactions = "Transactions"
 
 type ChainSlot
@@ -101,10 +119,6 @@ type WebCompilationResult
 
 type WebEvaluationResult
   = WebData (Either PlaygroundError EvaluationResult)
-
--- this synonym is defined in playground-common/src/Playground/Types.hs
-type SimulatorAction
-  = ContractCall FormArgument
 
 data Query a
 
@@ -123,6 +137,13 @@ data HAction
   | EditorAction Editor.Action
   | CompileProgram
   -- Simulator.
+  | SimulatorAction SimulatorAction
+
+-- SimulatorAction is also defined in Playground.Types as `ContractCall FormArgument`
+-- (i.e. an "action" modelled in the simulation); maybe we can rethink these names.
+-- There's also SimulationAction from Schema.Types. Not ideal.
+data SimulatorAction
+  = ChangeSimulatorView SimulatorView
   | AddSimulationSlot
   | SetSimulationSlot Int
   | RemoveSimulationSlot Int
@@ -131,7 +152,7 @@ data HAction
   | EvaluateActions
   | ActionDragAndDrop Int DragAndDropEventType DragEvent
   | HandleBalancesChartMessage Chartist.Message
-  | ChainAction (Chain.Action)
+  | ChainAction Chain.Action
 
 data WalletEvent
   = AddWallet
@@ -169,6 +190,8 @@ instance actionIsEvent :: IsEvent HAction where
   toEvent (LoadScript script) = Just $ (defaultEvent "LoadScript") { label = Just script }
   -- Gist support.
   toEvent CheckAuthStatus = Nothing
+  -- TODO: put these instances in Gists.Types and replace them here with
+  -- `toEvent (GistAction gistAction) = toEvent gistAction`
   toEvent (GistAction PublishGist) = Just $ (defaultEvent "Publish") { category = Just "Gist" }
   toEvent (GistAction (SetGistUrl _)) = Nothing
   toEvent (GistAction LoadGist) = Just $ (defaultEvent "LoadGist") { category = Just "Gist" }
@@ -180,6 +203,10 @@ instance actionIsEvent :: IsEvent HAction where
   toEvent (EditorAction action) = Just $ (defaultEvent "ConfigureEditor")
   toEvent CompileProgram = Just $ defaultEvent "CompileProgram"
   -- Simulator.
+  toEvent (SimulatorAction simulatorAction) = toEvent simulatorAction
+
+instance simulatorActionIsEvent :: IsEvent SimulatorAction where
+  toEvent (ChangeSimulatorView simulatorView) = Just $ (defaultEvent "SimulatorView") { label = Just $ show simulatorView }
   toEvent (ChangeSimulation (PopulateAction _ _)) = Just $ (defaultEvent "PopulateAction") { category = Just "Action" }
   toEvent (ChangeSimulation (ModifyActions (AddAction _))) = Just $ (defaultEvent "AddAction") { category = Just "Action" }
   toEvent (ChangeSimulation (ModifyActions (AddWaitAction _))) = Just $ (defaultEvent "AddWaitAction") { category = Just "Action" }

@@ -16,7 +16,7 @@ import Halogen.HTML.Elements.Keyed as Keyed
 import Halogen.HTML.Events (onChange, onClick, onDragEnd, onDragEnter, onDragLeave, onDragOver, onDragStart, onDrop, onValueInput)
 import Halogen.HTML.Properties (InputType(..), checked, class_, classes, draggable, for, id_, min, name, placeholder, required, type_, value)
 import Icons (Icon(..), icon)
-import MainFrame.Types (DragAndDropEventType(..), HAction(..), SimulatorAction)
+import MainFrame.Types (DragAndDropEventType(..), SimulatorAction(..))
 import Playground.Lenses (_endpointDescription, _getEndpointDescription)
 import Playground.Types (ContractCall(..), SimulatorWallet, _FunctionSchema)
 import Plutus.V1.Ledger.Slot (Slot)
@@ -30,7 +30,7 @@ import Wallet.View (walletIdPane)
 import Web.Event.Event (Event)
 import Web.HTML.Event.DragEvent (DragEvent)
 
-actionsPane :: forall p. Maybe Int -> Array SimulatorWallet -> Array SimulatorAction -> HTML p HAction
+actionsPane :: forall p. Maybe Int -> Array SimulatorWallet -> Array (ContractCall FormArgument) -> HTML p SimulatorAction
 actionsPane actionDrag wallets actions =
   div
     [ class_ $ ClassName "actions" ]
@@ -49,7 +49,7 @@ actionsPane actionDrag wallets actions =
         )
     ]
 
-actionPane :: forall p. Maybe Int -> Array SimulatorWallet -> Int -> ContractCall FormArgument -> Tuple String (HTML p HAction)
+actionPane :: forall p. Maybe Int -> Array SimulatorWallet -> Int -> ContractCall FormArgument -> Tuple String (HTML p SimulatorAction)
 actionPane actionDrag wallets index action =
   Tuple (show index)
     $ div
@@ -85,7 +85,7 @@ actionPane actionDrag wallets index action =
                 ]
         ]
 
-actionPaneBody :: forall p. Int -> SimulatorAction -> HTML p SimulationAction
+actionPaneBody :: forall p. Int -> (ContractCall FormArgument) -> HTML p SimulationAction
 actionPaneBody index (CallEndpoint { caller, argumentValues }) =
   div_
     [ h3_
@@ -201,7 +201,7 @@ waitTypeRadioInputs index wait =
 
   waitUntilId = "wait-until-" <> show index
 
-addWaitActionPane :: forall p. Int -> Tuple String (HTML p HAction)
+addWaitActionPane :: forall p. Int -> Tuple String (HTML p SimulatorAction)
 addWaitActionPane index =
   Tuple "add-wait"
     $ div
@@ -230,7 +230,7 @@ dragSourceProperties ::
         , onDragEnd :: DragEvent
         | i
         )
-        HAction
+        SimulatorAction
     )
 dragSourceProperties index =
   [ draggable true
@@ -249,7 +249,7 @@ dragTargetProperties ::
         , onDrop :: DragEvent
         | i
         )
-        HAction
+        SimulatorAction
     )
 dragTargetProperties index =
   [ onDragEnter $ dragAndDropAction index DragEnter
@@ -258,7 +258,7 @@ dragTargetProperties index =
   , onDrop $ dragAndDropAction index Drop
   ]
 
-dragAndDropAction :: Int -> DragAndDropEventType -> DragEvent -> Maybe HAction
+dragAndDropAction :: Int -> DragAndDropEventType -> DragEvent -> Maybe SimulatorAction
 dragAndDropAction index eventType = Just <<< ActionDragAndDrop index eventType
 
 -- defaults to 1 because all the BigInteger fields here have a minimum value of 1
