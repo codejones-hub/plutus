@@ -14,18 +14,18 @@ import Halogen.HTML.Elements.Keyed as Keyed
 import Halogen.HTML.Events (onClick)
 import Halogen.HTML.Properties (class_, classes)
 import Icons (Icon(..), icon)
-import MainFrame.Types (SimulatorAction(..), WalletEvent(..))
 import Playground.Lenses (_endpointDescription, _getEndpointDescription)
 import Playground.Types (ContractCall(..), FunctionSchema, SimulatorWallet(..), _FunctionSchema)
 import Plutus.V1.Ledger.Value (Value)
 import Prelude (const, show, ($), (<), (<>), (<$>), (<<<))
 import Schema (FormSchema)
 import Schema.Types (ActionEvent(..), SimulationAction(..), Signatures, toArgument)
+import Simulator.Types (Action(..), WalletEvent(..))
 import ValueEditor (valueForm)
 import Wallet.Emulator.Wallet (Wallet(..))
 import Wallet.Lenses (_simulatorWalletWallet)
 
-walletsPane :: forall p. Signatures -> Value -> Array SimulatorWallet -> HTML p SimulatorAction
+walletsPane :: forall p. Signatures -> Value -> Array SimulatorWallet -> HTML p Action
 walletsPane signatures initialValue simulatorWallets =
   div
     [ class_ $ ClassName "wallets" ]
@@ -42,7 +42,7 @@ walletsPane signatures initialValue simulatorWallets =
 
   simulatorWalletPanes = mapWithIndex (walletPane signatures initialValue) simulatorWallets
 
-walletPane :: forall p. Signatures -> Value -> Int -> SimulatorWallet -> Tuple String (HTML p SimulatorAction)
+walletPane :: forall p. Signatures -> Value -> Int -> SimulatorWallet -> Tuple String (HTML p Action)
 walletPane signatures initialValue walletIndex simulatorWallet@(SimulatorWallet { simulatorWalletWallet, simulatorWalletBalance }) =
   Tuple (show walletIndex)
     $ div
@@ -72,7 +72,7 @@ walletIdPane wallet@(Wallet { getWallet }) =
   span [ class_ $ ClassName "wallet-id" ]
     [ text $ "Wallet " <> show getWallet ]
 
-addWalletPane :: forall p. Tuple String (HTML p SimulatorAction)
+addWalletPane :: forall p. Tuple String (HTML p Action)
 addWalletPane =
   Tuple "add-wallet"
     $ div

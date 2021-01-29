@@ -1,4 +1,7 @@
-module MainFrame.View (render) where
+module MainFrame.View
+  ( render
+  , simulatorTitleRefLabel
+  ) where
 
 import Bootstrap (active, btn, containerFluid, hidden, justifyContentBetween, mlAuto, mrAuto, navItem, navLink, navbar, navbarBrand, navbarExpand, navbarNav, navbarText, nbsp)
 import Data.Lens (view)
@@ -10,17 +13,18 @@ import Editor.Types as Editor
 import Editor.View (compileButton, editorPreferencesSelect, simulateButton, editorPane, editorFeedback)
 import Effect.Aff.Class (class MonadAff)
 import Gists.View (gistControls)
+import Halogen (RefLabel(RefLabel))
 import Halogen.HTML (ClassName(ClassName), ComponentHTML, HTML, a, button, div, footer, h1_, img, label_, main, nav, p_, span, text, ul, li)
 import Halogen.HTML.Events (onClick)
 import Halogen.HTML.Extra (mapComponent)
-import Halogen.HTML.Properties (class_, classes, height, href, src, target, width)
+import Halogen.HTML.Properties (class_, classes, height, href, ref, src, target, width)
 import Icons (Icon(..), icon)
 import Language.Haskell.Interpreter (_InterpreterResult, _SourceCode)
 import MainFrame.Lenses (_contractDemoEditorContents, _currentView, _lastSuccessfulCompilationResult, _result, _simulatorState)
 import MainFrame.Types (ChildSlots, HAction(..), State(..), View(..), WebCompilationResult)
 import Playground.Types (ContractDemo(..))
 import Prelude (class Eq, const, ($), (<$>), (<<<), (==))
-import Simulator.View (simulatorTitle, simulatorWrapper)
+import Simulator.View (simulatorWrapper)
 import StaticData (bufferLocalStorageKey, lookupContractDemo)
 
 foreign import plutusLogo :: String
@@ -177,6 +181,23 @@ mainComponentClasses currentView targetView =
     [ containerFluid, ClassName "main" ]
   else
     [ containerFluid, hidden, ClassName "main" ]
+
+simulatorTitle :: forall p. HTML p HAction
+simulatorTitle =
+  div
+    [ class_ $ ClassName "main-header"
+    , ref simulatorTitleRefLabel
+    ]
+    [ h1_ [ text "Simulator" ]
+    , a
+        [ class_ btn
+        , onClick $ const $ Just $ ChangeView Editor
+        ]
+        [ text "< Return to Editor" ]
+    ]
+
+simulatorTitleRefLabel :: RefLabel
+simulatorTitleRefLabel = RefLabel "simulations"
 
 editorWrapper :: forall m. MonadAff m => Array ContractDemo -> View -> Editor.State -> WebCompilationResult -> ComponentHTML HAction ChildSlots m
 editorWrapper contractDemos currentView editorState compilationResult =

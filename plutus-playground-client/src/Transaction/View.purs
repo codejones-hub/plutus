@@ -31,7 +31,7 @@ import Halogen.HTML.Properties (class_, classes)
 import Icons (Icon(..), icon)
 import Language.PlutusTx.AssocMap as AssocMap
 import MainFrame.Lenses (_balancesChartSlot)
-import MainFrame.Types (ChildSlots, SimulatorAction(..), SimulatorView(..))
+import MainFrame.Types (ChildSlots)
 import Playground.Lenses (_tokenName, _contractInstanceTag)
 import Playground.Types (EvaluationResult(EvaluationResult), SimulatorWallet)
 import Plutus.Trace.Emulator.Types (ContractInstanceLog(..))
@@ -39,6 +39,7 @@ import Plutus.V1.Ledger.Slot (Slot(..))
 import Plutus.V1.Ledger.TxId (TxId(TxId))
 import Plutus.V1.Ledger.Value (CurrencySymbol, TokenName)
 import Prelude (const, map, show, unit, ($), (<$>), (<<<), (<>))
+import Simulator.Types (Action(..), View(..))
 import Wallet.Emulator.Chain (ChainEvent(..))
 import Wallet.Emulator.ChainIndex (ChainIndexEvent(..))
 import Wallet.Emulator.MultiAgent (EmulatorEvent'(..))
@@ -47,7 +48,7 @@ import Wallet.Emulator.NodeClient (NodeClientEvent(..))
 import Wallet.Emulator.Wallet (Wallet(..), WalletEvent(..))
 import Wallet.Lenses (_simulatorWalletBalance, _simulatorWalletWallet, _walletId)
 
-evaluationPane :: forall m. MonadAff m => State -> EvaluationResult -> ComponentHTML SimulatorAction ChildSlots m
+evaluationPane :: forall m. MonadAff m => State -> EvaluationResult -> ComponentHTML Action ChildSlots m
 evaluationPane state evaluationResult@(EvaluationResult { emulatorLog, emulatorTrace, fundsDistribution, resultRollup, walletKeys }) =
   div
     [ class_ $ ClassName "transactions" ]
@@ -56,7 +57,7 @@ evaluationPane state evaluationResult@(EvaluationResult { emulatorLog, emulatorT
         [ h2_ [ text "Transactions" ]
         , button
             [ classes [ btn ]
-            , onClick $ const $ Just $ ChangeSimulatorView WalletsAndActions
+            , onClick $ const $ Just $ ChangeView WalletsAndActions
             ]
             [ icon Close ]
         ]

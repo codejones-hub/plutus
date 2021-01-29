@@ -12,22 +12,10 @@ module MainFrame.Lenses
   , _successfulCompilationResult
   , _lastSuccessfulCompilationResult
   , _simulatorState
-  , _simulatorView
-  , _actionDrag
-  , _simulations
-  , _evaluationResult
-  , _successfulEvaluationResult
-  , _lastEvaluatedSimulation
-  , _blockchainVisualisationState
   , _editorSlot
   , _balancesChartSlot
   , _contractDemoEditorContents
-  , _simulationId
-  , _simulationActions
-  , _simulationWallets
-  , _resultRollup
   , _functionSchema
-  , _walletKeys
   , _knownCurrencies
   , _result
   , _warnings
@@ -35,11 +23,8 @@ module MainFrame.Lenses
   ) where
 
 import Auth (AuthStatus)
-import Chain.Types as Chain
 import Control.Monad.State.Class (class MonadState)
-import Cursor (Cursor)
 import Data.Either (Either)
-import Data.Json.JsonTuple (JsonTuple)
 import Data.Lens (Lens', Traversal', _Right)
 import Data.Lens.Extra (peruse)
 import Data.Lens.Iso.Newtype (_Newtype)
@@ -49,15 +34,12 @@ import Data.Symbol (SProxy(..))
 import Editor.Types (State) as Editor
 import Gist (Gist)
 import Language.Haskell.Interpreter (InterpreterError, InterpreterResult, SourceCode, _InterpreterResult)
-import MainFrame.Types (SimulatorState, SimulatorView, State, View, WebData)
+import MainFrame.Types (State, View, WebData)
 import Network.RemoteData (_Success)
-import Playground.Types (CompilationResult, ContractCall, ContractDemo, EvaluationResult, FunctionSchema, KnownCurrency, PlaygroundError, Simulation, SimulatorWallet)
-import Plutus.V1.Ledger.Crypto (PubKeyHash)
+import Playground.Types (CompilationResult, ContractDemo, FunctionSchema, KnownCurrency)
 import Prelude ((<$>), (<<<))
 import Schema (FormSchema)
-import Schema.Types (FormArgument)
-import Wallet.Emulator.Wallet (Wallet)
-import Wallet.Rollup.Types (AnnotatedTx)
+import Simulator.Types as Simulator
 
 _demoFilesMenuVisible :: Lens' State Boolean
 _demoFilesMenuVisible = _Newtype <<< prop (SProxy :: SProxy "demoFilesMenuVisible")
@@ -95,29 +77,8 @@ _successfulCompilationResult = _compilationResult <<< _Success <<< _Right <<< _I
 _lastSuccessfulCompilationResult :: Lens' State (Maybe (InterpreterResult CompilationResult))
 _lastSuccessfulCompilationResult = _Newtype <<< prop (SProxy :: SProxy "lastSuccessfulCompilationResult")
 
-_simulatorState :: Lens' State SimulatorState
+_simulatorState :: Lens' State Simulator.State
 _simulatorState = _Newtype <<< prop (SProxy :: SProxy "simulatorState")
-
-_simulatorView :: Lens' State SimulatorView
-_simulatorView = _simulatorState <<< _Newtype <<< prop (SProxy :: SProxy "simulatorView")
-
-_actionDrag :: Lens' State (Maybe Int)
-_actionDrag = _simulatorState <<< _Newtype <<< prop (SProxy :: SProxy "actionDrag")
-
-_simulations :: Lens' State (Cursor Simulation)
-_simulations = _simulatorState <<< _Newtype <<< prop (SProxy :: SProxy "simulations")
-
-_evaluationResult :: Lens' State (WebData (Either PlaygroundError EvaluationResult))
-_evaluationResult = _simulatorState <<< _Newtype <<< prop (SProxy :: SProxy "evaluationResult")
-
-_successfulEvaluationResult :: Traversal' State EvaluationResult
-_successfulEvaluationResult = _evaluationResult <<< _Success <<< _Right
-
-_lastEvaluatedSimulation :: Lens' State (Maybe Simulation)
-_lastEvaluatedSimulation = _simulatorState <<< _Newtype <<< prop (SProxy :: SProxy "lastEvaluatedSimulation")
-
-_blockchainVisualisationState :: Lens' State Chain.State
-_blockchainVisualisationState = _simulatorState <<< _Newtype <<< prop (SProxy :: SProxy "blockchainVisualisationState")
 
 ------------------------------------------------------------
 _editorSlot :: SProxy "editorSlot"
@@ -130,23 +91,8 @@ _balancesChartSlot = SProxy
 _contractDemoEditorContents :: Lens' ContractDemo SourceCode
 _contractDemoEditorContents = _Newtype <<< prop (SProxy :: SProxy "contractDemoEditorContents")
 
-_simulationId :: Lens' Simulation Int
-_simulationId = _Newtype <<< prop (SProxy :: SProxy "simulationId")
-
-_simulationActions :: Lens' Simulation (Array (ContractCall FormArgument))
-_simulationActions = _Newtype <<< prop (SProxy :: SProxy "simulationActions")
-
-_simulationWallets :: Lens' Simulation (Array SimulatorWallet)
-_simulationWallets = _Newtype <<< prop (SProxy :: SProxy "simulationWallets")
-
-_resultRollup :: Lens' EvaluationResult (Array (Array AnnotatedTx))
-_resultRollup = _Newtype <<< prop (SProxy :: SProxy "resultRollup")
-
 _functionSchema :: Lens' CompilationResult (Array (FunctionSchema FormSchema))
 _functionSchema = _Newtype <<< prop (SProxy :: SProxy "functionSchema")
-
-_walletKeys :: Lens' EvaluationResult (Array (JsonTuple PubKeyHash Wallet))
-_walletKeys = _Newtype <<< prop (SProxy :: SProxy "walletKeys")
 
 _knownCurrencies :: Lens' CompilationResult (Array KnownCurrency)
 _knownCurrencies = _Newtype <<< prop (SProxy :: SProxy "knownCurrencies")

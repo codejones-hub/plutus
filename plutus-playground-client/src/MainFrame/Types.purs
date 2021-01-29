@@ -1,26 +1,15 @@
 module MainFrame.Types
   ( State(..)
   , View(..)
-  , SimulatorState(..)
-  , SimulatorView(..)
-  , ChainSlot
-  , Blockchain
   , WebData
   , WebCompilationResult
-  , WebEvaluationResult
   , Query
   , HAction(..)
-  , SimulatorAction(..)
-  , WalletEvent(..)
-  , DragAndDropEventType(..)
   , ChildSlots
   ) where
 
 import Analytics (class IsEvent, defaultEvent, toEvent)
 import Auth (AuthStatus)
-import Chain.Types (Action(..))
-import Chain.Types as Chain
-import Clipboard as Clipboard
 import Cursor (Cursor)
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
@@ -36,14 +25,11 @@ import Halogen.Monaco as Monaco
 import Language.Haskell.Interpreter (InterpreterError, InterpreterResult)
 import Network.RemoteData (RemoteData)
 import Playground.Types (CompilationResult, ContractDemo, EvaluationResult, PlaygroundError, Simulation)
-import Plutus.V1.Ledger.Tx (Tx)
 import Prelude (class Eq, class Show, Unit, show, ($))
-import Schema.Types (ActionEvent(..), SimulationAction(..))
 import Servant.PureScript.Ajax (AjaxError)
+import Simulator.Types as Simulator
 import Test.QuickCheck.Arbitrary (class Arbitrary)
 import Test.QuickCheck.Gen as Gen
-import ValueEditor (ValueEvent(..))
-import Web.HTML.Event.DragEvent (DragEvent)
 
 newtype State
   = State
@@ -63,7 +49,7 @@ newtype State
   , compilationResult :: WebCompilationResult
   , lastSuccessfulCompilationResult :: Maybe (InterpreterResult CompilationResult)
   -- Simulator.
-  , simulatorState :: SimulatorState
+  , simulatorState :: Simulator.State
   }
 
 derive instance newtypeState :: Newtype State _
@@ -83,42 +69,11 @@ instance showView :: Show View where
   show Editor = "Editor"
   show Simulator = "Simulator"
 
-newtype SimulatorState
-  = SimulatorState
-  { simulatorView :: SimulatorView
-  , actionDrag :: Maybe Int
-  , simulations :: Cursor Simulation
-  , evaluationResult :: WebEvaluationResult
-  , lastEvaluatedSimulation :: Maybe Simulation
-  , blockchainVisualisationState :: Chain.State
-  }
-
-derive instance newtypeSimulatorState :: Newtype SimulatorState _
-
-data SimulatorView
-  = WalletsAndActions
-  | Transactions
-
-derive instance eqSimulatorView :: Eq SimulatorView
-
-instance showSimulatorView :: Show SimulatorView where
-  show WalletsAndActions = "WalletsAndActions"
-  show Transactions = "Transactions"
-
-type ChainSlot
-  = Array Tx
-
-type Blockchain
-  = Array ChainSlot
-
 type WebData
   = RemoteData AjaxError
 
 type WebCompilationResult
   = WebData (Either InterpreterError (InterpreterResult CompilationResult))
-
-type WebEvaluationResult
-  = WebData (Either PlaygroundError EvaluationResult)
 
 data Query a
 
@@ -137,43 +92,7 @@ data HAction
   | EditorAction Editor.Action
   | CompileProgram
   -- Simulator.
-  | SimulatorAction SimulatorAction
-
--- SimulatorAction is also defined in Playground.Types as `ContractCall FormArgument`
--- (i.e. an "action" modelled in the simulation); maybe we can rethink these names.
--- There's also SimulationAction from Schema.Types. Not ideal.
-data SimulatorAction
-  = ChangeSimulatorView SimulatorView
-  | AddSimulationSlot
-  | SetSimulationSlot Int
-  | RemoveSimulationSlot Int
-  | ModifyWallets WalletEvent
-  | ChangeSimulation SimulationAction
-  | EvaluateActions
-  | ActionDragAndDrop Int DragAndDropEventType DragEvent
-  | HandleBalancesChartMessage Chartist.Message
-  | ChainAction Chain.Action
-
-data WalletEvent
-  = AddWallet
-  | RemoveWallet Int
-  | ModifyBalance Int ValueEvent
-
-data DragAndDropEventType
-  = DragStart
-  | DragEnd
-  | DragEnter
-  | DragOver
-  | DragLeave
-  | Drop
-
-instance showDragAndDropEventType :: Show DragAndDropEventType where
-  show DragStart = "DragStart"
-  show DragEnd = "DragEnd"
-  show DragEnter = "DragEnter"
-  show DragOver = "DragOver"
-  show DragLeave = "DragLeave"
-  show Drop = "Drop"
+  | SimulatorAction Simulator.Action
 
 type ChildSlots
   = ( editorSlot :: H.Slot Monaco.Query Monaco.Message Unit
@@ -204,26 +123,3 @@ instance actionIsEvent :: IsEvent HAction where
   toEvent CompileProgram = Just $ defaultEvent "CompileProgram"
   -- Simulator.
   toEvent (SimulatorAction simulatorAction) = toEvent simulatorAction
-
-instance simulatorActionIsEvent :: IsEvent SimulatorAction where
-  toEvent (ChangeSimulatorView simulatorView) = Just $ (defaultEvent "SimulatorView") { label = Just $ show simulatorView }
-  toEvent (ChangeSimulation (PopulateAction _ _)) = Just $ (defaultEvent "PopulateAction") { category = Just "Action" }
-  toEvent (ChangeSimulation (ModifyActions (AddAction _))) = Just $ (defaultEvent "AddAction") { category = Just "Action" }
-  toEvent (ChangeSimulation (ModifyActions (AddWaitAction _))) = Just $ (defaultEvent "AddWaitAction") { category = Just "Action" }
-  toEvent (ChangeSimulation (ModifyActions (RemoveAction _))) = Just $ (defaultEvent "RemoveAction") { category = Just "Action" }
-  toEvent (ChangeSimulation (ModifyActions (SetPayToWalletValue _ _))) = Just $ (defaultEvent "SetPayToWalletValue") { category = Just "Action" }
-  toEvent (ChangeSimulation (ModifyActions (SetPayToWalletRecipient _ _))) = Just $ (defaultEvent "SetPayToWalletRecipient") { category = Just "Action" }
-  toEvent (ChangeSimulation (ModifyActions (SetWaitTime _ _))) = Just $ (defaultEvent "SetWaitTime") { category = Just "Action" }
-  toEvent (ChangeSimulation (ModifyActions (SetWaitUntilTime _ _))) = Just $ (defaultEvent "SetWaitUntilTime") { category = Just "Action" }
-  toEvent AddSimulationSlot = Just $ (defaultEvent "AddSimulationSlot") { category = Just "Simulation" }
-  toEvent (SetSimulationSlot _) = Just $ (defaultEvent "SetSimulationSlot") { category = Just "Simulation" }
-  toEvent (RemoveSimulationSlot _) = Just $ (defaultEvent "RemoveSimulationSlot") { category = Just "Simulation" }
-  toEvent (ModifyWallets AddWallet) = Just $ (defaultEvent "AddWallet") { category = Just "Wallet" }
-  toEvent (ModifyWallets (RemoveWallet _)) = Just $ (defaultEvent "RemoveWallet") { category = Just "Wallet" }
-  toEvent (ModifyWallets (ModifyBalance _ (SetBalance _ _ _))) = Just $ (defaultEvent "SetBalance") { category = Just "Wallet" }
-  toEvent EvaluateActions = Just $ (defaultEvent "EvaluateActions") { category = Just "Action" }
-  toEvent (ActionDragAndDrop _ eventType _) = Just $ (defaultEvent (show eventType)) { category = Just "Action" }
-  toEvent (HandleBalancesChartMessage _) = Nothing
-  toEvent (ChainAction (FocusTx (Just _))) = Just $ (defaultEvent "BlockchainFocus") { category = Just "Transaction" }
-  toEvent (ChainAction (FocusTx Nothing)) = Nothing
-  toEvent (ChainAction (ClipboardAction (Clipboard.CopyToClipboard _))) = Just $ (defaultEvent "ClipboardAction") { category = Just "CopyToClipboard" }

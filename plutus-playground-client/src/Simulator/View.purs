@@ -1,7 +1,5 @@
 module Simulator.View
-  ( simulatorTitle
-  , simulatorWrapper
-  , simulatorTitleRefLabel
+  ( simulatorWrapper
   , simulationsErrorRefLabel
   ) where
 
@@ -20,37 +18,24 @@ import Data.Semiring (zero)
 import Data.String as String
 import Effect.Aff.Class (class MonadAff)
 import Halogen (ComponentHTML, RefLabel(RefLabel))
-import Halogen.HTML (ClassName(ClassName), HTML, IProp, a, button, code_, div, div_, h1_, p_, pre_, span, text, ul, li)
+import Halogen.HTML (ClassName(ClassName), HTML, IProp, a, button, code_, div, div_, p_, pre_, span, text, ul, li)
 import Halogen.HTML.Events (onClick, onValueInput)
 import Halogen.HTML.Properties (class_, classes, disabled, id_, ref)
 import Icons (Icon(..), icon)
 import Language.Haskell.Interpreter (CompilationError(..))
 import Language.Haskell.Interpreter as PI
-import MainFrame.Types (ChildSlots, HAction(..), SimulatorAction(..), SimulatorState(..), SimulatorView(..), View(..), WebEvaluationResult)
+import MainFrame.Types (ChildSlots)
 import Network.RemoteData (RemoteData(..))
 import Playground.Types (CompilationResult(..), ContractCall, PlaygroundError(..), Simulation(..), SimulatorWallet)
 import Prelude (const, map, not, pure, show, (#), ($), (/=), (<$>), (<<<), (<>), (==), (>))
 import Schema.Types (FormArgument, mkInitialValue)
+import Simulator.Types (Action(..), State(..), View(..), WebEvaluationResult)
 import Transaction.View (evaluationPane)
 import Wallet.View (walletsPane)
 import Web.Event.Event (Event)
 
-simulatorTitle :: forall p. HTML p HAction
-simulatorTitle =
-  div
-    [ class_ $ ClassName "main-header"
-    , ref simulatorTitleRefLabel
-    ]
-    [ h1_ [ text "Simulator" ]
-    , a
-        [ class_ btn
-        , onClick $ const $ Just $ ChangeView Editor
-        ]
-        [ text "< Return to Editor" ]
-    ]
-
-simulatorWrapper :: forall m. MonadAff m => CompilationResult -> SimulatorState -> ComponentHTML SimulatorAction ChildSlots m
-simulatorWrapper compilationResult state@(SimulatorState { simulations }) =
+simulatorWrapper :: forall m. MonadAff m => CompilationResult -> State -> ComponentHTML Action ChildSlots m
+simulatorWrapper compilationResult state@(State { simulations }) =
   div
     [ classes [ ClassName "main-body", ClassName "simulator" ] ] case current simulations of
     Just (Simulation simulation) ->
@@ -63,7 +48,7 @@ simulatorWrapper compilationResult state@(SimulatorState { simulations }) =
     -- if there aren't any simulations, we shouldn't be here; consider how to remodel
     Nothing -> []
 
-simulationsNav :: forall p. Cursor Simulation -> HTML p SimulatorAction
+simulationsNav :: forall p. Cursor Simulation -> HTML p Action
 simulationsNav simulations =
   ul
     [ classes [ nav, ClassName "nav-tabs" ]
@@ -76,7 +61,7 @@ simulationsNav simulations =
         <> [ addSimulationControl ]
     )
 
-simulationNavItem :: forall p. Boolean -> Int -> Int -> Simulation -> Array (HTML p SimulatorAction)
+simulationNavItem :: forall p. Boolean -> Int -> Int -> Simulation -> Array (HTML p Action)
 simulationNavItem canClose activeIndex index (Simulation { simulationName }) =
   [ li
       [ id_ $ "simulation-nav-item-" <> show index
@@ -100,7 +85,7 @@ simulationNavItem canClose activeIndex index (Simulation { simulationName }) =
   where
   navLinkClasses = if activeIndex == index then [ navLink, active ] else [ navLink ]
 
-addSimulationControl :: forall p. HTML p SimulatorAction
+addSimulationControl :: forall p. HTML p Action
 addSimulationControl =
   li
     [ id_ "simulation-nav-item-add"
@@ -116,15 +101,15 @@ addSimulationControl =
         ]
     ]
 
-simulationPane :: forall m. MonadAff m => CompilationResult -> Simulation -> SimulatorState -> ComponentHTML SimulatorAction ChildSlots m
-simulationPane (CompilationResult { knownCurrencies, functionSchema }) (Simulation { simulationWallets, simulationActions }) (SimulatorState { simulatorView, actionDrag, simulations, lastEvaluatedSimulation, evaluationResult, blockchainVisualisationState }) =
+simulationPane :: forall m. MonadAff m => CompilationResult -> Simulation -> State -> ComponentHTML Action ChildSlots m
+simulationPane (CompilationResult { knownCurrencies, functionSchema }) (Simulation { simulationWallets, simulationActions }) (State { view, actionDrag, simulations, lastEvaluatedSimulation, evaluationResult, blockchainVisualisationState }) =
   let
     initialValue = mkInitialValue knownCurrencies zero
   in
     div
       [ class_ $ ClassName "simulation" ]
       [ div
-          (if simulatorView == WalletsAndActions then [] else [ class_ hidden ])
+          (if view == WalletsAndActions then [] else [ class_ hidden ])
           [ div
               [ classes [ ClassName "simulation-controls", floatRight ] ]
               [ evaluateActionsButton simulationWallets simulationActions evaluationResult
@@ -143,14 +128,14 @@ simulationPane (CompilationResult { knownCurrencies, functionSchema }) (Simulati
               _ -> empty
           ]
       , div
-          (if simulatorView == Transactions then [] else [ class_ hidden ]) case evaluationResult of
+          (if view == Transactions then [] else [ class_ hidden ]) case evaluationResult of
           Success (Right evaluation) -> [ evaluationPane blockchainVisualisationState evaluation ]
           -- all other states should be impossible when simulationView == Transactions;
           -- consider how to model this better
           _ -> [ p_ [ text "You must evaluate your simulation before you can view the evaluation results." ] ]
       ]
 
-evaluateActionsButton :: forall p. Array SimulatorWallet -> Array (ContractCall FormArgument) -> WebEvaluationResult -> HTML p SimulatorAction
+evaluateActionsButton :: forall p. Array SimulatorWallet -> Array (ContractCall FormArgument) -> WebEvaluationResult -> HTML p Action
 evaluateActionsButton simulationWallets simulationActions evaluationResult =
   button
     [ classes [ btn, ClassName "btn-green" ]
@@ -167,12 +152,12 @@ evaluateActionsButton simulationWallets simulationActions evaluationResult =
 
   btnText _ _ = text "Evaluate"
 
-viewTransactionsButton :: forall p. Cursor Simulation -> Maybe Simulation -> WebEvaluationResult -> HTML p SimulatorAction
+viewTransactionsButton :: forall p. Cursor Simulation -> Maybe Simulation -> WebEvaluationResult -> HTML p Action
 viewTransactionsButton simulations lastEvaluatedSimulation evaluationResult =
   button
     [ classes [ btn, ClassName "btn-turquoise" ]
     , disabled isDisabled
-    , onClick $ const $ Just $ ChangeSimulatorView Transactions
+    , onClick $ const $ Just $ ChangeView Transactions
     ]
     [ text "Transactions" ]
   where
@@ -235,9 +220,6 @@ onIntInput :: forall i r. (Int -> i) -> IProp ( onInput :: Event, value :: Strin
 onIntInput f = onValueInput $ map f <<< Int.fromString
 
 ------------------------------------------------------------
-simulatorTitleRefLabel :: RefLabel
-simulatorTitleRefLabel = RefLabel "simulations"
-
 simulationsErrorRefLabel :: RefLabel
 simulationsErrorRefLabel = RefLabel "simulation-errors"
 

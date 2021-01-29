@@ -1,7 +1,7 @@
 module MainFrame.State
   ( mkMainFrame
-  , handleAction
   , mkInitialState
+  , handleAction
   ) where
 
 import AjaxUtils (AjaxErrorPaneAction(..), ajaxErrorRefLabel, renderForeignErrors)
@@ -55,9 +55,9 @@ import Halogen as H
 import Halogen.HTML (HTML)
 import Halogen.Query (HalogenM)
 import Language.Haskell.Interpreter (CompilationError(..), InterpreterError(..), InterpreterResult, SourceCode(..), _InterpreterResult)
-import MainFrame.Lenses (_actionDrag, _authStatus, _blockchainVisualisationState, _compilationResult, _contractDemos, _createGistResult, _currentDemoName, _currentView, _demoFilesMenuVisible, _editorState, _evaluationResult, _functionSchema, _gistErrorPaneVisible, _gistUrl, _lastEvaluatedSimulation, _lastSuccessfulCompilationResult, _knownCurrencies, _result, _resultRollup, _simulationActions, _simulationId, _simulationWallets, _simulations, _simulatorView, _successfulCompilationResult, _successfulEvaluationResult, getKnownCurrencies)
+import MainFrame.Lenses (_authStatus, _compilationResult, _contractDemos, _createGistResult, _currentDemoName, _currentView, _demoFilesMenuVisible, _editorState, _functionSchema, _gistErrorPaneVisible, _gistUrl, _lastSuccessfulCompilationResult, _knownCurrencies, _result, _successfulCompilationResult)
 import MainFrame.MonadApp (class MonadApp, editorGetContents, editorHandleAction, editorSetAnnotations, editorSetContents, getGistByGistId, getOauthStatus, patchGistByGistId, postContract, postEvaluation, postGist, preventDefault, resizeBalancesChart, resizeEditor, runHalogenApp, saveBuffer, scrollIntoView, setDataTransferData, setDropEffect)
-import MainFrame.Types (ChildSlots, DragAndDropEventType(..), HAction(..), Query, SimulatorAction(..), SimulatorState(..), SimulatorView(..), State(..), View(..), WalletEvent(..), WebData)
+import MainFrame.Types (ChildSlots, HAction(..), Query, State(..), View(..), WebData)
 import MainFrame.View (render)
 import Monaco (IMarkerData, markerSeverity)
 import Network.RemoteData (RemoteData(..), _Success, isSuccess)
@@ -69,62 +69,14 @@ import Prelude (class Applicative, Unit, Void, add, const, bind, discard, flip, 
 import Schema.Types (Expression, FormArgument, SimulationAction(..), formArgumentToJson, handleActionEvent, handleFormEvent, handleValueEvent, mkInitialValue, traverseFunctionSchema)
 import Servant.PureScript.Ajax (errorToString)
 import Servant.PureScript.Settings (SPSettings_, defaultSettings)
-import Simulator.View (simulatorTitleRefLabel, simulationsErrorRefLabel)
+import Simulator.Lenses (_simulations)
+import Simulator.State (initialSimulatorState)
+import Simulator.View (simulationsErrorRefLabel)
 import StaticData (mkContractDemos, lookupContractDemo)
 import Validation (_argumentValues, _argument)
 import Wallet.Emulator.Wallet (Wallet(Wallet))
 import Wallet.Lenses (_simulatorWalletBalance, _simulatorWalletWallet, _walletId)
 import Web.HTML.Event.DataTransfer as DataTransfer
-
-mkSimulatorWallet :: Array KnownCurrency -> BigInteger -> SimulatorWallet
-mkSimulatorWallet currencies walletId =
-  SimulatorWallet
-    { simulatorWalletWallet: Wallet { getWallet: walletId }
-    , simulatorWalletBalance: mkInitialValue currencies (BigInteger.fromInt 10)
-    }
-
-mkSimulation :: Array KnownCurrency -> Int -> Simulation
-mkSimulation simulationCurrencies simulationId =
-  Simulation
-    { simulationName: "Simulation " <> show simulationId
-    , simulationId
-    , simulationActions: []
-    , simulationWallets: mkSimulatorWallet simulationCurrencies <<< BigInteger.fromInt <$> 1 .. 2
-    }
-
-mkInitialState :: forall m. MonadThrow Error m => Editor.State -> m State
-mkInitialState editorState = do
-  contractDemos <- mapError (\e -> error $ "Could not load demo scripts. Parsing errors: " <> show e) mkContractDemos
-  pure
-    $ State
-        { demoFilesMenuVisible: false
-        , gistErrorPaneVisible: true
-        , contractDemos
-        , currentDemoName: Nothing
-        , authStatus: NotAsked
-        , createGistResult: NotAsked
-        , gistUrl: Nothing
-        , currentView: Editor
-        , editorState
-        , compilationResult: NotAsked
-        , lastSuccessfulCompilationResult: Nothing
-        , simulatorState: initialSimulatorState
-        }
-
-initialSimulatorState :: SimulatorState
-initialSimulatorState =
-  SimulatorState
-    { simulatorView: WalletsAndActions
-    , actionDrag: Nothing
-    , simulations: Cursor.empty
-    , evaluationResult: NotAsked
-    , lastEvaluatedSimulation: Nothing
-    , blockchainVisualisationState: Chain.initialState
-    }
-
-------------------------------------------------------------
-ajaxSettings :: SPSettings_ SPParams_
-ajaxSettings = defaultSettings $ SPParams_ { baseURL: "/api/" }
 
 mkMainFrame ::
   forall m n.
@@ -147,6 +99,28 @@ mkMainFrame = do
               , receive: const Nothing
               , finalize: Nothing
               }
+        }
+
+ajaxSettings :: SPSettings_ SPParams_
+ajaxSettings = defaultSettings $ SPParams_ { baseURL: "/api/" }
+
+mkInitialState :: forall m. MonadThrow Error m => Editor.State -> m State
+mkInitialState editorState = do
+  contractDemos <- mapError (\e -> error $ "Could not load demo scripts. Parsing errors: " <> show e) mkContractDemos
+  pure
+    $ State
+        { demoFilesMenuVisible: false
+        , gistErrorPaneVisible: true
+        , contractDemos
+        , currentDemoName: Nothing
+        , authStatus: NotAsked
+        , createGistResult: NotAsked
+        , gistUrl: Nothing
+        , currentView: Editor
+        , editorState
+        , compilationResult: NotAsked
+        , lastSuccessfulCompilationResult: Nothing
+        , simulatorState: Simulator.initialState
         }
 
 -- TODO: use web-common withAnalytics function
@@ -252,168 +226,9 @@ handleAction CompileProgram = do
         _ -> pure unit
       pure unit
 
-handleAction (SimulatorAction action) = handleSimulatorAction action
-
-handleSimulatorAction ::
-  forall m.
-  MonadState State m =>
-  MonadClipboard m =>
-  MonadAsk (SPSettings_ SPParams_) m =>
-  MonadApp m =>
-  MonadAnimate m State =>
-  SimulatorAction -> m Unit
-handleSimulatorAction (ChangeSimulatorView simulatorView) = do
-  assign _simulatorView simulatorView
-  when (simulatorView == Transactions) resizeBalancesChart
-
--- Note: the following three cases involve some temporary fudges that should become
--- unnecessary when we remodel and have one evaluationResult per simulation. In
--- particular: we prevent simulation changes while the evaluationResult is Loading,
--- and switch to the simulations view (from transactions) following any change
-handleSimulatorAction AddSimulationSlot = do
-  evaluationResult <- use _evaluationResult
-  case evaluationResult of
-    Loading -> pure unit
-    _ -> do
-      knownCurrencies <- getKnownCurrencies
-      mSignatures <- peruse (_successfulCompilationResult <<< _functionSchema)
-      case mSignatures of
-        Just signatures ->
-          modifying _simulations
-            ( \simulations ->
-                let
-                  maxsimulationId = fromMaybe 0 $ maximumOf (traversed <<< _simulationId) simulations
-
-                  simulationId = maxsimulationId + 1
-                in
-                  Cursor.snoc simulations
-                    (mkSimulation knownCurrencies simulationId)
-            )
-        Nothing -> pure unit
-      assign _simulatorView WalletsAndActions
-
-handleSimulatorAction (SetSimulationSlot index) = do
-  evaluationResult <- use _evaluationResult
-  case evaluationResult of
-    Loading -> pure unit
-    _ -> do
-      modifying _simulations (Cursor.setIndex index)
-      assign _simulatorView WalletsAndActions
-
-handleSimulatorAction (RemoveSimulationSlot index) = do
-  evaluationResult <- use _evaluationResult
-  case evaluationResult of
-    Loading -> pure unit
-    _ -> do
-      simulations <- use _simulations
-      if (Cursor.getIndex simulations) == index then
-        assign _simulatorView WalletsAndActions
-      else
-        pure unit
-      modifying _simulations (Cursor.deleteAt index)
-
-handleSimulatorAction (ModifyWallets action) = do
-  knownCurrencies <- getKnownCurrencies
-  modifying (_simulations <<< _current <<< _simulationWallets) (handleActionWalletEvent (mkSimulatorWallet knownCurrencies) action)
-
-handleSimulatorAction (ChangeSimulation subaction) = do
-  knownCurrencies <- getKnownCurrencies
-  let
-    initialValue = mkInitialValue knownCurrencies zero
-  modifying (_simulations <<< _current <<< _simulationActions) (handleSimulationAction initialValue subaction)
-
-handleSimulatorAction EvaluateActions =
-  void
-    $ runMaybeT
-    $ do
-        simulation <- peruse (_simulations <<< _current)
-        evaluation <-
-          MaybeT do
-            contents <- editorGetContents
-            pure $ join $ toEvaluation <$> contents <*> simulation
-        assign _evaluationResult Loading
-        result <- lift $ postEvaluation evaluation
-        assign _evaluationResult result
-        case result of
-          Success (Right _) -> do
-            -- on successful evaluation, update last evaluated simulation, and reset and show transactions
-            when (isSuccess result) do
-              assign _lastEvaluatedSimulation simulation
-              assign _blockchainVisualisationState Chain.initialState
-              -- preselect the first transaction (if any)
-              mAnnotatedBlockchain <- peruse (_successfulEvaluationResult <<< _resultRollup <<< to AnnotatedBlockchain)
-              txId <- (gets <<< lastOf) (_successfulEvaluationResult <<< _resultRollup <<< traversed <<< traversed <<< _txIdOf)
-              lift $ zoomStateT _blockchainVisualisationState $ Chain.handleAction (FocusTx txId) mAnnotatedBlockchain
-              assign _simulatorView Transactions
-              lift $ scrollIntoView simulatorTitleRefLabel
-          Success (Left _) -> do
-            -- on failed evaluation, scroll the error pane into view
-            lift $ scrollIntoView simulationsErrorRefLabel
-          Failure _ -> do
-            -- on failed response, scroll the ajax error pane into view
-            lift $ scrollIntoView ajaxErrorRefLabel
-          _ -> pure unit
-        pure unit
-
-handleSimulatorAction (ActionDragAndDrop index DragStart event) = do
-  setDataTransferData event textPlain (show index)
-  assign _actionDrag (Just index)
-
-handleSimulatorAction (ActionDragAndDrop _ DragEnd event) = assign _actionDrag Nothing
-
-handleSimulatorAction (ActionDragAndDrop _ DragEnter event) = do
-  preventDefault event
-  setDropEffect DataTransfer.Move event
-
-handleSimulatorAction (ActionDragAndDrop _ DragOver event) = do
-  preventDefault event
-  setDropEffect DataTransfer.Move event
-
-handleSimulatorAction (ActionDragAndDrop _ DragLeave event) = pure unit
-
-handleSimulatorAction (ActionDragAndDrop destination Drop event) = do
-  use _actionDrag
-    >>= case _ of
-        Just source -> modifying (_simulations <<< _current <<< _simulationActions) (Array.move source destination)
-        _ -> pure unit
-  preventDefault event
-  assign _actionDrag Nothing
-
--- We just ignore most Chartist events.
-handleSimulatorAction (HandleBalancesChartMessage _) = pure unit
-
-handleSimulatorAction (ChainAction subaction) = do
-  mAnnotatedBlockchain <-
-    peruse (_successfulEvaluationResult <<< _resultRollup <<< to AnnotatedBlockchain)
-  let
-    wrapper = case subaction of
-      (FocusTx _) -> animate (_blockchainVisualisationState <<< _chainFocusAppearing)
-      _ -> identity
-  wrapper
-    $ zoomStateT _blockchainVisualisationState
-    $ Chain.handleAction subaction mAnnotatedBlockchain
-
-defaultSimulations :: Maybe (Array KnownCurrency) -> Cursor Simulation
-defaultSimulations newCurrencies = case newCurrencies of
-  Just currencies -> Cursor.singleton $ mkSimulation currencies 1
-  Nothing -> Cursor.empty
-
-handleSimulationAction ::
-  Value ->
-  SimulationAction ->
-  Array (ContractCall FormArgument) ->
-  Array (ContractCall FormArgument)
-handleSimulationAction _ (ModifyActions actionEvent) = handleActionEvent actionEvent
-
-handleSimulationAction initialValue (PopulateAction n event) = do
-  over
-    ( ix n
-        <<< _CallEndpoint
-        <<< _argumentValues
-        <<< _FunctionSchema
-        <<< _argument
-    )
-    $ handleFormEvent initialValue event
+handleAction (SimulatorAction action) = do
+  compilationResult <- use _successfulCompilationResult
+  Simulator.handleAction compilationResult action
 
 _details :: forall a. Traversal' (WebData (Either InterpreterError (InterpreterResult a))) a
 _details = _Success <<< _Right <<< _InterpreterResult <<< _result
@@ -478,55 +293,6 @@ handleGistAction LoadGist =
   toEither x NotAsked = x
 
 handleGistAction (AjaxErrorPaneAction CloseErrorPane) = assign _gistErrorPaneVisible false
-
-handleActionWalletEvent :: (BigInteger -> SimulatorWallet) -> WalletEvent -> Array SimulatorWallet -> Array SimulatorWallet
-handleActionWalletEvent mkWallet AddWallet wallets =
-  let
-    maxWalletId = fromMaybe zero $ maximumOf (traversed <<< _simulatorWalletWallet <<< _walletId) wallets
-
-    newWallet = mkWallet (add one maxWalletId)
-  in
-    Array.snoc wallets newWallet
-
-handleActionWalletEvent _ (RemoveWallet index) wallets = fromMaybe wallets $ Array.deleteAt index wallets
-
-handleActionWalletEvent _ (ModifyBalance walletIndex action) wallets =
-  over
-    (ix walletIndex <<< _simulatorWalletBalance)
-    (handleValueEvent action)
-    wallets
-
-------------------------------------------------------------
-toEvaluation :: SourceCode -> Simulation -> Maybe Evaluation
-toEvaluation sourceCode (Simulation { simulationActions, simulationWallets }) = do
-  program <- RawJson <<< encodeJSON <$> traverse toExpression simulationActions
-  pure
-    $ Evaluation
-        { wallets: simulationWallets
-        , program
-        , sourceCode
-        }
-
-toExpression :: ContractCall FormArgument -> Maybe Expression
-toExpression = traverseContractCall encodeForm
-  where
-  encodeForm :: FormArgument -> Maybe RawJson
-  encodeForm argument = (RawJson <<< encodeJSON) <$> formArgumentToJson argument
-
-traverseContractCall ::
-  forall m b a.
-  Applicative m =>
-  (a -> m b) ->
-  ContractCall a -> m (ContractCall b)
-traverseContractCall _ (AddBlocks addBlocks) = pure $ AddBlocks addBlocks
-
-traverseContractCall _ (AddBlocksUntil addBlocksUntil) = pure $ AddBlocksUntil addBlocksUntil
-
-traverseContractCall _ (PayToWallet payToWallet) = pure $ PayToWallet payToWallet
-
-traverseContractCall f (CallEndpoint { caller, argumentValues: oldArgumentValues }) = rewrap <$> traverseFunctionSchema f oldArgumentValues
-  where
-  rewrap newArgumentValues = CallEndpoint { caller, argumentValues: newArgumentValues }
 
 toAnnotations :: InterpreterError -> Array IMarkerData
 toAnnotations (TimeoutError _) = []
