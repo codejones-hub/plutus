@@ -21,6 +21,7 @@ module Language.Plutus.Contract.Test.ContractModel
     -- * Spec monad
     , Spec
     , wait
+    , waitUntil
     , deposit
     , withdraw
     , transfer
@@ -48,6 +49,7 @@ import           Language.Plutus.Contract.Test.StateModel hiding (Script, arbitr
                                                            nextState, perform, precondition, shrinkAction)
 import qualified Language.Plutus.Contract.Test.StateModel as StateModel
 import           Language.PlutusTx.Monoid                 (inv)
+import           Ledger.Slot
 import           Ledger.Value                             (Value)
 import           Plutus.Trace.Emulator                    as Trace (ContractHandle, EmulatorTrace,
                                                                     activateContractWallet, chInstanceId)
@@ -57,7 +59,8 @@ import qualified Test.QuickCheck                          as QC
 import           Test.QuickCheck.Monadic                  as QC
 
 data ModelState state = ModelState
-        { _currentSlot   :: Int
+        { _currentSlot   :: Slot
+        , _lastSlot      :: Slot
         , _balances      :: Map Wallet Value
         , _walletHandles :: Map Wallet (ContractHandle (Schema state) (Err state))
         , _modelState    :: state
@@ -100,8 +103,11 @@ makeLenses 'ModelState
 runSpec :: Spec state () -> ModelState state -> ModelState state
 runSpec spec s = Eff.run $ execState s spec
 
-wait :: forall state. Int -> Spec state ()
-wait n = modify @(ModelState state) (over currentSlot (+ n))
+wait :: forall state. Integer -> Spec state ()
+wait n = modify @(ModelState state) $ over currentSlot (+ Slot n)
+
+waitUntil :: forall state. Slot -> Spec state ()
+waitUntil n = modify @(ModelState state) $ over currentSlot (max n)
 
 deposit :: forall s. Wallet -> Value -> Spec s ()
 deposit w val = modify @(ModelState s) (over (balances . at w) (Just . maybe val (<> val)))
@@ -155,14 +161,15 @@ instance ContractModel state => StateModel (ModelState state) where
     shrinkAction s (ContractAction a) = [ Some @() (ContractAction a') | a' <- shrinkCommand s a ]
 
     initialState = ModelState { _currentSlot   = 0
+                              , _lastSlot      = 125        -- Set by propRunScript
                               , _balances      = Map.empty
                               , _walletHandles = Map.empty
                               , _modelState    = initialState }
 
     nextState s (ContractAction cmd) _v = runSpec (nextState cmd) s
 
-                                                -- TODO: remember actual maxSlots
-    precondition s (ContractAction cmd) = s ^. currentSlot < 100 && precondition s cmd
+    precondition s (ContractAction cmd) = s ^. currentSlot < s ^. lastSlot - 10 -- No commands if < 10 slots left
+                                          && precondition s cmd
 
     perform s (ContractAction cmd) _env = error "unused" <$ perform s cmd
 
@@ -222,7 +229,8 @@ propRunScriptWithOptions :: forall state.
 propRunScriptWithOptions opts wallets contract predicate before script after =
     monadic (runTr opts finalPredicate . void) $ do
         handles <- QC.run $ activateWallets @state wallets contract
-        let initState = StateModel.initialState { _walletHandles = handles }
+        let initState = StateModel.initialState { _walletHandles = handles
+                                                , _lastSlot      = opts ^. maxSlot }
         QC.run $ before initState
         (st, _) <- runScriptInState initState script
         after st

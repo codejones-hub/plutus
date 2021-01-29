@@ -136,7 +136,7 @@ doRevoke NoIssue = NoIssue
 doRevoke Revoked = Revoked
 doRevoke Issued  = Revoked
 
-waitSlots :: Int
+waitSlots :: Integer
 waitSlots = 2
 
 instance ContractModel PrismModel where
@@ -184,7 +184,7 @@ instance ContractModel PrismModel where
 
     monitoring (_, s) _ = counterexample (show s)
 
-delay :: Int -> Trace.EmulatorTrace ()
+delay :: Integer -> Trace.EmulatorTrace ()
 delay n = void $ Trace.waitNSlots $ fromIntegral n
 
 finalPredicate :: ModelState PrismModel -> TracePredicate
