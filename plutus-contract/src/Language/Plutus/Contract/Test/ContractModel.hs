@@ -19,6 +19,7 @@ module Language.Plutus.Contract.Test.ContractModel
     , handle, contractInstanceId
     , lockedFunds
     , ContractModel(..)
+    , addCommands
     -- * Spec monad
     , Spec
     , wait
@@ -158,6 +159,11 @@ lockedFunds s = s ^. forged <> inv (fold $ s ^. balances)
 
 contractInstanceId :: ModelState s -> Wallet -> ContractInstanceId
 contractInstanceId s w = chInstanceId $ handle s w
+
+addCommands :: forall state. Script state -> [Command state] -> Script state
+addCommands (StateModel.Script s) cmds = StateModel.Script $ s ++ [Var i := ContractAction @state @() cmd | (cmd, i) <- zip cmds [n + 1..] ]
+    where
+        n = last $ 0 : [ i | Var i := _ <- s ]
 
 instance ContractModel state => Show (Action (ModelState state) a) where
     showsPrec p (ContractAction a) = showsPrec p a

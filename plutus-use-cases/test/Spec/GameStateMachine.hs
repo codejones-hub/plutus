@@ -17,9 +17,12 @@ import           Control.Lens
 import           Control.Monad
 import           Control.Monad.Freer.Error
 import           Control.Monad.Freer.Log                                   (LogLevel (..))
+import           Control.Monad.Freer.Writer
 import           Data.Map                                                  (Map)
 import qualified Data.Map                                                  as Map
 import           Data.Maybe
+import           Data.Text.Prettyprint.Doc
+import           Data.Void
 import           Test.QuickCheck                                           as QC hiding ((.&&.))
 import           Test.QuickCheck.Monadic
 import           Test.Tasty
@@ -31,13 +34,15 @@ import qualified Language.PlutusTx                                         as Pl
 
 import           Language.Plutus.Contract.Test                             hiding (not)
 import           Language.Plutus.Contract.Test.ContractModel
+import           Language.Plutus.Contract.Test.StateModel                  (stateAfter)
 import           Language.PlutusTx.Coordination.Contracts.GameStateMachine as G
 import           Language.PlutusTx.Lattice
 import qualified Ledger.Ada                                                as Ada
 import qualified Ledger.Typed.Scripts                                      as Scripts
-import           Ledger.Value                                              (Value)
+import           Ledger.Value                                              (Value, isZero)
 import           Plutus.Trace.Emulator                                     as Trace
 import qualified Wallet.Emulator                                           as EM
+import           Wallet.Emulator.Folds                                     (postMapM)
 
 -- * QuickCheck model
 
@@ -86,8 +91,10 @@ instance ContractModel GameModel where
         keeper        $= Just w
         currentSecret $= secret
         gameValue     $= val
+        forge gameTokenVal
         deposit  w gameTokenVal
         withdraw w $ Ada.lovelaceValueOf val
+        wait 2
 
     nextState (Guess w old new val) = do
         b <- getModelState busy
@@ -99,6 +106,7 @@ instance ContractModel GameModel where
                 currentSecret $= new
                 gameValue     $~ subtract val
                 deposit w $ Ada.lovelaceValueOf val
+
     nextState (GiveToken w) = do
         lock <- (> 0) <$> getModelState tokenLock
         lessBusy
@@ -106,12 +114,16 @@ instance ContractModel GameModel where
             w0 <- fromJust <$> getModelState hasToken
             transfer w0 w gameTokenVal
             hasToken $= Just w
-    nextState Delay = lessBusy
+        wait 1
+
+    nextState Delay = do
+        lessBusy
+        wait 1
 
     arbitraryCommand s0 = oneof $
         [ Lock      <$> genWallet <*> genGuess <*> genValue
             | Nothing == s ^. hasToken ] ++
-        [ Guess w   <$> genGuess <*> genGuess <*> choose (1, s ^. gameValue)
+        [ Guess w   <$> genGuess <*> genGuess <*> choose (0, s ^. gameValue)
             | Just w <- [s ^. hasToken], s ^. hasToken /= s ^. keeper, s ^. gameValue > 0 ] ++
         [ GiveToken <$> genWallet
             | s ^. hasToken /= Nothing ] ++
@@ -183,15 +195,38 @@ genValue = getPositive <$> arbitrary
 delay :: Int -> EmulatorTrace ()
 delay n = void $ waitNSlots (fromIntegral n)
 
-prop_Game :: Shrink2 (Script GameModel) -> Property
+prop_Game :: Script GameModel -> Property
 prop_Game = propGame' Info
 
-propGame' :: LogLevel -> Shrink2 (Script GameModel) -> Property
-propGame' l (Shrink2 s) = propRunScriptWithOptions (set minLogLevel l defaultCheckOptions)
-                                                   wallets G.contract finalPredicate before s $ after
+propGame' :: LogLevel -> Script GameModel -> Property
+propGame' l s = propRunScriptWithOptions (set minLogLevel l defaultCheckOptions)
+                                                   wallets G.contract finalPredicate before s after
     where
         before _ = return ()
         after  _ = run (delay 10)
+
+tag :: Doc Void -> TracePredicate -> TracePredicate
+tag err = postMapM $ \ ok -> ok <$ unless ok (tell err)
+
+-- Check that we can always get the money out of the guessing game (by guessing correctly).
+prop_NoLockedFunds :: Script GameModel -> Property
+prop_NoLockedFunds script = whenFail (print script') $
+        propRunScript wallets G.contract pred (const $ return ()) script' (const $ return ())
+    where
+        script' =
+            case stateAfter script ^. modelState of
+                GameModel{ _hasToken      = Just w
+                         , _keeper        = Just keeper
+                         , _currentSecret = s
+                         , _gameValue     = val } | val > 0 ->
+                    addCommands script $ [Delay] ++
+                                         [GiveToken w' | w' /= w] ++
+                                         [Delay] ++
+                                         [Guess w' s s val]
+                    where w' = head $ filter (/= keeper) wallets
+                _ -> script
+        pred s = tag ("Funds still locked:" <+> pretty val) (pure $ isZero val)
+            where val = lockedFunds s
 
 -- * Unit tests
 
