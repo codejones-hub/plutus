@@ -17,11 +17,14 @@ module Language.Plutus.Contract.Test.ContractModel
     ( ModelState
     , modelState, currentSlot, balances
     , handle, contractInstanceId
+    , lockedFunds
     , ContractModel(..)
     -- * Spec monad
     , Spec
     , wait
     , waitUntil
+    , forge
+    , burn
     , deposit
     , withdraw
     , transfer
@@ -39,6 +42,7 @@ import           Control.Monad.Cont
 import           Control.Monad.Freer                      as Eff
 import           Control.Monad.Freer.State
 import qualified Data.Aeson                               as JSON
+import           Data.Foldable
 import           Data.Map                                 (Map)
 import qualified Data.Map                                 as Map
 import           Data.Row                                 (Row)
@@ -62,6 +66,7 @@ data ModelState state = ModelState
         { _currentSlot   :: Slot
         , _lastSlot      :: Slot
         , _balances      :: Map Wallet Value
+        , _forged        :: Value
         , _walletHandles :: Map Wallet (ContractHandle (Schema state) (Err state))
         , _modelState    :: state
         }
@@ -109,6 +114,12 @@ wait n = modify @(ModelState state) $ over currentSlot (+ Slot n)
 waitUntil :: forall state. Slot -> Spec state ()
 waitUntil n = modify @(ModelState state) $ over currentSlot (max n)
 
+forge :: forall s. Value -> Spec s ()
+forge v = modify @(ModelState s) $ over forged (<> v)
+
+burn :: forall s. Value -> Spec s ()
+burn = forge . inv
+
 deposit :: forall s. Wallet -> Value -> Spec s ()
 deposit w val = modify @(ModelState s) (over (balances . at w) (Just . maybe val (<> val)))
 
@@ -132,6 +143,9 @@ getModelState l = getState (modelState . l)
 
 handle :: ModelState s -> Wallet -> Trace.ContractHandle (Schema s) (Err s)
 handle s w = s ^?! walletHandles . at w . _Just
+
+lockedFunds :: ModelState s -> Value
+lockedFunds s = s ^. forged <> inv (fold $ s ^. balances)
 
 -- Using this function in models makes ghc choke.
 -- callEndpoint ::
@@ -163,6 +177,7 @@ instance ContractModel state => StateModel (ModelState state) where
     initialState = ModelState { _currentSlot   = 0
                               , _lastSlot      = 125        -- Set by propRunScript
                               , _balances      = Map.empty
+                              , _forged        = mempty
                               , _walletHandles = Map.empty
                               , _modelState    = initialState }
 
