@@ -9,43 +9,55 @@
 
 module TypedStateModel.Quantify(
                 Quantification(isaQ),
-                generateQ, shrinkQ,
+                isEmptyQ, generateQ, shrinkQ,
                 arbitraryQ,exactlyQ,elementsQ,oneofQ,frequencyQ,mapQ,whereQ,
                 Quantifiable(..)
                ) where
 
+import           Data.Maybe
 import           Data.Typeable
+
+import           Control.Monad
 
 import           Test.QuickCheck
 
+import           TypedStateModel.CanGenerate
+
 data Quantification a = Quantification
-  { genQ :: Gen a,
+  { genQ :: Maybe (Gen a),
     isaQ :: a -> Bool,
     shrQ :: a -> [a]
   }
 
+isEmptyQ :: Quantification a -> Bool
+isEmptyQ = not . isJust . genQ
+
 generateQ :: Quantification a -> Gen a
-generateQ q = genQ q `suchThat` isaQ q
+generateQ q = fromJust (genQ q) `suchThat` isaQ q
 
 shrinkQ :: Quantification a -> a -> [a]
 shrinkQ q a = filter (isaQ q) (shrQ q a)
 
 arbitraryQ :: Arbitrary a => Quantification a
-arbitraryQ = Quantification arbitrary (const True) shrink
+arbitraryQ = Quantification (Just arbitrary) (const True) shrink
 
 exactlyQ :: Eq a => a -> Quantification a
 exactlyQ a = Quantification
-  (return a)
+  (Just $ return a)
   (==a)
   (const [])
 
 elementsQ :: Eq a => [a] -> Quantification a
-elementsQ as = Quantification (elements as) (`elem` as) (\a -> takeWhile (/=a) as)
+elementsQ as = Quantification g (`elem` as) (\a -> takeWhile (/=a) as)
+  where g | null as   = Nothing
+          | otherwise = Just (elements as)
 
 frequencyQ :: [(Int,Quantification a)] -> Quantification a
 frequencyQ iqs =
   Quantification
-    (frequency [(i,genQ q) | (i,q) <- iqs])
+    (case [(i,g) | (i,q) <- iqs, i > 0, Just g <- [genQ q]] of
+       []  -> Nothing
+       igs -> Just (frequency igs))
     (isa iqs)
     (shr iqs)
   where isa [] a          = False
@@ -59,18 +71,20 @@ oneofQ qs = frequencyQ $ map (1,) qs
 
 mapQ :: (a -> b, b -> a) -> Quantification a -> Quantification b
 mapQ (f,g) q = Quantification
-  (f <$> genQ q)
+  ((f <$>) <$> genQ q)
   (isaQ q . g)
   (map f . shrQ q . g)
 
 whereQ :: Quantification a -> (a -> Bool) -> Quantification a
 whereQ q p = Quantification
-  (genQ q `suchThat` p)
-  (\a -> p a && isaQ q a)
-  (\a -> if p a then filter p (shrQ q a) else [])
+    (case genQ q of
+       Just g | canGenerate 0.01 g p -> Just (g `suchThat` p)
+       _                             -> Nothing)
+    (\a -> p a && isaQ q a)
+    (\a -> if p a then filter p (shrQ q a) else [])
 
 pairQ q q' = Quantification
-  ((,) <$> genQ q <*> genQ q')
+  (liftM2 (,) <$> genQ q <*> genQ q')
   (\(a,a') -> isaQ q a && isaQ q' a')
   (\(a,a') -> map (,a') (shrQ q a) ++ map (a,) (shrQ q' a'))
 
@@ -95,7 +109,7 @@ instance (Quantifiable a, Quantifiable b, Quantifiable c) => Quantifiable (a,b,c
 
 instance Quantifiable a => Quantifiable [a] where
   type Quantifies [a] = [Quantifies a]
-  quantify [] = Quantification (return []) null (const [])
+  quantify [] = Quantification (Just $ return []) null (const [])
   quantify (a:as) =
     (mapQ (to,from) $ pairQ (quantify a) (quantify as))
     `whereQ` (not . null)
@@ -103,6 +117,6 @@ instance Quantifiable a => Quantifiable [a] where
           from (x:xs) = (x,xs)
 
 validQuantification q =
-  forAllShrink (genQ q) (shrinkQ q) $ isaQ q
+  forAllShrink (fromJust $ genQ q) (shrinkQ q) $ isaQ q
 
 

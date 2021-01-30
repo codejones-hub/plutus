@@ -59,7 +59,11 @@ after act    = After (Action act)
 (|||)        = Alt True  -- In formulae, we use only angelic
                          -- choice. But it becomes demonic after one
                          -- step (that is, the choice has been made).
-forAllQ q f  = ForAll (quantify q) f
+forAllQ q f
+  | isEmptyQ q' = ignore
+  | otherwise   = ForAll q' f
+  where q' = quantify q
+
 weight       = Weight
 toStop       = Stopping
 

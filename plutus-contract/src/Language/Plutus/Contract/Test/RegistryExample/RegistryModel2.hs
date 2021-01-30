@@ -239,9 +239,7 @@ canRegister s
                       after (Successful $ Register name tid)
                       done
 
-canRegisterName name s
-  | null availableTids = ignore
-  | otherwise          = forAllQ (elementsQ availableTids) $ \tid ->
+canRegisterName name s = forAllQ (elementsQ availableTids) $ \tid ->
                            after (Successful $ Register name tid) done
   where availableTids = tids s \\ map snd (regs s)
 
@@ -250,10 +248,8 @@ canReregister s
   | otherwise     = forAllQ (elementsQ $ map fst (regs s)) $ \name ->
                       after (Unregister name) (canRegisterName name)
 
-canRegisterName' name s
-  | null availableTids = ignore
-  | otherwise          = forAllQ (elementsQ availableTids) $ \tid ->
-                           after (Successful $ Register name tid) done
+canRegisterName' name s = forAllQ (elementsQ availableTids) $ \tid ->
+                            after (Successful $ Register name tid) done
   where availableTids = (tids s \\ map snd (regs s)) \\ dead s
 
 canReregister' s
