@@ -19,6 +19,7 @@ module Language.Plutus.Contract.Test.ContractModel
     , handle, contractInstanceId
     , lockedFunds
     , ContractModel(..)
+    , Action(..)
     , addCommands
     -- * Spec monad
     , Spec

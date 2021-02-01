@@ -25,7 +25,7 @@ import           Data.Text.Prettyprint.Doc
 import           Data.Void
 import           Test.QuickCheck                                           as QC hiding ((.&&.))
 import           Test.QuickCheck.Monadic
-import           Test.Tasty
+import           Test.Tasty                                                hiding (after)
 import qualified Test.Tasty.HUnit                                          as HUnit
 
 import qualified Spec.Lib                                                  as Lib
@@ -34,7 +34,9 @@ import qualified Language.PlutusTx                                         as Pl
 
 import           Language.Plutus.Contract.Test                             hiding (not)
 import           Language.Plutus.Contract.Test.ContractModel
+import           Language.Plutus.Contract.Test.DynamicLogic
 import           Language.Plutus.Contract.Test.StateModel                  (stateAfter)
+import qualified Language.Plutus.Contract.Test.StateModel                  as StateModel
 import           Language.PlutusTx.Coordination.Contracts.GameStateMachine as G
 import           Language.PlutusTx.Lattice
 import qualified Ledger.Ada                                                as Ada
@@ -81,7 +83,7 @@ instance ContractModel GameModel where
     precondition s (Lock _ _ _)         = Nothing == s ^. modelState . hasToken
     precondition s (Guess w _old _ val) = and [ Just w == s ^. modelState . hasToken
                                               , val <= s ^. modelState . gameValue
-                                              , Just w /= s ^. modelState . keeper ]
+                                              ] -- , Just w /= s ^. modelState . keeper ]
     precondition s (GiveToken w)        = and [ (s ^. modelState . hasToken) `notElem` [Nothing, Just w]
                                               , s ^. modelState . gameValue > 0 ] -- stops the test
     precondition _ Delay                = True
@@ -208,23 +210,34 @@ propGame' l s = propRunScriptWithOptions (set minLogLevel l defaultCheckOptions)
 tag :: Doc Void -> TracePredicate -> TracePredicate
 tag err = postMapM $ \ ok -> ok <$ unless ok (tell err)
 
--- Check that we can always get the money out of the guessing game (by guessing correctly).
-prop_NoLockedFunds :: Script GameModel -> Property
-prop_NoLockedFunds script = whenFail (print script') $
-        propRunScript wallets G.contract pred (const $ return ()) script' (const $ return ())
+instance DynLogicModel (ModelState GameModel) where
+    restricted _ = False
+
+noLockedFunds :: ModelState GameModel -> DynLogic (ModelState GameModel)
+noLockedFunds s
+    | isZero (lockedFunds s) = passTest
+    | otherwise =
+        -- Anyone can get the money.
+        forAllQ (elementsQ wallets) $ \ w ->
+            after (ContractAction @_ @() Delay) $ \ s ->
+            go s w
     where
-        script' =
-            case stateAfter script ^. modelState of
-                GameModel{ _hasToken      = Just w
-                         , _keeper        = Just keeper
-                         , _currentSecret = s
-                         , _gameValue     = val } | val > 0 ->
-                    addCommands script $ [Delay] ++
-                                         [GiveToken w' | w' /= w] ++
-                                         [Delay] ++
-                                         [Guess w' s s val]
-                    where w' = head $ filter (/= keeper) wallets
-                _ -> script
+        go s w | hasT == Just w =
+                    after (ContractAction @_ @() $ Guess w secret secret val) $ \ _ ->
+                    passTest
+               | otherwise =
+                    after (ContractAction @_ @() $ GiveToken w) $ \ _ ->
+                    after (ContractAction @_ @() Delay) $ \ s -> go s w
+            where
+                hasT   = s ^. modelState . hasToken
+                secret = s ^. modelState . currentSecret
+                val    = s ^. modelState . gameValue
+
+-- Check that we can always get the money out of the guessing game (by guessing correctly).
+prop_NoLockedFunds :: Property
+prop_NoLockedFunds = forAllScripts (always noLockedFunds StateModel.initialState) $ \ script ->
+        propRunScript @GameModel wallets G.contract pred (const $ return ()) script (const $ return ())
+    where
         pred s = tag ("Funds still locked:" <+> pretty val) (pure $ isZero val)
             where val = lockedFunds s
 
