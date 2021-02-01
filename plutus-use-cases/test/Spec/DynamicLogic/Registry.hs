@@ -5,7 +5,7 @@
 -- THIS CODE!!! The exercise is one in black box testing.
 
 
-module RegistryExample.Registry where
+module Spec.DynamicLogic.Registry where
 
 import           Control.Concurrent
 import           Control.Monad

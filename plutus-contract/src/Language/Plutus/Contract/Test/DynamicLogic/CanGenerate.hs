@@ -1,4 +1,4 @@
-module TypedStateModel.CanGenerate(canGenerate) where
+module Language.Plutus.Contract.Test.DynamicLogic.CanGenerate (canGenerate) where
 
 import           System.IO.Unsafe
 import           Test.QuickCheck
@@ -15,5 +15,5 @@ canGenerate prob g p = unsafePerformIO $ tryToGenerate 1
                             if p x then return True else
                               tryToGenerate (luck * (1-prob))
 
--- Our confidence level is 1-eps
-eps = 10^^(-9)
+        -- Our confidence level is 1-eps
+        eps = 1.0e-9

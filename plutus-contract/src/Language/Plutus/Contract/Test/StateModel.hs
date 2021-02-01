@@ -7,6 +7,7 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE UndecidableInstances  #-}
 
@@ -19,7 +20,6 @@ module Language.Plutus.Contract.Test.StateModel(
   , stateAfter
   , runScript
   , runScriptInState
-  , notStuck
 ) where
 
 import           Data.Typeable
@@ -27,14 +27,17 @@ import           Data.Typeable
 import           Test.QuickCheck         as QC
 import           Test.QuickCheck.Monadic
 
-class (forall a. Show (Action state a), Monad (ActionMonad state)) =>
+class (forall a. Show (Action state a),
+       Monad (ActionMonad state),
+       Show state,
+       Typeable state) =>
         StateModel state where
   data Action state a
   type ActionMonad state :: * -> *
   actionName      :: Action state a -> String
   actionName = head . words . show
   arbitraryAction :: state -> Gen (Any (Action state))
-  shrinkAction    :: state -> Action state a -> [Any (Action state)]
+  shrinkAction    :: (Typeable a, Show a) => state -> Action state a -> [Any (Action state)]
   shrinkAction _ _ = []
   initialState    :: state
   nextState       :: state -> Action state a -> Var a -> state
@@ -47,15 +50,13 @@ class (forall a. Show (Action state a), Monad (ActionMonad state)) =>
   postcondition _ _ _ _ = True
   monitoring      :: (state,state) -> Action state a -> LookUp -> a -> Property -> Property
   monitoring _ _ _ _ = id
-  isFinal :: state -> Bool
-  isFinal _ = False
 
 type LookUp = forall a. Typeable a => Var a -> a
 
 type Env = [EnvEntry]
 
 data EnvEntry where
-  (:==) :: (Show a,Typeable a) => Var a -> a -> EnvEntry
+  (:==) :: (Show a, Typeable a) => Var a -> a -> EnvEntry
 
 infix 5 :==
 
@@ -69,21 +70,33 @@ lookUpVar ((v' :== a) : env) v =
     _                      -> lookUpVar env v
 
 data Any f where
-  Some :: (Show a, Typeable a) => f a -> Any f
+  Some :: (Show a, Typeable a, Eq (f a)) => f a -> Any f
 
 deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
 
+instance Eq (Any f) where
+  Some (a :: f a) == Some (b :: f b) =
+    case eqT @a @b of
+      Just Refl -> a == b
+      Nothing   -> False
+
 data Step state where
-  (:=) :: (Show a, Typeable a) => Var a -> Action state a -> Step state
+  (:=) :: (Show a, Typeable a, Eq (Action state a), Typeable (Action state a), Show (Action state a)) =>
+            Var a -> Action state a -> Step state
 
 infix 5 :=
 
 deriving instance (forall a. Show (Action state a)) => Show (Step state)
 
 newtype Var a = Var Int
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Typeable)
+
+instance Eq (Step state) where
+  (Var i := act) == (Var j := act') =
+    (i==j) && Some act == Some act'
 
 newtype Script state = Script [Step state]
+  deriving Eq
 
 instance (forall a. Show (Action state a)) => Show (Script state) where
   showsPrec d (Script as)
@@ -94,7 +107,7 @@ instance (forall a. Show (Action state a)) => Show (Script state) where
                     [showsPrec 0 a . (",\n  "++) | a <- init as]
 
 
-instance StateModel state => Arbitrary (Script state) where
+instance (Typeable state, StateModel state) => Arbitrary (Script state) where
   arbitrary = Script <$> arbActions initialState 1
     where
       arbActions :: state -> Int -> Gen [Step state]
@@ -156,11 +169,3 @@ runScriptInState state (Script script) = loop state [] script
       monitor (monitoring (s,s') act (lookUpVar env') ret)
       assert $ postcondition s act (lookUpVar env) ret
       loop s' env' as
-
-notStuck :: StateModel state => Script state -> Property
-notStuck script
-  | isFinal s = property True
-  | otherwise = forAll (vectorOf 20 $ arbitraryAction s) $ any (\(Some act) -> precondition s act)
-  where
-    s = stateAfter script
-

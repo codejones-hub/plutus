@@ -47,6 +47,7 @@ import           Data.Foldable
 import           Data.Map                                 (Map)
 import qualified Data.Map                                 as Map
 import           Data.Row                                 (Row)
+import           Data.Typeable
 
 import           Language.Plutus.Contract                 (Contract, ContractInstanceId, HasBlockchainActions)
 import           Language.Plutus.Contract.Test
@@ -81,7 +82,10 @@ type Handle state = ContractHandle (Schema state) (Err state)
 
 type Spec state = Eff '[State (ModelState state)]
 
-class ( Show (Command state)
+class ( Typeable state
+      , Show state
+      , Show (Command state)
+      , Eq (Command state)
       , Show (Err state)
       , JSON.ToJSON (Err state)
       , JSON.FromJSON (Err state)
@@ -160,13 +164,15 @@ lockedFunds s = s ^. forged <> inv (fold $ s ^. balances)
 contractInstanceId :: ModelState s -> Wallet -> ContractInstanceId
 contractInstanceId s w = chInstanceId $ handle s w
 
-addCommands :: forall state. Script state -> [Command state] -> Script state
+addCommands :: forall state. ContractModel state => Script state -> [Command state] -> Script state
 addCommands (StateModel.Script s) cmds = StateModel.Script $ s ++ [Var i := ContractAction @state @() cmd | (cmd, i) <- zip cmds [n + 1..] ]
     where
         n = last $ 0 : [ i | Var i := _ <- s ]
 
 instance ContractModel state => Show (Action (ModelState state) a) where
     showsPrec p (ContractAction a) = showsPrec p a
+
+deriving instance ContractModel state => Eq (Action (ModelState state) a)
 
 instance ContractModel state => StateModel (ModelState state) where
 
@@ -197,8 +203,6 @@ instance ContractModel state => StateModel (ModelState state) where
     postcondition _s _cmd _env _res = True
 
     monitoring (s0, s1) (ContractAction cmd) _env _res = monitoring (s0, s1) cmd
-
-    isFinal _s = False
 
 -- * Running the model
 

@@ -93,6 +93,8 @@ test-suite plutus-use-cases-test
     other-modules:
         Spec.Crowdfunding
         Spec.Currency
+        Spec.DynamicLogic.Registry
+        Spec.DynamicLogic.RegistryModel
         Spec.ErrorHandling
         Spec.Escrow
         Spec.Future

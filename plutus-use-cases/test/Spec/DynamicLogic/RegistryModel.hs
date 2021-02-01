@@ -5,17 +5,17 @@
 {-# LANGUAGE TypeApplications   #-}
 {-# LANGUAGE TypeFamilies       #-}
 
-module RegistryExample.RegistryModel2 where
+module Spec.DynamicLogic.RegistryModel where
 
 import           Control.Concurrent
-import           Control.Exception            (ErrorCall, try)
+import           Control.Exception                          (ErrorCall, try)
 import           Data.List
 import           Test.QuickCheck
 import           Test.QuickCheck.Monadic
 
-import           RegistryExample.Registry
-import           TypedStateModel
-import           TypedStateModel.DynamicLogic
+import           Language.Plutus.Contract.Test.DynamicLogic
+import           Language.Plutus.Contract.Test.StateModel
+import           Spec.DynamicLogic.Registry
 
 
 data RegState = RegState{
@@ -42,30 +42,30 @@ instance StateModel RegState where
 
   arbitraryAction s =
     frequency
-          [(max 1 $ 10-length (tids s),return $ Action Spawn),
-           (max 1 $ 10-length (regs s),Action <$> (Register
+          [(max 1 $ 10-length (tids s),return $ Some Spawn),
+           (max 1 $ 10-length (regs s),Some <$> (Register
              <$> probablyUnregistered s
              <*> elements (tids s))),
-           (2*length (regs s),Action <$> (Unregister
+           (2*length (regs s),Some <$> (Unregister
              <$> probablyRegistered s)),
-           (10,Action <$> (WhereIs
+           (10,Some <$> (WhereIs
              <$> probablyRegistered s)),
-           (max 1 $ 3-length (dead s),Action <$> (KillThread <$> elements (tids s)))
+           (max 1 $ 3-length (dead s),Some <$> (KillThread <$> elements (tids s)))
           ]
 
   shrinkAction s (Register name tid) =
-    [Action (Unregister name)] ++
-    [Action (Register name' tid) | name' <- shrinkName name] ++
-    [Action (Register name tid') | tid'  <- shrinkTid s tid]
+    [Some (Unregister name)] ++
+    [Some (Register name' tid) | name' <- shrinkName name] ++
+    [Some (Register name tid') | tid'  <- shrinkTid s tid]
   shrinkAction s (Unregister name) =
-    [Action (WhereIs name)] ++ [Action (Unregister name') | name' <- shrinkName name]
+    [Some (WhereIs name)] ++ [Some (Unregister name') | name' <- shrinkName name]
   shrinkAction s (WhereIs name) =
-    [Action (WhereIs name') | name' <- shrinkName name]
+    [Some (WhereIs name') | name' <- shrinkName name]
   shrinkAction s Spawn = []
   shrinkAction s (KillThread tid) =
-    [Action (KillThread tid') | tid' <- shrinkTid s tid]
+    [Some (KillThread tid') | tid' <- shrinkTid s tid]
   shrinkAction s (Successful act) =
-    Action act : [Action (Successful act') | Action act' <- shrinkAction s act]
+    Some act : [Some (Successful act') | Some act' <- shrinkAction s act]
 
 
   initialState :: RegState
@@ -109,19 +109,19 @@ instance StateModel RegState where
       WhereIs _    -> tabu "WhereIs" [case res of Nothing -> "fails"; Just _ -> "succeeds"]
       _            -> id
 
-  perform Spawn _
+  perform _ Spawn _
     = forkIO (threadDelay 10000000)
-  perform (Register name tid) env
+  perform _ (Register name tid) env
     = try $ register name (env tid)
-  perform (Unregister name) _
+  perform _ (Unregister name) _
     = try $ unregister name
-  perform (WhereIs name) _
+  perform _ (WhereIs name) _
     = whereis name
-  perform (KillThread tid) env
+  perform _ (KillThread tid) env
     = do killThread (env tid)
          threadDelay 1000
-  perform (Successful act) env =
-    perform act env
+  perform s (Successful act) env =
+    perform s act env
 
 positive :: RegState -> Action RegState a -> Bool
 positive s (Register name tid) =
@@ -141,6 +141,7 @@ why s (Register name tid) =
   unwords $ ["name already registered" | name `elem` map fst (regs s)] ++
             ["tid already registered"  | tid  `elem` map snd (regs s)] ++
             ["dead thread"             | tid  `elem` dead s]
+why _ _ = "(impossible)"
 
 arbitraryName :: Gen String
 arbitraryName = elements allNames
