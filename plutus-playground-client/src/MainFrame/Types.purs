@@ -10,7 +10,6 @@ module MainFrame.Types
 
 import Analytics (class IsEvent, defaultEvent, toEvent)
 import Auth (AuthStatus)
-import Cursor (Cursor)
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..))
@@ -24,7 +23,7 @@ import Halogen.Chartist as Chartist
 import Halogen.Monaco as Monaco
 import Language.Haskell.Interpreter (InterpreterError, InterpreterResult)
 import Network.RemoteData (RemoteData)
-import Playground.Types (CompilationResult, ContractDemo, EvaluationResult, PlaygroundError, Simulation)
+import Playground.Types (CompilationResult, ContractDemo)
 import Prelude (class Eq, class Show, Unit, show, ($))
 import Servant.PureScript.Ajax (AjaxError)
 import Simulator.Types as Simulator

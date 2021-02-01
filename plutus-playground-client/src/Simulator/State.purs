@@ -1,6 +1,7 @@
 module Simulator.State
   ( initialState
   , handleAction
+  , defaultSimulations
   ) where
 
 import AjaxUtils (ajaxErrorRefLabel)
@@ -20,7 +21,7 @@ import Data.Array.Extra (move)
 import Data.BigInteger (BigInteger)
 import Data.BigInteger as BigInteger
 import Data.Either (Either(..))
-import Data.Lens (assign, modifying, over, to, traversed, use)
+import Data.Lens (assign, modifying, over, preview, to, traversed, use)
 import Data.Lens.Extra (peruse)
 import Data.Lens.Fold (lastOf, maximumOf)
 import Data.Lens.Index (ix)
@@ -30,7 +31,7 @@ import Data.RawJson (RawJson(..))
 import Data.Traversable (traverse)
 import Foreign.Generic (encodeJSON)
 import Language.Haskell.Interpreter (SourceCode)
-import MainFrame.Lenses (_functionSchema, _knownCurrencies)
+import MainFrame.Lenses (_knownCurrencies)
 import MainFrame.MonadApp (class MonadApp, editorGetContents, postEvaluation, preventDefault, resizeBalancesChart, scrollIntoView, setDataTransferData, setDropEffect)
 import MainFrame.View (simulatorTitleRefLabel)
 import Network.RemoteData (RemoteData(..), isSuccess)
@@ -80,7 +81,8 @@ handleAction compilationResult AddSimulationSlot = do
   case evaluationResult of
     Loading -> pure unit
     _ -> do
-      knownCurrencies <- peruse _knownCurrencies compilationResult
+      let
+        knownCurrencies = fromMaybe [] $ preview _knownCurrencies compilationResult
       modifying _simulations
         ( \simulations ->
             let
@@ -113,12 +115,14 @@ handleAction _ (RemoveSimulationSlot index) = do
       modifying _simulations (Cursor.deleteAt index)
 
 handleAction compilationResult (ModifyWallets action) = do
-  knownCurrencies <- peruse _knownCurrencies compilationResult
+  let
+    knownCurrencies = fromMaybe [] $ preview _knownCurrencies compilationResult
   modifying (_simulations <<< _current <<< _simulationWallets) (handleActionWalletEvent (mkSimulatorWallet knownCurrencies) action)
 
 handleAction compilationResult (ChangeSimulation subaction) = do
-  knownCurrencies <- peruse _knownCurrencies compilationResult
   let
+    knownCurrencies = fromMaybe [] $ preview _knownCurrencies compilationResult
+
     initialValue = mkInitialValue knownCurrencies zero
   modifying (_simulations <<< _current <<< _simulationActions) (handleSimulationAction initialValue subaction)
 

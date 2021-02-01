@@ -4,49 +4,36 @@ module MainFrame.State
   , handleAction
   ) where
 
-import AjaxUtils (AjaxErrorPaneAction(..), ajaxErrorRefLabel, renderForeignErrors)
+import AjaxUtils (AjaxErrorPaneAction(..), renderForeignErrors)
 import Analytics (analyticsTracking)
-import Animation (class MonadAnimate, animate)
-import Chain.State (handleAction) as Chain
-import Chain.Types (Action(..), AnnotatedBlockchain(..), _chainFocusAppearing, _txIdOf)
-import Chain.Types (initialState) as Chain
+import Animation (class MonadAnimate)
 import Clipboard (class MonadClipboard)
 import Control.Monad.Error.Class (class MonadThrow)
 import Control.Monad.Error.Extra (mapError)
 import Control.Monad.Except.Extra (noteT)
 import Control.Monad.Except.Trans (ExceptT(..), except, mapExceptT, withExceptT, runExceptT)
 import Control.Monad.Maybe.Extra (hoistMaybe)
-import Control.Monad.Maybe.Trans (MaybeT(..), runMaybeT)
+import Control.Monad.Maybe.Trans (runMaybeT)
 import Control.Monad.Reader (class MonadAsk, runReaderT)
-import Control.Monad.State.Class (class MonadState, gets)
+import Control.Monad.State.Class (class MonadState)
 import Control.Monad.State.Extra (zoomStateT)
 import Control.Monad.Trans.Class (lift)
-import Cursor (Cursor, _current)
 import Cursor as Cursor
-import Data.Array (catMaybes, (..))
-import Data.Array (deleteAt, snoc) as Array
-import Data.Array.Extra (move) as Array
+import Data.Array (catMaybes)
 import Data.Bifunctor (lmap)
-import Data.BigInteger (BigInteger)
-import Data.BigInteger as BigInteger
 import Data.Either (Either(..), note)
-import Data.Lens (Traversal', _Right, assign, modifying, over, to, traversed, use, view)
-import Data.Lens.Extra (peruse)
-import Data.Lens.Fold (maximumOf, lastOf, preview)
-import Data.Lens.Index (ix)
-import Data.Maybe (Maybe(..), fromMaybe)
-import Data.MediaType.Common (textPlain)
+import Data.Lens (Traversal', _Right, assign, modifying, use, view)
+import Data.Lens.Fold (preview)
+import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
-import Data.RawJson (RawJson(..))
 import Data.String as String
-import Data.Traversable (traverse)
-import Editor.State (initialState) as Editor
 import Editor.Lenses (_currentCodeIsCompiled, _feedbackPaneMinimised, _lastCompiledCode)
+import Editor.State (initialState) as Editor
 import Editor.Types (Action(..), State) as Editor
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Exception (Error, error)
-import Foreign.Generic (decodeJSON, encodeJSON)
+import Foreign.Generic (decodeJSON)
 import Gist (_GistId, gistId)
 import Gists.Types (GistAction(..))
 import Gists.Types as Gists
@@ -54,29 +41,23 @@ import Halogen (Component, hoist)
 import Halogen as H
 import Halogen.HTML (HTML)
 import Halogen.Query (HalogenM)
-import Language.Haskell.Interpreter (CompilationError(..), InterpreterError(..), InterpreterResult, SourceCode(..), _InterpreterResult)
-import MainFrame.Lenses (_authStatus, _compilationResult, _contractDemos, _createGistResult, _currentDemoName, _currentView, _demoFilesMenuVisible, _editorState, _functionSchema, _gistErrorPaneVisible, _gistUrl, _lastSuccessfulCompilationResult, _knownCurrencies, _result, _successfulCompilationResult)
-import MainFrame.MonadApp (class MonadApp, editorGetContents, editorHandleAction, editorSetAnnotations, editorSetContents, getGistByGistId, getOauthStatus, patchGistByGistId, postContract, postEvaluation, postGist, preventDefault, resizeBalancesChart, resizeEditor, runHalogenApp, saveBuffer, scrollIntoView, setDataTransferData, setDropEffect)
+import Language.Haskell.Interpreter (CompilationError(..), InterpreterError(..), InterpreterResult(..), SourceCode(..), _InterpreterResult)
+import MainFrame.Lenses (_authStatus, _compilationResult, _contractDemos, _createGistResult, _currentDemoName, _currentView, _demoFilesMenuVisible, _editorState, _functionSchema, _gistErrorPaneVisible, _gistUrl, _knownCurrencies, _lastSuccessfulCompilationResult, _result, _simulatorState)
+import MainFrame.MonadApp (class MonadApp, editorGetContents, editorHandleAction, editorSetAnnotations, editorSetContents, getGistByGistId, getOauthStatus, patchGistByGistId, postContract, postGist, resizeEditor, runHalogenApp, saveBuffer)
 import MainFrame.Types (ChildSlots, HAction(..), Query, State(..), View(..), WebData)
 import MainFrame.View (render)
 import Monaco (IMarkerData, markerSeverity)
 import Network.RemoteData (RemoteData(..), _Success, isSuccess)
 import Playground.Gists (mkNewGist, playgroundGistFile, simulationGistFile)
 import Playground.Server (SPParams_(..))
-import Playground.Types (ContractCall(..), ContractDemo(..), Evaluation(..), KnownCurrency, Simulation(..), SimulatorWallet(..), _CallEndpoint, _FunctionSchema)
-import Plutus.V1.Ledger.Value (Value)
-import Prelude (class Applicative, Unit, Void, add, const, bind, discard, flip, identity, join, not, mempty, one, pure, show, unit, unless, void, when, zero, (+), ($), (&&), (==), (<>), (<$>), (<*>), (>>=), (<<<))
-import Schema.Types (Expression, FormArgument, SimulationAction(..), formArgumentToJson, handleActionEvent, handleFormEvent, handleValueEvent, mkInitialValue, traverseFunctionSchema)
+import Playground.Types (ContractDemo(..))
+import Prelude (Unit, Void, bind, const, discard, flip, mempty, not, pure, show, unit, unless, void, when, ($), (&&), (<$>), (<<<), (<>), (==))
 import Servant.PureScript.Ajax (errorToString)
 import Servant.PureScript.Settings (SPSettings_, defaultSettings)
-import Simulator.Lenses (_simulations)
-import Simulator.State (initialSimulatorState)
-import Simulator.View (simulationsErrorRefLabel)
+import Simulator.Lenses (_evaluationResult, _simulations)
+import Simulator.State (defaultSimulations)
+import Simulator.State (initialState, handleAction) as Simulator
 import StaticData (mkContractDemos, lookupContractDemo)
-import Validation (_argumentValues, _argument)
-import Wallet.Emulator.Wallet (Wallet(Wallet))
-import Wallet.Lenses (_simulatorWalletBalance, _simulatorWalletWallet, _walletId)
-import Web.HTML.Event.DataTransfer as DataTransfer
 
 mkMainFrame ::
   forall m n.
@@ -160,13 +141,13 @@ handleAction (LoadScript key) = do
       assign _demoFilesMenuVisible false
       assign _currentView Editor
       assign _currentDemoName (Just contractDemoName)
-      assign _simulations $ Cursor.fromArray contractDemoSimulations
+      assign (_simulatorState <<< _simulations) $ Cursor.fromArray contractDemoSimulations
       assign (_editorState <<< _lastCompiledCode) (Just contractDemoEditorContents)
       assign (_editorState <<< _currentCodeIsCompiled) true
       assign _compilationResult (Success <<< Right $ contractDemoContext)
       assign _lastSuccessfulCompilationResult (Just contractDemoContext)
-      assign _evaluationResult NotAsked
       assign _createGistResult NotAsked
+      assign (_simulatorState <<< _evaluationResult) NotAsked
 
 handleAction CheckAuthStatus = do
   assign _authStatus Loading
@@ -214,7 +195,7 @@ handleAction CompileProgram = do
 
               newCurrencies = preview (_details <<< _knownCurrencies) newCompilationResult
             case lastSuccessfulCompilationResult of
-              Nothing -> assign _simulations $ defaultSimulations newCurrencies
+              Nothing -> assign (_simulatorState <<< _simulations) $ defaultSimulations newCurrencies
               Just oldCompilationResult -> do
                 let
                   oldSignatures = preview (_result <<< _functionSchema) (unwrap oldCompilationResult)
@@ -222,13 +203,18 @@ handleAction CompileProgram = do
                   oldCurrencies = preview (_result <<< _knownCurrencies) (unwrap oldCompilationResult)
                 unless
                   (oldSignatures == newSignatures && oldCurrencies == newCurrencies)
-                  (assign _simulations $ defaultSimulations newCurrencies)
+                  (assign (_simulatorState <<< _simulations) $ defaultSimulations newCurrencies)
         _ -> pure unit
       pure unit
 
 handleAction (SimulatorAction action) = do
-  compilationResult <- use _successfulCompilationResult
-  Simulator.handleAction compilationResult action
+  lastSuccesfulCompilationResult <- use _lastSuccessfulCompilationResult
+  case lastSuccesfulCompilationResult of
+    Nothing -> pure unit
+    Just (InterpreterResult interpreterResult) -> do
+      let
+        compilationResult = view _result interpreterResult
+      zoomStateT _simulatorState $ Simulator.handleAction compilationResult action
 
 _details :: forall a. Traversal' (WebData (Either InterpreterError (InterpreterResult a))) a
 _details = _Success <<< _Right <<< _InterpreterResult <<< _result
@@ -238,7 +224,7 @@ handleGistAction PublishGist = do
   void
     $ runMaybeT do
         mContents <- lift $ editorGetContents
-        simulations <- use _simulations
+        simulations <- use (_simulatorState <<< _simulations)
         newGist <- hoistMaybe $ mkNewGist { source: mContents, simulations }
         mGist <- use _createGistResult
         assign _createGistResult Loading
@@ -275,13 +261,13 @@ handleGistAction LoadGist =
         content <- noteT "Source not found in gist." $ view playgroundGistFile gist
         lift $ editorSetContents (SourceCode content) (Just 1)
         lift $ saveBuffer content
-        assign _simulations Cursor.empty
-        assign _evaluationResult NotAsked
+        assign (_simulatorState <<< _simulations) Cursor.empty
+        assign (_simulatorState <<< _evaluationResult) NotAsked
         --
         -- Load the simulation, if available.
         simulationString <- noteT "Simulation not found in gist." $ view simulationGistFile gist
         simulations <- mapExceptT (pure <<< unwrap) $ withExceptT renderForeignErrors $ decodeJSON simulationString
-        assign _simulations simulations
+        assign (_simulatorState <<< _simulations) simulations
   where
   toEither :: forall e a. Either e a -> RemoteData e a -> Either e a
   toEither _ (Success a) = Right a
