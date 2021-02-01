@@ -214,20 +214,20 @@ instance DynLogicModel (ModelState GameModel) where
     restricted _ = False
 
 noLockedFunds :: ModelState GameModel -> DynLogic (ModelState GameModel)
-noLockedFunds s
-    | isZero (lockedFunds s) = passTest
-    | otherwise =
-        -- Anyone can get the money.
-        forAllQ (elementsQ wallets) $ \ w ->
-            after (ContractAction @_ @() Delay) $ \ s ->
-            go s w
+noLockedFunds s = forAllQ (elementsQ wallets) $ \ w -> go s w
+                  -- Anyone can get the money.
     where
-        go s w | hasT == Just w =
-                    after (ContractAction @_ @() $ Guess w secret secret val) $ \ _ ->
-                    passTest
-               | otherwise =
-                    after (ContractAction @_ @() $ GiveToken w) $ \ _ ->
-                    after (ContractAction @_ @() Delay) $ \ s -> go s w
+        go s w
+            | isZero (lockedFunds s) = passTest
+            | hasT == Just w =
+                after (ContractAction @_ @() Delay)                       $ \ _ ->
+                after (ContractAction @_ @() $ Guess w secret secret val) $ \ s ->
+                if isZero (lockedFunds s) then passTest else ignore
+            | otherwise =
+                after (ContractAction @_ @() Delay)         $ \ _ ->
+                after (ContractAction @_ @() $ GiveToken w) $ \ _ ->
+                after (ContractAction @_ @() Delay)         $ \ s ->
+                go s w
             where
                 hasT   = s ^. modelState . hasToken
                 secret = s ^. modelState . currentSecret
@@ -235,11 +235,7 @@ noLockedFunds s
 
 -- Check that we can always get the money out of the guessing game (by guessing correctly).
 prop_NoLockedFunds :: Property
-prop_NoLockedFunds = forAllScripts (always noLockedFunds StateModel.initialState) $ \ script ->
-        propRunScript @GameModel wallets G.contract pred (const $ return ()) script (const $ return ())
-    where
-        pred s = tag ("Funds still locked:" <+> pretty val) (pure $ isZero val)
-            where val = lockedFunds s
+prop_NoLockedFunds = forAllScripts (always noLockedFunds StateModel.initialState) prop_Game
 
 -- * Unit tests
 
