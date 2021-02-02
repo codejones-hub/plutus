@@ -60,25 +60,22 @@
 -- | ...making your `order` fade in from the left.
 module Animation where
 
+import Control.Monad.State.Class (class MonadState)
 import Data.Lens (Lens', assign, view)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Time.Duration as Duration
 import Effect.Aff as Aff
 import Effect.Aff.Class (class MonadAff, liftAff)
-import Halogen (HalogenM)
 import Halogen.HTML (ClassName(..))
 import Prelude (bind, discard, pure, ($), (<>))
 
-class MonadAnimate m state where
-  animate :: forall a. (Lens' state Boolean) -> m a -> m a
-
-instance monadAnimateHalogenM :: MonadAff m => MonadAnimate (HalogenM state action input output m) state where
-  animate toggle action = do
-    assign toggle true
-    result <- action
-    liftAff $ Aff.delay $ Duration.fromDuration $ Milliseconds 1.0
-    assign toggle false
-    pure result
+animate :: forall m state b a. MonadState state m => MonadAff m => ((b -> Boolean) -> state -> state) -> m a -> m a
+animate toggle action = do
+  assign toggle true
+  result <- action
+  liftAff $ Aff.delay $ Duration.fromDuration $ Milliseconds 1.0
+  assign toggle false
+  pure result
 
 animationClass :: forall state. Lens' state Boolean -> state -> Array ClassName
 animationClass toggle state =
