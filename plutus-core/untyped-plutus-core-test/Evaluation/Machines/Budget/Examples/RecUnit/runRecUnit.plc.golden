@@ -1,8 +1,8 @@
 ( (Right (delay (\ru -> force ru ru)))
-, ({ tally: ({ BAST causes ({ cpu: 0
-| mem: 6
-})})
+, ({ tally: ({ BAST causes [  ({ cpu: 0
+| mem: 12
+})]})
 | budget: ({ cpu: 0
-| mem: 6
+| mem: 12
 })
 }) )

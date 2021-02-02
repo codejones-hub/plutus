@@ -49,8 +49,7 @@ module Language.PlutusCore
     , defaultVersion
     , allKeywords
     , toTerm
-    , termAnn
-    , typeAnn
+    , HasAnnotation (..)
     , mapFun
     -- * DeBruijn representation
     , DeBruijn (..)

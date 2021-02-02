@@ -64,7 +64,7 @@ safeLift x = do
     lifted <- liftQuote $ runDefT () $ Lift.lift x
     tcConfig <- PLC.getDefTypeCheckConfig $ Original ()
     compiled <- flip runReaderT (toDefaultCompilationCtx tcConfig) $ compileTerm lifted
-    let erased = UPLC.erase compiled
+    let erased = UPLC.eraseWith id compiled
     db <- UPLC.deBruijnTerm erased
     pure $ void db
 

@@ -39,6 +39,7 @@ module Language.UntypedPlutusCore.Evaluation.Machine.Cek
     , evaluateCek
     , unsafeEvaluateCek
     , readKnownCek
+    , annotateMemory
     )
 where
 
@@ -68,6 +69,10 @@ import           Control.Monad.State.Strict
 import           Data.Array
 import           Data.HashMap.Monoidal
 import           Data.Text.Prettyprint.Doc
+
+import           Data.Functor.Foldable                              (Recursive (cata))
+import qualified Data.Vector                                        as Vector
+import           Language.PlutusCore.Core.Type                      (HasAnnotation (toAnnotation))
 
 {- Note [Scoping]
    The CEK machine does not rely on the global uniqueness condition, so the renamer pass is not a
@@ -161,6 +166,8 @@ data ExBudgetCategory fun
     = BForce
     | BApply
     | BVar
+    | BDelay
+    | BLamAbs
     | BBuiltin fun
     | BAST
     deriving stock (Show, Eq, Generic)
@@ -271,7 +278,7 @@ instance (Eq fun, Hashable fun, ToExMemory term) =>
             SpendBudget (CekCarryingM term uni fun) fun (ExBudgetCategory fun) term where
     spendBudget key budget = do
         modifying exBudgetStateTally
-                (<> (ExTally (singleton key budget)))
+                (<> ExTally (singleton key (Vector.singleton budget)))
         newBudget <- exBudgetStateBudget <%= (<> budget)
         mode <- asks cekEnvBudgetMode
         case mode of
@@ -488,7 +495,7 @@ applyBuiltin ctx bn args = do
 -- | Evaluate a term using the CEK machine and keep track of costing.
 runCek
     :: ( GShow uni, GEq uni, Closed uni, uni `Everywhere` ExMemoryUsage
-       , Hashable fun, Ix fun, ExMemoryUsage fun
+       , Hashable fun, Ix fun
        )
     => BuiltinsRuntime fun (CekValue uni fun)
     -> ExBudgetMode
@@ -498,15 +505,15 @@ runCek runtime mode term =
     runCekM (CekEnv runtime mode)
             (ExBudgetState mempty mempty)
         $ do
-            spendBudget BAST (ExBudget 0 (termAnn memTerm))
+            spendBudget BAST (ExBudget 0 (toAnnotation memTerm))
             computeCek [] mempty memTerm
     where
-        memTerm = withMemory term
+        memTerm = annotateMemory term
 
 -- | Evaluate a term using the CEK machine in the 'Counting' mode.
 runCekCounting
     :: ( GShow uni, GEq uni, Closed uni, uni `Everywhere` ExMemoryUsage
-       , Hashable fun, Ix fun, ExMemoryUsage fun
+       , Hashable fun, Ix fun
        )
     => BuiltinsRuntime fun (CekValue uni fun)
     -> Term Name uni fun ()
@@ -516,7 +523,7 @@ runCekCounting means = runCek means Counting
 -- | Evaluate a term using the CEK machine.
 evaluateCek
     :: ( GShow uni, GEq uni, Closed uni, uni `Everywhere` ExMemoryUsage
-       , Hashable fun, Ix fun, ExMemoryUsage fun
+       , Hashable fun, Ix fun
        )
     => BuiltinsRuntime fun (CekValue uni fun)
     -> Term Name uni fun ()
@@ -527,7 +534,7 @@ evaluateCek runtime = fst . runCekCounting runtime
 unsafeEvaluateCek
     :: ( GShow uni, GEq uni, Typeable uni
        , Closed uni, uni `EverywhereAll` '[ExMemoryUsage, PrettyConst]
-       , Hashable fun, Ix fun, Pretty fun, Typeable fun, ExMemoryUsage fun
+       , Hashable fun, Ix fun, Pretty fun, Typeable fun
        )
     => BuiltinsRuntime fun (CekValue uni fun)
     -> Term Name uni fun ()
@@ -538,9 +545,23 @@ unsafeEvaluateCek runtime = either throw id . extractEvaluationResult . evaluate
 readKnownCek
     :: ( GShow uni, GEq uni, Closed uni, uni `Everywhere` ExMemoryUsage
        , KnownType (Term Name uni fun ()) a
-       , Hashable fun, Ix fun, ExMemoryUsage fun
+       , Hashable fun, Ix fun
        )
     => BuiltinsRuntime fun (CekValue uni fun)
     -> Term Name uni fun ()
     -> Either (CekEvaluationException uni fun) a
 readKnownCek runtime = evaluateCek runtime >=> readKnown
+
+annotateMemory :: (Everywhere uni ExMemoryUsage, Closed uni) =>
+    Term Name uni fun () -> Term Name uni fun ExMemory
+annotateMemory = cata $ \case
+    ConstantF () som      -> Constant (constructorMemoryUsage + memoryUsage som) som
+    BuiltinF () fun       -> Builtin constructorMemoryUsage fun
+    VarF () name          -> Var (constructorMemoryUsage + memoryUsage name) name
+    LamAbsF () name term  -> LamAbs (constructorMemoryUsage + toAnnotation term + memoryUsage name) name term
+    ApplyF () term1 term2 -> Apply (constructorMemoryUsage + toAnnotation term1 + toAnnotation term2) term1 term2
+    DelayF () term        -> Delay (constructorMemoryUsage + toAnnotation term) term
+    ForceF () term        -> Force (constructorMemoryUsage + toAnnotation term) term
+    ErrorF ()             -> Error constructorMemoryUsage
+    where
+        constructorMemoryUsage = 1

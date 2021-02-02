@@ -16,13 +16,16 @@ module Language.UntypedPlutusCore.Core.Type
     , mapFun
     , termAnn
     , erase
+    , eraseWith
     , eraseProgram
+    , eraseProgramWith
     ) where
 
 import           PlutusPrelude
 
 import qualified Language.PlutusCore.Constant                       as TPLC
 import qualified Language.PlutusCore.Core                           as TPLC
+import           Language.PlutusCore.Core.Type                      (HasAnnotation)
 import           Language.PlutusCore.Evaluation.Machine.ExBudgeting
 import           Language.PlutusCore.Evaluation.Machine.ExMemory
 import           Language.PlutusCore.MkPlc
@@ -89,6 +92,10 @@ instance ToExMemory (Term name uni fun ()) where
 instance ToExMemory (Term name uni fun ExMemory) where
     toExMemory = termAnn
 
+instance HasAnnotation (Term name uni fun ann) where
+    type Annotation (Term name uni fun ann) = ann
+    toAnnotation = termAnn
+
 deriving via GenericExMemoryUsage (Term name uni fun ann) instance
     ( ExMemoryUsage name, ExMemoryUsage fun, ExMemoryUsage ann
     , Closed uni, uni `Everywhere` ExMemoryUsage
@@ -126,7 +133,7 @@ mapFun :: (ann -> fun -> fun') -> Term name uni fun ann -> Term name uni fun' an
 mapFun f = bindFun $ \ann fun -> Builtin ann (f ann fun)
 
 -- | Erase a Typed Plutus Core term to its untyped counterpart.
-erase :: TPLC.Term tyname name uni fun ann -> Term name uni fun ann
+erase :: TPLC.Term tyname name uni fun () -> Term name uni fun ()
 erase (TPLC.Var ann name)           = Var ann name
 erase (TPLC.TyAbs ann _ _ body)     = Delay ann (erase body)
 erase (TPLC.LamAbs ann name _ body) = LamAbs ann name (erase body)
@@ -138,6 +145,22 @@ erase (TPLC.Unwrap _ term)          = erase term
 erase (TPLC.IWrap _ _ _ term)       = erase term
 erase (TPLC.Error ann _)            = Error ann
 
+-- TODO proper recursion so the translation function can use `TPLC.Term name uni fun untypedAnn`
+eraseWith :: (ann -> untypedAnn) -> TPLC.Term tyname name uni fun ann -> Term name uni fun untypedAnn
+eraseWith f (TPLC.Var ann name)           = Var (f ann) name
+eraseWith f (TPLC.TyAbs ann _ _ body)     = Delay (f ann) (eraseWith f body)
+eraseWith f (TPLC.LamAbs ann name _ body) = LamAbs (f ann) name (eraseWith f body)
+eraseWith f (TPLC.Apply ann fun arg)      = Apply (f ann) (eraseWith f fun) (eraseWith f arg)
+eraseWith f (TPLC.Constant ann con)       = Constant (f ann) con
+eraseWith f (TPLC.Builtin ann bn)         = Builtin (f ann) bn
+eraseWith f (TPLC.TyInst ann term _)      = Force (f ann) (eraseWith f term)
+eraseWith f (TPLC.Unwrap _ term)          = eraseWith f term
+eraseWith f (TPLC.IWrap _ _ _ term)       = eraseWith f term
+eraseWith f (TPLC.Error ann _)            = Error (f ann)
+
 -- | Erase a Typed Plutus Core Program to its untyped counterpart.
-eraseProgram :: TPLC.Program tyname name uni fun ann -> Program name uni fun ann
+eraseProgram :: TPLC.Program tyname name uni fun () -> Program name uni fun ()
 eraseProgram (TPLC.Program a v t) = Program a v $ erase t
+
+eraseProgramWith :: (ann -> untypedAnn) -> TPLC.Program tyname name uni fun ann -> Program name uni fun untypedAnn
+eraseProgramWith fun (TPLC.Program a v t) = Program (fun a) (fmap fun v) $ eraseWith fun t
