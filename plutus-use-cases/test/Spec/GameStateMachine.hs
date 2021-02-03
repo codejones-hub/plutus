@@ -1,8 +1,10 @@
 {-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE DeriveFunctor        #-}
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE MonoLocalBinds       #-}
+{-# LANGUAGE MultiWayIf           #-}
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE RankNTypes           #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
@@ -13,6 +15,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Spec.GameStateMachine where
 
+import           Control.Applicative
 import           Control.Lens
 import           Control.Monad
 import           Control.Monad.Freer.Error
@@ -213,29 +216,72 @@ tag err = postMapM $ \ ok -> ok <$ unless ok (tell err)
 instance DynLogicModel (ModelState GameModel) where
     restricted _ = False
 
-noLockedFunds :: ModelState GameModel -> DynLogic (ModelState GameModel)
-noLockedFunds s = forAllQ (elementsQ wallets) $ \ w -> go s w
+newtype DL s a = DL { unDL :: s -> (a -> DynPred s) -> DynLogic s }
+    deriving (Functor)
+
+instance Applicative (DL s) where
+    pure x = DL $ \ s k -> k x s
+    (<*>)  = ap
+
+instance Monad (DL s) where
+    return = pure
+    DL h >>= j = DL $ \ s k -> h s $ \ x s1 -> unDL (j x) s1 k
+
+type DLC s = DL (ModelState s)
+
+action :: ContractModel s => Command s -> DLC s ()
+action cmd = DL $ \ _ k -> after (ContractAction @_ @() cmd) $ k ()
+
+anyAction :: DL s ()
+anyAction = DL $ \ _ k -> afterAny $ k ()
+
+alwaysDL :: DL s () -> DL s ()
+alwaysDL (DL h) = DL $ \ s k -> always (\ s1 -> h s1 k) s
+
+dlState :: DL s s
+dlState = DL $ \ s k -> k s s
+
+assertDL :: Bool -> DL s ()
+assertDL b = unless b empty
+
+assertModel :: (s -> Bool) -> DL s ()
+assertModel p = assertDL . p =<< dlState
+
+forAllDL :: Quantifiable q => q -> DL s (Quantifies q)
+forAllDL q = DL $ \ s k -> forAllQ q $ \ x -> k x s
+
+instance Alternative (DL s) where
+    empty = DL $ \ _ _ -> ignore
+    DL h <|> DL j = DL $ \ s k -> h s k ||| j s k
+
+runDL :: s -> DL s () -> DynLogic s
+runDL s dl = unDL dl s $ \ _ _ -> passTest
+
+noLockedFunds :: DynLogic (ModelState GameModel)
+noLockedFunds = runDL StateModel.initialState noLockedFundsDL
+
+noLockedFundsDL :: DLC GameModel ()
+noLockedFundsDL = alwaysDL $ forAllDL (elementsQ wallets) >>= go
                   -- Anyone can get the money.
     where
-        go s w
-            | isZero (lockedFunds s) = passTest
-            | hasT == Just w =
-                after (ContractAction @_ @() Delay)                       $ \ _ ->
-                after (ContractAction @_ @() $ Guess w secret secret val) $ \ s ->
-                if isZero (lockedFunds s) then passTest else ignore
-            | otherwise =
-                after (ContractAction @_ @() Delay)         $ \ _ ->
-                after (ContractAction @_ @() $ GiveToken w) $ \ _ ->
-                after (ContractAction @_ @() Delay)         $ \ s ->
-                go s w
-            where
-                hasT   = s ^. modelState . hasToken
+        go w = do
+            s <- dlState
+            let hasT   = s ^. modelState . hasToken
                 secret = s ^. modelState . currentSecret
                 val    = s ^. modelState . gameValue
+            if | isZero (lockedFunds s) -> pure ()
+               | hasT == Just w -> do
+                    action Delay
+                    action (Guess w "secret" secret val)
+                    assertModel $ isZero . lockedFunds
+               | otherwise -> do
+                    action Delay
+                    action $ GiveToken w
+                    go w
 
 -- Check that we can always get the money out of the guessing game (by guessing correctly).
 prop_NoLockedFunds :: Property
-prop_NoLockedFunds = forAllScripts (always noLockedFunds StateModel.initialState) prop_Game
+prop_NoLockedFunds = forAllScripts noLockedFunds prop_Game
 
 -- * Unit tests
 
