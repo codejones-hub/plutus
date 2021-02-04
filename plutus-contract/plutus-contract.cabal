@@ -151,6 +151,7 @@ library
             Language.Plutus.Contract.Test.ContractModel
             Language.Plutus.Contract.Test.DynamicLogic
             Language.Plutus.Contract.Test.DynamicLogic.CanGenerate
+            Language.Plutus.Contract.Test.DynamicLogic.Monad
             Language.Plutus.Contract.Test.DynamicLogic.Quantify
             Language.Plutus.Contract.Test.StateModel
         build-depends:

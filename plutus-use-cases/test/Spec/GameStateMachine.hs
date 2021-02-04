@@ -37,7 +37,7 @@ import qualified Language.PlutusTx                                         as Pl
 
 import           Language.Plutus.Contract.Test                             hiding (not)
 import           Language.Plutus.Contract.Test.ContractModel
-import           Language.Plutus.Contract.Test.DynamicLogic
+import           Language.Plutus.Contract.Test.DynamicLogic.Monad
 import           Language.Plutus.Contract.Test.StateModel                  (stateAfter)
 import qualified Language.Plutus.Contract.Test.StateModel                  as StateModel
 import           Language.PlutusTx.Coordination.Contracts.GameStateMachine as G
@@ -210,78 +210,26 @@ propGame' l s = propRunScriptWithOptions (set minLogLevel l defaultCheckOptions)
         before _ = return ()
         after  _ = run (delay 10)
 
-tag :: Doc Void -> TracePredicate -> TracePredicate
-tag err = postMapM $ \ ok -> ok <$ unless ok (tell err)
-
-instance DynLogicModel (ModelState GameModel) where
-    restricted _ = False
-
-newtype DL s a = DL { unDL :: s -> (a -> DynPred s) -> DynLogic s }
-    deriving (Functor)
-
-instance Applicative (DL s) where
-    pure x = DL $ \ s k -> k x s
-    (<*>)  = ap
-
-instance Monad (DL s) where
-    return = pure
-    DL h >>= j = DL $ \ s k -> h s $ \ x s1 -> unDL (j x) s1 k
-
 type DLC s = DL (ModelState s)
 
-action :: ContractModel s => Command s -> DLC s ()
-action cmd = DL $ \ _ k -> after (ContractAction @_ @() cmd) $ k ()
+actionC :: ContractModel s => Command s -> DLC s ()
+actionC cmd = action (ContractAction @_ @() cmd)
 
-anyAction :: DL s ()
-anyAction = DL $ \ _ k -> afterAny $ k ()
-
-alwaysDL :: DL s () -> DL s ()
-alwaysDL (DL h) = DL $ \ s k -> always (\ s1 -> h s1 k) s
-
-dlState :: DL s s
-dlState = DL $ \ s k -> k s s
-
-assertDL :: Bool -> DL s ()
-assertDL b = unless b empty
-
-assertModel :: (s -> Bool) -> DL s ()
-assertModel p = assertDL . p =<< dlState
-
-forAllDL :: Quantifiable q => q -> DL s (Quantifies q)
-forAllDL q = DL $ \ s k -> forAllQ q $ \ x -> k x s
-
-instance Alternative (DL s) where
-    empty = DL $ \ _ _ -> ignore
-    DL h <|> DL j = DL $ \ s k -> h s k ||| j s k
-
-runDL :: s -> DL s () -> DynLogic s
-runDL s dl = unDL dl s $ \ _ _ -> passTest
-
-noLockedFunds :: DynLogic (ModelState GameModel)
-noLockedFunds = runDL StateModel.initialState noLockedFundsDL
-
-noLockedFundsDL :: DLC GameModel ()
-noLockedFundsDL = alwaysDL $ forAllDL (elementsQ wallets) >>= go
-                  -- Anyone can get the money.
-    where
-        go w = do
-            s <- dlState
-            let hasT   = s ^. modelState . hasToken
-                secret = s ^. modelState . currentSecret
-                val    = s ^. modelState . gameValue
-            if | isZero (lockedFunds s) -> pure ()
-               | hasT == Just w -> do
-                    action Delay
-                    action (Guess w "secret" secret val)
-                    assertModel $ isZero . lockedFunds
-               | otherwise -> do
-                    action Delay
-                    action $ GiveToken w
-                    go w
+noLockedFunds :: DLC GameModel ()
+noLockedFunds = do
+    anyActions_
+    w <- forAllQ (elementsQ wallets) -- Anyone can get the money.
+    s <- getModelStateDL
+    let secret = s ^. modelState . currentSecret
+        val    = s ^. modelState . gameValue
+    unless (isZero $ lockedFunds s) $ do
+        actionC $ GiveToken w
+        actionC $ Guess w secret secret val
+        assertModel $ isZero . lockedFunds
 
 -- Check that we can always get the money out of the guessing game (by guessing correctly).
 prop_NoLockedFunds :: Property
-prop_NoLockedFunds = forAllScripts noLockedFunds prop_Game
+prop_NoLockedFunds = forAllDL noLockedFunds prop_Game
 
 -- * Unit tests
 

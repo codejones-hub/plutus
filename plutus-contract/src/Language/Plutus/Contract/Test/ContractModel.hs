@@ -41,29 +41,31 @@ module Language.Plutus.Contract.Test.ContractModel
 
 import           Control.Lens
 import           Control.Monad.Cont
-import           Control.Monad.Freer                      as Eff
+import           Control.Monad.Freer                              as Eff
 import           Control.Monad.Freer.State
-import qualified Data.Aeson                               as JSON
+import qualified Data.Aeson                                       as JSON
 import           Data.Foldable
-import           Data.Map                                 (Map)
-import qualified Data.Map                                 as Map
-import           Data.Row                                 (Row)
+import           Data.Map                                         (Map)
+import qualified Data.Map                                         as Map
+import           Data.Row                                         (Row)
 import           Data.Typeable
 
-import           Language.Plutus.Contract                 (Contract, ContractInstanceId, HasBlockchainActions)
+import           Language.Plutus.Contract                         (Contract, ContractInstanceId, HasBlockchainActions)
 import           Language.Plutus.Contract.Test
-import           Language.Plutus.Contract.Test.StateModel hiding (Script, arbitraryAction, initialState, monitoring,
-                                                           nextState, perform, precondition, shrinkAction)
-import qualified Language.Plutus.Contract.Test.StateModel as StateModel
-import           Language.PlutusTx.Monoid                 (inv)
+import qualified Language.Plutus.Contract.Test.DynamicLogic.Monad as DL
+import           Language.Plutus.Contract.Test.StateModel         hiding (Script, arbitraryAction, initialState,
+                                                                   monitoring, nextState, perform, precondition,
+                                                                   shrinkAction)
+import qualified Language.Plutus.Contract.Test.StateModel         as StateModel
+import           Language.PlutusTx.Monoid                         (inv)
 import           Ledger.Slot
-import           Ledger.Value                             (Value)
-import           Plutus.Trace.Emulator                    as Trace (ContractHandle, EmulatorTrace,
-                                                                    activateContractWallet, chInstanceId)
+import           Ledger.Value                                     (Value)
+import           Plutus.Trace.Emulator                            as Trace (ContractHandle, EmulatorTrace,
+                                                                            activateContractWallet, chInstanceId)
 
-import           Test.QuickCheck                          hiding ((.&&.))
-import qualified Test.QuickCheck                          as QC
-import           Test.QuickCheck.Monadic                  as QC
+import           Test.QuickCheck                                  hiding ((.&&.))
+import qualified Test.QuickCheck                                  as QC
+import           Test.QuickCheck.Monadic                          as QC
 
 data ModelState state = ModelState
         { _currentSlot   :: Slot
@@ -204,6 +206,9 @@ instance ContractModel state => StateModel (ModelState state) where
     postcondition _s _cmd _env _res = True
 
     monitoring (s0, s1) (ContractAction cmd) _env _res = monitoring (s0, s1) cmd
+
+instance ContractModel s => DL.DynLogicModel (ModelState s) where
+    restricted _ = False
 
 -- * Running the model
 
