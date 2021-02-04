@@ -11,7 +11,7 @@
 module Language.Plutus.Contract.Test.DynamicLogic.Quantify
     ( Quantification(isaQ)
     , isEmptyQ, generateQ, shrinkQ
-    , arbitraryQ, exactlyQ, elementsQ, oneofQ, frequencyQ, mapQ, whereQ
+    , arbitraryQ, exactlyQ, elementsQ, oneofQ, frequencyQ, mapQ, whereQ, chooseQ
     , validQuantification
     , Quantifiable(..)
     ) where
@@ -21,6 +21,7 @@ import           Data.Typeable
 
 import           Control.Monad
 
+import           System.Random
 import           Test.QuickCheck
 
 import           Language.Plutus.Contract.Test.DynamicLogic.CanGenerate
@@ -48,6 +49,12 @@ exactlyQ a = Quantification
     (Just $ return a)
     (==a)
     (const [])
+
+chooseQ :: (Arbitrary a, Random a, Ord a) => (a, a) -> Quantification a
+chooseQ r@(a, b) = Quantification
+    (Just $ choose r)
+    (\ x -> a <= x && x <= b)
+    shrink
 
 elementsQ :: Eq a => [a] -> Quantification a
 elementsQ as = Quantification g (`elem` as) (\a -> takeWhile (/=a) as)

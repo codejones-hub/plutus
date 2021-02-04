@@ -141,6 +141,7 @@ library
         uuid -any,
         aeson-pretty -any,
         QuickCheck -any,
+        random -any,
         unordered-containers -any,
         foldl -any,
         streaming -any
