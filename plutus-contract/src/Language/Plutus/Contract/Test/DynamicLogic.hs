@@ -324,7 +324,7 @@ stepDLtoDL d s step = case stepDL d s step of
 
 propPruningGeneratedScriptIsNoop :: DynLogicModel s => DynLogic s -> Property
 propPruningGeneratedScriptIsNoop d =
-  forAll (sized $ generateDLTest d) $ \test ->
+  forAll (sized $ \ n -> choose (1, max 1 n) >>= generateDLTest d) $ \test ->
     let script = case test of BadPrecondition s _ -> s
                               Looping s           -> s
                               Stuck s             -> s
