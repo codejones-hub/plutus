@@ -58,6 +58,7 @@ module Language.Plutus.Contract.Test.ContractModel
 import           Control.Lens
 import           Control.Monad.Cont
 import           Control.Monad.Freer                                 as Eff
+import           Control.Monad.Freer.Log
 import           Control.Monad.Freer.State
 import qualified Data.Aeson                                          as JSON
 import           Data.Foldable
@@ -283,7 +284,7 @@ propRunScript :: forall state.
     Script state ->
     (ModelState state -> PropertyM EmulatorTrace ()) ->
     Property
-propRunScript = propRunScriptWithOptions defaultCheckOptions
+propRunScript = propRunScriptWithOptions (set minLogLevel Warning defaultCheckOptions)
 
 propRunScriptWithOptions :: forall state.
     ( HasBlockchainActions (Schema state)
