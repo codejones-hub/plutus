@@ -37,7 +37,6 @@ import qualified Language.PlutusTx                                         as Pl
 
 import           Language.Plutus.Contract.Test                             hiding (not)
 import           Language.Plutus.Contract.Test.ContractModel
-import           Language.Plutus.Contract.Test.DynamicLogic.Monad
 import           Language.Plutus.Contract.Test.StateModel                  (stateAfter)
 import qualified Language.Plutus.Contract.Test.StateModel                  as StateModel
 import           Language.PlutusTx.Coordination.Contracts.GameStateMachine as G
@@ -46,7 +45,7 @@ import qualified Ledger.Ada                                                as Ad
 import qualified Ledger.Typed.Scripts                                      as Scripts
 import           Ledger.Value                                              (Value, isZero)
 import           Plutus.Trace.Emulator                                     as Trace
-import qualified Wallet.Emulator                                           as EM
+import           Wallet.Emulator                                           (Wallet)
 import           Wallet.Emulator.Folds                                     (postMapM)
 
 -- * QuickCheck model
@@ -201,21 +200,17 @@ delay :: Int -> EmulatorTrace ()
 delay n = void $ waitNSlots (fromIntegral n)
 
 prop_Game :: Script GameModel -> Property
-prop_Game = propGame' Info
+prop_Game script = propRunScript_ wallets G.contract script
 
 propGame' :: LogLevel -> Script GameModel -> Property
 propGame' l s = propRunScriptWithOptions (set minLogLevel l defaultCheckOptions)
-                                                   wallets G.contract finalPredicate before s after
+                                         wallets G.contract test before s after
     where
+        test   _ = pure True
         before _ = return ()
         after  _ = run (delay 10)
 
-type DLC s = DL (ModelState s)
-
-actionC :: ContractModel s => Command s -> DLC s ()
-actionC cmd = action (ContractAction @_ @() cmd)
-
-noLockedFunds :: DLC GameModel ()
+noLockedFunds :: DL GameModel ()
 noLockedFunds = do
     anyActions_
     w <- forAllQ (elementsQ wallets) -- Anyone can get the money.
@@ -223,8 +218,8 @@ noLockedFunds = do
     let secret = s ^. modelState . currentSecret
         val    = s ^. modelState . gameValue
     unless (isZero $ lockedFunds s) $ do
-        actionC $ GiveToken w
-        actionC $ Guess w secret secret val
+        action $ GiveToken w
+        action $ Guess w secret secret val
         assertModel $ isZero . lockedFunds
 
 -- Check that we can always get the money out of the guessing game (by guessing correctly).

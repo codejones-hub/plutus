@@ -33,39 +33,57 @@ module Language.Plutus.Contract.Test.ContractModel
     , ($=), ($~)
     , getState
     , getModelState
+    -- * Dynamic logic
+    , DL
+    , action
+    , DL.anyAction
+    , DL.anyActions
+    , DL.anyActions_
+    , DL.stopping
+    , DL.weight
+    , DL.getModelStateDL
+    , DL.assert
+    , DL.assertModel
+    , DL.forAllQ
+    , DL.forAllDL
+    , DL.DynLogic
+    , module Language.Plutus.Contract.Test.DynamicLogic.Quantify
     -- * Running properties
     , Script
+    , propRunScript_
     , propRunScript
     , propRunScriptWithOptions
     ) where
 
 import           Control.Lens
 import           Control.Monad.Cont
-import           Control.Monad.Freer                              as Eff
+import           Control.Monad.Freer                                 as Eff
 import           Control.Monad.Freer.State
-import qualified Data.Aeson                                       as JSON
+import qualified Data.Aeson                                          as JSON
 import           Data.Foldable
-import           Data.Map                                         (Map)
-import qualified Data.Map                                         as Map
-import           Data.Row                                         (Row)
+import           Data.Map                                            (Map)
+import qualified Data.Map                                            as Map
+import           Data.Row                                            (Row)
 import           Data.Typeable
 
-import           Language.Plutus.Contract                         (Contract, ContractInstanceId, HasBlockchainActions)
+import           Language.Plutus.Contract                            (Contract, ContractInstanceId,
+                                                                      HasBlockchainActions)
 import           Language.Plutus.Contract.Test
-import qualified Language.Plutus.Contract.Test.DynamicLogic.Monad as DL
-import           Language.Plutus.Contract.Test.StateModel         hiding (Script, arbitraryAction, initialState,
-                                                                   monitoring, nextState, perform, precondition,
-                                                                   shrinkAction)
-import qualified Language.Plutus.Contract.Test.StateModel         as StateModel
-import           Language.PlutusTx.Monoid                         (inv)
+import qualified Language.Plutus.Contract.Test.DynamicLogic.Monad    as DL
+import           Language.Plutus.Contract.Test.DynamicLogic.Quantify
+import           Language.Plutus.Contract.Test.StateModel            hiding (Script, arbitraryAction, initialState,
+                                                                      monitoring, nextState, perform, precondition,
+                                                                      shrinkAction)
+import qualified Language.Plutus.Contract.Test.StateModel            as StateModel
+import           Language.PlutusTx.Monoid                            (inv)
 import           Ledger.Slot
-import           Ledger.Value                                     (Value)
-import           Plutus.Trace.Emulator                            as Trace (ContractHandle, EmulatorTrace,
-                                                                            activateContractWallet, chInstanceId)
+import           Ledger.Value                                        (Value)
+import           Plutus.Trace.Emulator                               as Trace (ContractHandle, EmulatorTrace,
+                                                                               activateContractWallet, chInstanceId)
 
-import           Test.QuickCheck                                  hiding ((.&&.))
-import qualified Test.QuickCheck                                  as QC
-import           Test.QuickCheck.Monadic                          as QC
+import           Test.QuickCheck                                     hiding ((.&&.))
+import qualified Test.QuickCheck                                     as QC
+import           Test.QuickCheck.Monadic                             as QC
 
 data ModelState state = ModelState
         { _currentSlot   :: Slot
@@ -207,15 +225,22 @@ instance ContractModel state => StateModel (ModelState state) where
 
     monitoring (s0, s1) (ContractAction cmd) _env _res = monitoring (s0, s1) cmd
 
+-- * Dynamic logic
+
+type DL s = DL.DL (ModelState s)
+
+action :: ContractModel s => Command s -> DL s ()
+action cmd = DL.action (ContractAction @_ @() cmd)
+
 instance ContractModel s => DL.DynLogicModel (ModelState s) where
     restricted _ = False
 
 -- * Running the model
 
 runTr :: CheckOptions -> TracePredicate -> EmulatorTrace () -> Property
-runTr opts predicate action =
+runTr opts predicate trace =
   flip runCont (const $ property True) $
-    checkPredicateInner opts predicate action
+    checkPredicateInner opts predicate trace
                         debugOutput assertResult
   where
     debugOutput :: String -> Cont Property ()
@@ -231,6 +256,21 @@ activateWallets :: forall state.
     ) => [Wallet] -> Contract (Schema state) (Err state) () -> EmulatorTrace (Map Wallet (Handle state))
 activateWallets wallets contract =
     Map.fromList . zip wallets <$> mapM (flip (activateContractWallet @(Schema state)) contract) wallets
+
+propRunScript_ :: forall state.
+    ( HasBlockchainActions (Schema state)
+    , ContractConstraints (Schema state)
+    , ContractModel state ) =>
+    [Wallet] ->
+    Contract (Schema state) (Err state) () ->
+    Script state ->
+    Property
+propRunScript_ wallets contract script =
+    propRunScript wallets contract
+                  (\ _ -> pure True)
+                  (\ _ -> pure ())
+                  script
+                  (\ _ -> pure ())
 
 propRunScript :: forall state.
     ( HasBlockchainActions (Schema state)
