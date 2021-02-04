@@ -178,6 +178,24 @@ propGame' l s = propRunScriptWithOptions (set minLogLevel l defaultCheckOptions)
         before _ = return ()
         after  _ = run (delay 10)
 
+unitTest :: DL GameModel ()
+unitTest = do
+    action $ Lock w1 "hello" 8
+    action $ GiveToken w2
+    action $ Guess w2 "hello" "new secret" 3
+
+unitTest2 :: DL GameModel ()
+unitTest2 = do
+    unitTest
+    action $ GiveToken w3
+    action $ Guess w3 "new secret" "hello" 4
+
+unitTestFail :: DL GameModel ()
+unitTestFail = do
+    action $ Lock w1 "hello" 8
+    action $ GiveToken w2
+    action $ Guess w2 "hola" "new secret" 3
+
 noLockedFunds :: DL GameModel ()
 noLockedFunds = do
     anyActions_
