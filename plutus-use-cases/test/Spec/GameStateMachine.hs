@@ -53,7 +53,6 @@ import           Wallet.Emulator.Folds                                     (post
 
 data GameModel = GameModel
     { _gameValue     :: Integer
-    , _keeper        :: Maybe Wallet
     , _hasToken      :: Maybe Wallet
     , _currentSecret :: String }
     deriving (Show)
@@ -73,21 +72,19 @@ instance ContractModel GameModel where
     initialState = GameModel
         { _gameValue     = 0
         , _hasToken      = Nothing
-        , _keeper        = Nothing
         , _currentSecret = ""
         }
 
-    precondition s (Lock _ _ v)         = v > 0 && Nothing == s ^. modelState . hasToken
-    precondition s (Guess w _old _ val) = and [ Just w == s ^. modelState . hasToken
-                                              , val <= s ^. modelState . gameValue
-                                              ]
-                                              -- , Just w /= s ^. modelState . keeper ]
-    precondition s (GiveToken w)        = and [ (s ^. modelState . hasToken) `notElem` [Nothing] -- , Just w]
-                                              ] -- , s ^. modelState . gameValue > 0 ] -- stops the test
+    precondition s cmd = case cmd of
+            Lock _ _ v    -> v > 0 && tok == Nothing
+            Guess w _ _ v -> v <= val && tok == Just w
+            GiveToken w   -> tok /= Nothing
+        where
+            tok = s ^. modelState . hasToken
+            val = s ^. modelState . gameValue
 
     nextState (Lock w secret val) = do
         hasToken      $= Just w
-        keeper        $= Just w
         currentSecret $= secret
         gameValue     $= val
         forge gameTokenVal
@@ -98,7 +95,6 @@ instance ContractModel GameModel where
     nextState (Guess w old new val) = do
         correct <- (old ==) <$> getModelState currentSecret
         when correct $ do
-            keeper        $= Just w
             currentSecret $= new
             gameValue     $~ subtract val
             deposit w $ Ada.lovelaceValueOf val
@@ -111,13 +107,11 @@ instance ContractModel GameModel where
         wait 1
 
     arbitraryCommand s0 = oneof $
-        [ Lock      <$> genWallet <*> genGuess <*> genValue
-        ] ++
-        --    | Nothing == s ^. hasToken ] ++
+        [ Lock      <$> genWallet <*> genGuess <*> genValue ] ++
         [ Guess w   <$> genGuess <*> genGuess <*> choose (1, s ^. gameValue)
-            | Just w <- [s ^. hasToken], s ^. hasToken /= s ^. keeper, s ^. gameValue > 0 ] ++
+            | Just w <- [s ^. hasToken], s ^. gameValue > 0 ] ++
         [ GiveToken <$> genWallet
-            | s ^. hasToken /= Nothing ] -- ++
+            | s ^. hasToken /= Nothing ]
         where s = s0 ^. modelState
 
     shrinkCommand _s (Lock w secret val) =
