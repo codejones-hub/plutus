@@ -21,6 +21,11 @@ module Language.Plutus.Contract.Test.ContractModel
     , ContractModel(..)
     , Action(..)
     , addCommands
+    -- * GetModelState
+    , GetModelState(..)
+    , getModelState
+    , viewState
+    , viewModelState
     -- * Spec monad
     , Spec
     , wait
@@ -31,8 +36,6 @@ module Language.Plutus.Contract.Test.ContractModel
     , withdraw
     , transfer
     , ($=), ($~)
-    , getState
-    , getModelState
     -- * Dynamic logic
     , DL
     , action
@@ -132,6 +135,19 @@ class ( Typeable state
 
 makeLenses 'ModelState
 
+class Monad m => GetModelState m where
+    type StateType m :: *
+    getState :: m (ModelState (StateType m))
+
+getModelState :: GetModelState m => m (StateType m)
+getModelState = _modelState <$> getState
+
+viewState :: GetModelState m => Getting a (ModelState (StateType m)) a -> m a
+viewState l = (^. l) <$> getState
+
+viewModelState :: GetModelState m => Getting a (StateType m) a -> m a
+viewModelState l = viewState (modelState . l)
+
 runSpec :: Spec state () -> ModelState state -> ModelState state
 runSpec spec s = Eff.run $ execState s spec
 
@@ -162,11 +178,9 @@ l $= x = l $~ const x
 ($~) :: forall s a b. ASetter s s a b -> (a -> b) -> Spec s ()
 l $~ f = modify @(ModelState s) (over (modelState . l) f)
 
-getState :: Getter (ModelState s) a -> Spec s a
-getState l = gets (^. l)
-
-getModelState :: Getter s a -> Spec s a
-getModelState l = getState (modelState . l)
+instance GetModelState (Spec s) where
+    type StateType (Spec s) = s
+    getState = get
 
 handle :: ModelState s -> Wallet -> Trace.ContractHandle (Schema s) (Err s)
 handle s w = s ^?! walletHandles . at w . _Just
@@ -235,6 +249,10 @@ action cmd = DL.action (ContractAction @_ @() cmd)
 
 instance ContractModel s => DL.DynLogicModel (ModelState s) where
     restricted _ = False
+
+instance GetModelState (DL s) where
+    type StateType (DL s) = s
+    getState = DL.getModelStateDL
 
 -- * Running the model
 

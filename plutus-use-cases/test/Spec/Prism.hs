@@ -162,8 +162,8 @@ instance ContractModel PrismModel where
             Issue   -> isIssued $= Issued
             Call    -> stoState $~ \ case STOReady -> STOPending; sto -> sto
             Present -> do
-                iss <- (== Issued)     <$> getModelState isIssued
-                sto <- (== STOPending) <$> getModelState stoState
+                iss <- (== Issued)     <$> viewModelState isIssued
+                sto <- (== STOPending) <$> viewModelState stoState
                 stoState $= STOReady
                 when (iss && sto) $ do
                     transfer user issuer (Ada.lovelaceValueOf numTokens)

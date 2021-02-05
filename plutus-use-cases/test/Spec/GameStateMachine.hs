@@ -93,7 +93,7 @@ instance ContractModel GameModel where
         wait 2
 
     nextState (Guess w old new val) = do
-        correct <- (old ==) <$> getModelState currentSecret
+        correct <- (old ==) <$> viewModelState currentSecret
         when correct $ do
             currentSecret $= new
             gameValue     $~ subtract val
@@ -101,7 +101,7 @@ instance ContractModel GameModel where
         wait 1
 
     nextState (GiveToken w) = do
-        w0 <- fromJust <$> getModelState hasToken
+        w0 <- fromJust <$> viewModelState hasToken
         transfer w0 w gameTokenVal
         hasToken $= Just w
         wait 1
@@ -194,10 +194,9 @@ noLockedFunds :: DL GameModel ()
 noLockedFunds = do
     anyActions_
     w <- forAllQ (elementsQ wallets) -- Anyone can get the money.
-    s <- getModelStateDL
-    let secret = s ^. modelState . currentSecret
-        val    = s ^. modelState . gameValue
-    unless (isZero $ lockedFunds s) $ do
+    secret <- viewModelState currentSecret
+    val    <- viewModelState gameValue
+    unless (val == 0) $ do
         action $ GiveToken w
         action $ Guess w secret secret val
     assertModel $ isZero . lockedFunds
