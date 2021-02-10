@@ -139,13 +139,20 @@ doRevoke Issued  = Revoked
 waitSlots :: Integer
 waitSlots = 2
 
+deriving instance Eq   (HandleKey PrismModel s)
+deriving instance Show (HandleKey PrismModel s)
+
 instance ContractModel PrismModel where
 
     data Command PrismModel = Delay | Issue | Revoke | Call | Present
         deriving (Eq, Show)
 
-    type Schema PrismModel = PrismSchema
     type Err    PrismModel = PrismError
+
+    data HandleKey PrismModel s where
+        MirrorH  :: HandleKey PrismModel PrismSchema
+        UserH    :: HandleKey PrismModel PrismSchema
+        ManagerH :: HandleKey PrismModel PrismSchema
 
     arbitraryCommand _ = QC.elements [Delay, Revoke, Issue, Call, Present]
 
@@ -172,10 +179,10 @@ instance ContractModel PrismModel where
 
     perform s cmd = case cmd of
         Delay   -> wrap $ delay 1
-        Issue   -> wrap $ Trace.callEndpoint @"issue"              (handle s mirror) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
-        Revoke  -> wrap $ Trace.callEndpoint @"revoke"             (handle s mirror) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
-        Call    -> wrap $ Trace.callEndpoint @"sto"                (handle s user) stoSubscriber
-        Present -> wrap $ Trace.callEndpoint @"credential manager" (handle s user) (contractInstanceId s credentialManager)
+        Issue   -> wrap $ Trace.callEndpoint @"issue"              (handle s MirrorH) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
+        Revoke  -> wrap $ Trace.callEndpoint @"revoke"             (handle s MirrorH) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
+        Call    -> wrap $ Trace.callEndpoint @"sto"                (handle s UserH) stoSubscriber
+        Present -> wrap $ Trace.callEndpoint @"credential manager" (handle s UserH) (contractInstanceId s ManagerH)
         where                     -- v Wait a generous amount of blocks between calls
             wrap m   = m *> delay waitSlots
 
@@ -194,14 +201,16 @@ finalPredicate _ =
         | w <- [ issuer, user, mirror, credentialManager ] ]
 
 prop_Prism :: Script PrismModel -> Property
-prop_Prism script = propRunScript @PrismModel wallets contract finalPredicate before script after
+prop_Prism script = propRunScript @PrismModel spec finalPredicate before script after
     where
-        wallets = [user, mirror, credentialManager] -- , issuer]
+        spec = [ HandleSpec UserH    user contract
+               , HandleSpec MirrorH  mirror contract
+               , HandleSpec ManagerH credentialManager contract ]
         before :: ModelState PrismModel -> Trace.EmulatorTrace ()
         before s = do
-            Trace.callEndpoint @"role" (handle s user)              UnlockSTO
-            Trace.callEndpoint @"role" (handle s mirror)            Mirror
-            Trace.callEndpoint @"role" (handle s credentialManager) CredMan
+            Trace.callEndpoint @"role" (handle s UserH)    UnlockSTO
+            Trace.callEndpoint @"role" (handle s MirrorH)  Mirror
+            Trace.callEndpoint @"role" (handle s ManagerH) CredMan
             delay 5
         after _ = return () -- monitor $ collect $ s ^. balances . at user
 

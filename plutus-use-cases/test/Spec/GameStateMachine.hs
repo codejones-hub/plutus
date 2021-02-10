@@ -59,10 +59,15 @@ data GameModel = GameModel
 
 makeLenses 'GameModel
 
+deriving instance Eq (HandleKey GameModel schema)
+deriving instance Show (HandleKey GameModel schema)
+
 instance ContractModel GameModel where
 
-    type Schema GameModel = GameStateMachineSchema
     type Err    GameModel = GameError
+
+    data HandleKey GameModel schema where
+        WalletKey :: Wallet -> HandleKey GameModel GameStateMachineSchema
 
     -- The commands available to a test case
     data Command GameModel = Lock      Wallet String Integer
@@ -80,12 +85,14 @@ instance ContractModel GameModel where
     -- wallets and what the model thinks the current balances are.
     perform s cmd = case cmd of
         Lock w new val -> do
-            callEndpoint @"lock" (handle s w) LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
+            callEndpoint @"lock" (handle s $ WalletKey w)
+                         LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
             delay 2
         Guess w old new val -> do
-            callEndpoint @"guess" (handle s w) GuessArgs{ guessArgsOldSecret = old
-                                                        , guessArgsNewSecret = new
-                                                        , guessArgsValueTakenOut = Ada.lovelaceValueOf val}
+            callEndpoint @"guess" (handle s $ WalletKey w)
+                GuessArgs{ guessArgsOldSecret = old
+                         , guessArgsNewSecret = new
+                         , guessArgsValueTakenOut = Ada.lovelaceValueOf val}
             delay 1
         GiveToken w' -> do
             let w = fromJust (s ^. modelState . hasToken)
@@ -147,13 +154,16 @@ instance ContractModel GameModel where
 
     monitoring _ _ = id
 
+handleSpec :: [HandleSpec GameModel]
+handleSpec = [ HandleSpec (WalletKey w) w G.contract | w <- wallets ]
+
 -- | The main property. 'propRunScript_' checks that balances match the model after each test.
 prop_Game :: Script GameModel -> Property
-prop_Game script = propRunScript_ wallets G.contract script
+prop_Game script = propRunScript_ handleSpec script
 
 propGame' :: LogLevel -> Script GameModel -> Property
 propGame' l s = propRunScriptWithOptions (set minLogLevel l defaultCheckOptions)
-                                         wallets G.contract test before s after
+                                         handleSpec test before s after
     where
         test   _ = pure True
         before _ = return ()

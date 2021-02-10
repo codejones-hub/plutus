@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE PolyKinds             #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE TemplateHaskell       #-}
@@ -21,6 +22,7 @@ module Language.Plutus.Contract.Test.ContractModel
     , ContractModel(..)
     , Action(..)
     , addCommands
+    , HandleSpec(..)
     -- * GetModelState
     , GetModelState(..)
     , getModelState
@@ -89,12 +91,37 @@ import           Test.QuickCheck                                     hiding ((.&
 import qualified Test.QuickCheck                                     as QC
 import           Test.QuickCheck.Monadic                             as QC
 
+data IMap (key :: i -> *) (val :: i -> *) where
+    IMNil  :: IMap key val
+    IMCons :: Typeable i => key i -> val i -> IMap key val -> IMap key val
+
+imLookup :: (Typeable i, Typeable key, Typeable val, Eq (key i)) => key i -> IMap key val -> Maybe (val i)
+imLookup _ IMNil = Nothing
+imLookup k (IMCons key val m) =
+    case cast (key, val) of
+        Just (key', val') | key' == k -> Just val'
+        _                             -> imLookup k m
+
+data HandleSpec state where
+    HandleSpec :: forall state schema.
+                  ( Typeable schema
+                  , HasBlockchainActions schema
+                  , ContractConstraints schema )
+                  => HandleKey state schema
+                  -> Wallet
+                  -> Contract schema (Err state) ()
+                  -> HandleSpec state
+
+data HandleVal err schema = HandleVal (ContractHandle schema err)
+
+type Handles state = IMap (HandleKey state) (HandleVal (Err state))
+
 data ModelState state = ModelState
         { _currentSlot   :: Slot
         , _lastSlot      :: Slot
         , _balances      :: Map Wallet Value
         , _forged        :: Value
-        , _walletHandles :: Map Wallet (ContractHandle (Schema state) (Err state))
+        , _walletHandles :: Handles state
         , _modelState    :: state
         }
 
@@ -103,8 +130,6 @@ type Script s = StateModel.Script (ModelState s)
 instance Show state => Show (ModelState state) where
     show = show . _modelState   -- for now
 
-type Handle state = ContractHandle (Schema state) (Err state)
-
 type Spec state = Eff '[State (ModelState state)]
 
 class ( Typeable state
@@ -112,12 +137,15 @@ class ( Typeable state
       , Show (Command state)
       , Eq (Command state)
       , Show (Err state)
+      , Typeable (Err state)
+      , (forall s. Eq (HandleKey state s))
+      , (forall s. Show (HandleKey state s))
       , JSON.ToJSON (Err state)
       , JSON.FromJSON (Err state)
       ) => ContractModel state where
     data Command state
-    type Schema state :: Row *
     type Err state
+    data HandleKey state :: Row * -> *
 
     arbitraryCommand :: ModelState state -> Gen (Command state)
 
@@ -182,23 +210,17 @@ instance GetModelState (Spec s) where
     type StateType (Spec s) = s
     getState = get
 
-handle :: ModelState s -> Wallet -> Trace.ContractHandle (Schema s) (Err s)
-handle s w = s ^?! walletHandles . at w . _Just
+handle :: (ContractModel s, Typeable schema) => ModelState s -> HandleKey s schema -> Trace.ContractHandle schema (Err s)
+handle s key =
+    case imLookup key (s ^. walletHandles) of
+        Just (HandleVal h) -> h
+        Nothing            -> error $ "handle: No handle for " ++ show key
 
 lockedFunds :: ModelState s -> Value
 lockedFunds s = s ^. forged <> inv (fold $ s ^. balances)
 
--- Using this function in models makes ghc choke.
--- callEndpoint ::
---     forall l s ep.
---     (ContractConstraints (Schema s), HasEndpoint l ep (Schema s)) => ModelState s -> Wallet -> ep -> EmulatorTrace ()
--- callEndpoint s w v =
---     case s ^. walletHandles . at w of
---         Nothing -> return () -- fail in some way? could add error effect on top of EmulatorTrace
---         Just h  -> Trace.callEndpoint @l @ep @(Schema s) h v
-
-contractInstanceId :: ModelState s -> Wallet -> ContractInstanceId
-contractInstanceId s w = chInstanceId $ handle s w
+contractInstanceId :: (ContractModel s, Typeable schema) => ModelState s -> HandleKey s schema -> ContractInstanceId
+contractInstanceId s key = chInstanceId $ handle s key
 
 addCommands :: forall state. ContractModel state => Script state -> [Command state] -> Script state
 addCommands (StateModel.Script s) cmds = StateModel.Script $ s ++ [Var i := ContractAction @state @() cmd | (cmd, i) <- zip cmds [n + 1..] ]
@@ -226,7 +248,7 @@ instance ContractModel state => StateModel (ModelState state) where
                               , _lastSlot      = 125        -- Set by propRunScript
                               , _balances      = Map.empty
                               , _forged        = mempty
-                              , _walletHandles = Map.empty
+                              , _walletHandles = IMNil
                               , _modelState    = initialState }
 
     nextState s (ContractAction cmd) _v = runSpec (nextState cmd) s
@@ -268,35 +290,28 @@ runTr opts predicate trace =
     assertResult :: Bool -> Cont Property ()
     assertResult ok = cont $ \ k -> ok QC..&&. k ()
 
-activateWallets :: forall state.
-    ( ContractModel state
-    , HasBlockchainActions (Schema state)
-    , ContractConstraints (Schema state)
-    ) => [Wallet] -> Contract (Schema state) (Err state) () -> EmulatorTrace (Map Wallet (Handle state))
-activateWallets wallets contract =
-    Map.fromList . zip wallets <$> mapM (flip (activateContractWallet @(Schema state)) contract) wallets
+activateWallets :: forall state. ContractModel state => [HandleSpec state] -> EmulatorTrace (Handles state)
+activateWallets [] = return IMNil
+activateWallets (HandleSpec key wallet contract : spec) = do
+    h <- activateContractWallet wallet contract
+    m <- activateWallets spec
+    return $ IMCons key (HandleVal h) m
 
 propRunScript_ :: forall state.
-    ( HasBlockchainActions (Schema state)
-    , ContractConstraints (Schema state)
-    , ContractModel state ) =>
-    [Wallet] ->
-    Contract (Schema state) (Err state) () ->
+    ContractModel state =>
+    [HandleSpec state] ->
     Script state ->
     Property
-propRunScript_ wallets contract script =
-    propRunScript wallets contract
+propRunScript_ handleSpecs script =
+    propRunScript handleSpecs
                   (\ _ -> pure True)
                   (\ _ -> pure ())
                   script
                   (\ _ -> pure ())
 
 propRunScript :: forall state.
-    ( HasBlockchainActions (Schema state)
-    , ContractConstraints (Schema state)
-    , ContractModel state ) =>
-    [Wallet] ->
-    Contract (Schema state) (Err state) () ->
+    ContractModel state =>
+    [HandleSpec state] ->
     (ModelState state -> TracePredicate) ->
     (ModelState state -> EmulatorTrace ()) ->
     Script state ->
@@ -305,20 +320,17 @@ propRunScript :: forall state.
 propRunScript = propRunScriptWithOptions (set minLogLevel Warning defaultCheckOptions)
 
 propRunScriptWithOptions :: forall state.
-    ( HasBlockchainActions (Schema state)
-    , ContractConstraints (Schema state)
-    , ContractModel state ) =>
+    ContractModel state =>
     CheckOptions ->
-    [Wallet] ->
-    Contract (Schema state) (Err state) () ->
+    [HandleSpec state] ->
     (ModelState state -> TracePredicate) ->
     (ModelState state -> EmulatorTrace ()) ->
     Script state ->
     (ModelState state -> PropertyM EmulatorTrace ()) ->
     Property
-propRunScriptWithOptions opts wallets contract predicate before script after =
+propRunScriptWithOptions opts handleSpecs predicate before script after =
     monadic (runTr opts finalPredicate . void) $ do
-        handles <- QC.run $ activateWallets @state wallets contract
+        handles <- QC.run $ activateWallets @state handleSpecs
         let initState = StateModel.initialState { _walletHandles = handles
                                                 , _lastSlot      = opts ^. maxSlot }
         QC.run $ before initState
