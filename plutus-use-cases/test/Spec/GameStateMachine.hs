@@ -21,6 +21,7 @@ import           Control.Monad
 import           Control.Monad.Freer.Error
 import           Control.Monad.Freer.Log                                   (LogLevel (..))
 import           Control.Monad.Freer.Writer
+import           Data.List
 import           Data.Map                                                  (Map)
 import qualified Data.Map                                                  as Map
 import           Data.Maybe
@@ -50,7 +51,6 @@ import           Wallet.Emulator.Folds                                     (post
 
 -- * QuickCheck model
 
-
 data GameModel = GameModel
     { _gameValue     :: Integer
     , _hasToken      :: Maybe Wallet
@@ -61,13 +61,14 @@ makeLenses 'GameModel
 
 instance ContractModel GameModel where
 
+    type Schema GameModel = GameStateMachineSchema
+    type Err    GameModel = GameError
+
+    -- The commands available to a test case
     data Command GameModel = Lock      Wallet String Integer
                            | Guess     Wallet String String Integer
                            | GiveToken Wallet
         deriving (Eq, Show)
-
-    type Schema GameModel = GameStateMachineSchema
-    type Err    GameModel = GameError
 
     initialState = GameModel
         { _gameValue     = 0
@@ -75,13 +76,23 @@ instance ContractModel GameModel where
         , _currentSecret = ""
         }
 
-    precondition s cmd = case cmd of
-            Lock _ _ v    -> v > 0 && tok == Nothing
-            Guess w _ _ v -> v <= val && tok == Just w
-            GiveToken w   -> tok /= Nothing
-        where
-            tok = s ^. modelState . hasToken
-            val = s ^. modelState . gameValue
+    -- 'perform' gets a state, which includes the GameModel state, but also contract handles for the
+    -- wallets and what the model thinks the current balances are.
+    perform s cmd = case cmd of
+        Lock w new val -> do
+            callEndpoint @"lock" (handle s w) LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
+            delay 2
+        Guess w old new val -> do
+            callEndpoint @"guess" (handle s w) GuessArgs{ guessArgsOldSecret = old
+                                                        , guessArgsNewSecret = new
+                                                        , guessArgsValueTakenOut = Ada.lovelaceValueOf val}
+            delay 1
+        GiveToken w' -> do
+            let w = fromJust (s ^. modelState . hasToken)
+            payToWallet w w' gameTokenVal
+            delay 1
+
+    -- 'nextState' descibes how each command affects the state of the model
 
     nextState (Lock w secret val) = do
         hasToken      $= Just w
@@ -106,13 +117,24 @@ instance ContractModel GameModel where
         hasToken $= Just w
         wait 1
 
-    arbitraryCommand s0 = oneof $
+    -- To generate a random test case we need to know how to generate a random
+    -- command given the current model state.
+    arbitraryCommand s = oneof $
         [ Lock      <$> genWallet <*> genGuess <*> genValue ] ++
-        [ Guess w   <$> genGuess <*> genGuess <*> choose (1, s ^. gameValue)
-            | Just w <- [s ^. hasToken], s ^. gameValue > 0 ] ++
-        [ GiveToken <$> genWallet
-            | s ^. hasToken /= Nothing ]
-        where s = s0 ^. modelState
+        [ Guess w   <$> genGuess  <*> genGuess <*> choose (1, val) | Just w <- [tok], val > 0 ] ++
+        [ GiveToken <$> genWallet                                  | tok /= Nothing ]
+        where
+            tok = s ^. modelState . hasToken
+            val = s ^. modelState . gameValue
+
+    -- The 'precondition' says when a particular command is allowed.
+    precondition s cmd = case cmd of
+            Lock _ _ v    -> v > 0 && tok == Nothing
+            Guess w _ _ v -> v <= val && tok == Just w
+            GiveToken w   -> tok /= Nothing
+        where
+            tok = s ^. modelState . hasToken
+            val = s ^. modelState . gameValue
 
     shrinkCommand _s (Lock w secret val) =
         [Lock w' secret val | w' <- shrinkWallet w] ++
@@ -123,25 +145,19 @@ instance ContractModel GameModel where
         [Guess w' old new val | w' <- shrinkWallet w] ++
         [Guess w old new val' | val' <- shrink val]
 
-    perform s cmd = case cmd of
-        Lock w new val -> do
-            callEndpoint @"lock" (handle s w) LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
-            delay 2
-        Guess w old new val -> do
-            callEndpoint @"guess" (handle s w) GuessArgs{guessArgsOldSecret = old, guessArgsNewSecret = new, guessArgsValueTakenOut = Ada.lovelaceValueOf val}
-            delay 1
-        GiveToken w' -> do
-            let w = s ^?! modelState . hasToken . _Just
-            payToWallet w w' gameTokenVal
-            delay 1
+    monitoring _ _ = id
 
-    monitoring (s0, s1) act =
-      case act of
-        Guess _ guess _ _
-          | s0 ^. modelState . currentSecret == guess -> classify True "guessing-correctly"
-          | otherwise                                 -> classify True "guessing-wrongly"
-        _                         -> id
-      . (counterexample $ show s1)
+-- | The main property. 'propRunScript_' checks that balances match the model after each test.
+prop_Game :: Script GameModel -> Property
+prop_Game script = propRunScript_ wallets G.contract script
+
+propGame' :: LogLevel -> Script GameModel -> Property
+propGame' l s = propRunScriptWithOptions (set minLogLevel l defaultCheckOptions)
+                                         wallets G.contract test before s after
+    where
+        test   _ = pure True
+        before _ = return ()
+        after  _ = run (delay 10)
 
 wallets :: [Wallet]
 wallets = [w1, w2, w3]
@@ -161,20 +177,15 @@ genValue = getPositive <$> arbitrary
 delay :: Int -> EmulatorTrace ()
 delay n = void $ waitNSlots (fromIntegral n)
 
-prop_Game :: Script GameModel -> Property
-prop_Game script = propRunScript_ wallets G.contract script
+-- Dynamic Logic ----------------------------------------------------------
 
-propGame' :: LogLevel -> Script GameModel -> Property
-propGame' l s = propRunScriptWithOptions (set minLogLevel l defaultCheckOptions)
-                                         wallets G.contract test before s after
-    where
-        test   _ = pure True
-        before _ = return ()
-        after  _ = run (delay 10)
+prop_UnitTest :: Property
+prop_UnitTest = withMaxSuccess 1 $ forAllDL unitTest prop_Game
 
 unitTest :: DL GameModel ()
 unitTest = do
-    action $ Lock w1 "hello" 8
+    val <- forAllQ $ chooseQ (5, 20)
+    action $ Lock w1 "hello" val
     action $ GiveToken w2
     action $ Guess w2 "hello" "new secret" 3
 
@@ -193,15 +204,15 @@ unitTestFail = do
 noLockedFunds :: DL GameModel ()
 noLockedFunds = do
     anyActions_
-    w <- forAllQ (elementsQ wallets) -- Anyone can get the money.
+    w <- forAllQ $ elementsQ wallets
     secret <- viewModelState currentSecret
     val    <- viewModelState gameValue
-    unless (val == 0) $ do
+    when (val > 0) $ do
         action $ GiveToken w
         action $ Guess w secret secret val
     assertModel $ isZero . lockedFunds
 
--- Check that we can always get the money out of the guessing game (by guessing correctly).
+-- | Check that we can always get the money out of the guessing game (by guessing correctly).
 prop_NoLockedFunds :: Property
 prop_NoLockedFunds = forAllDL noLockedFunds prop_Game
 
