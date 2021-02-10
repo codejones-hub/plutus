@@ -20,10 +20,7 @@ open import Data.Vec hiding (_>>=_;_++_)
 open import Data.List hiding (_++_)
 
 open import Type
-open import Builtin
-open import Builtin.Constant.Type hiding (ByteString)
-open import Builtin.Constant.Term Ctx⋆ Kind * _⊢⋆_ con
-open import Builtin.Signature
+open import Builtin hiding (ByteString)
 open import Check
 open import Scoped.Extrication
 open import Type.BetaNBE
@@ -467,10 +464,11 @@ runTL t = do
 runCK : Term → Either ERROR Term
 runCK t = do
   tDB ← withE scopeError $ scopeCheckTm {0}{Z} (shifter Z (convTm t))
+  ty ,, _ ← withE (λ e → typeError (uglyTypeError e)) (inferType ∅ tDB)
   □ V ← withE runtimeError $ Scoped.CK.stepper maxsteps (ε ▻ tDB)
     where (_ ▻ _) → inj₁ (runtimeError gasError)
           (_ ◅ _) → inj₁ (runtimeError gasError)
-          ◆ → return (unconvTm (unshifter Z (extricateScope {0}{Z} (error missing)))) -- NOTE: we could use the typechecker to get the correct type
+          ◆ → return (unconvTm (unshifter Z (extricateScope {0}{Z} (extricate (error ty)))))
   return (unconvTm (unshifter Z (extricateScope (Scoped.CK.discharge V))))
 
 {-# COMPILE GHC runCK as runCKAgda #-}
@@ -479,11 +477,11 @@ runCK t = do
 runTCK : Term → Either ERROR Term
 runTCK t = do
   tDB ← withE scopeError (scopeCheckTm {0}{Z} (shifter Z (convTm t)))
-  _ ,, tC ← withE (λ e → typeError (uglyTypeError e)) (inferType ∅ tDB)
+  ty ,, tC ← withE (λ e → typeError (uglyTypeError e)) (inferType ∅ tDB)
   □ V ← withE runtimeError $ Algorithmic.CK.stepper maxsteps (ε ▻ tC)
     where (_ ▻ _) → inj₁ (runtimeError gasError)
           (_ ◅ _) → inj₁ (runtimeError gasError)
-          ◆ A → return (unconvTm (unshifter Z (extricateScope {0}{Z} (error missing)))) -- NOTE: we could use the typechecker to get the correct type
+          ◆ A → return (unconvTm (unshifter Z (extricateScope {0}{Z} (extricate (error ty)))))
   return (unconvTm (unshifter Z (extricateScope (extricate (Algorithmic.CK.discharge V)))))
 
 {-# COMPILE GHC runTCK as runTCKAgda #-}
@@ -492,11 +490,11 @@ runTCK t = do
 runTCEK : Term → Either ERROR Term
 runTCEK t = do
   tDB ← withE scopeError (scopeCheckTm {0}{Z} (shifter Z (convTm t)))
-  _ ,, tC ← withE (λ e → typeError (uglyTypeError e)) (inferType ∅ tDB)
+  ty ,, tC ← withE (λ e → typeError (uglyTypeError e)) (inferType ∅ tDB)
   □ V ← withE runtimeError $ Algorithmic.CEKV.stepper maxsteps (ε ; [] ▻ tC)
     where (_ ; _ ▻ _) → inj₁ (runtimeError gasError)
           (_ ◅ _) → inj₁ (runtimeError gasError)
-          ◆ A → return (unconvTm (unshifter Z (extricateScope {0}{Z} (error missing)))) -- NOTE: we could use the typechecker to get the correct type
+          ◆ A → return (unconvTm (unshifter Z (extricateScope {0}{Z} (extricate (error ty)))))
   return (unconvTm (unshifter Z (extricateScope (extricate (Algorithmic.CEKV.discharge V)))))
 
 {-# COMPILE GHC runTCEK as runTCEKAgda #-}

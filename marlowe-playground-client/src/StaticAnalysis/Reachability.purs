@@ -1,7 +1,16 @@
-module StaticAnalysis.Reachability (areContractAndStateTheOnesAnalysed, getUnreachableContracts, initialisePrefixMap, startReachabilityAnalysis, stepPrefixMap) where
+module StaticAnalysis.Reachability
+  ( analyseReachability
+  , areContractAndStateTheOnesAnalysed
+  , getUnreachableContracts
+  , initialisePrefixMap
+  , startReachabilityAnalysis
+  , stepPrefixMap
+  ) where
 
 import Prelude hiding (div)
 import Control.Monad.State as CMS
+import Control.Monad.Reader (class MonadAsk)
+import Data.Lens (assign)
 import Data.List (List(..), any, catMaybes, fromFoldable, null)
 import Data.List.NonEmpty (fromList, head, tail, toList)
 import Data.Map (fromFoldableWith, lookup, unionWith)
@@ -9,14 +18,33 @@ import Data.Maybe (Maybe(..))
 import Data.Set (singleton, union)
 import Data.Tuple.Nested (type (/\), (/\))
 import Effect.Aff.Class (class MonadAff)
+import Env (Env)
 import Halogen (HalogenM)
-import MainFrame.Types (ChildSlots)
-import Marlowe (SPParams_)
-import Marlowe.Semantics (Contract(..), Observation(..))
+import Marlowe.Semantics (Contract(..), Observation(..), emptyState)
 import Marlowe.Semantics as S
-import MarloweEditor.Types (Action, AnalysisState(..), ContractPath, ContractPathStep, ContractZipper(..), MultiStageAnalysisData(..), MultiStageAnalysisProblemDef, PrefixMap, State)
-import Servant.PureScript.Settings (SPSettings_)
+import Marlowe.Extended (toCore)
+import Marlowe.Extended as EM
 import StaticAnalysis.StaticTools (closeZipperContract, startMultiStageAnalysis, zipperToContractPath)
+import StaticAnalysis.Types (AnalysisState(..), ContractPath, ContractPathStep, ContractZipper(..), MultiStageAnalysisData(..), MultiStageAnalysisProblemDef, PrefixMap, _analysisState)
+
+analyseReachability ::
+  forall m state action slots.
+  MonadAff m =>
+  MonadAsk Env m =>
+  EM.Contract ->
+  HalogenM { analysisState :: AnalysisState | state } action slots Void m Unit
+analyseReachability extendedContract = do
+  case toCore extendedContract of
+    Just contract -> do
+      assign _analysisState (ReachabilityAnalysis AnalysisNotStarted)
+      -- when editor and simulator were together the analyse contract could be made
+      -- at any step of the simulator. Now that they are separate, it can only be done
+      -- with initial state
+      let
+        emptySemanticState = emptyState zero
+      newReachabilityAnalysisState <- startReachabilityAnalysis contract emptySemanticState
+      assign _analysisState (ReachabilityAnalysis newReachabilityAnalysisState)
+    Nothing -> assign _analysisState (ReachabilityAnalysis $ AnalysisFailure "The code has templates. Static analysis can only be run in core Marlowe code.")
 
 expandSubproblem :: ContractZipper -> Contract -> (ContractPath /\ Contract)
 expandSubproblem z _ = zipperToContractPath z /\ closeZipperContract z (Assert FalseObs Close)
@@ -38,14 +66,16 @@ reachabilityAnalysisDef =
   { analysisDataSetter: ReachabilityAnalysis
   , expandSubproblemImpl: expandSubproblem
   , isValidSubproblemImpl: isValidSubproblem
+  , shouldExamineChildren: identity
+  , isProblemCounterExample: identity
   }
 
 startReachabilityAnalysis ::
-  forall m.
+  forall m state action slots.
   MonadAff m =>
-  SPSettings_ SPParams_ ->
+  MonadAsk Env m =>
   Contract ->
-  S.State -> HalogenM State Action ChildSlots Void m MultiStageAnalysisData
+  S.State -> HalogenM { analysisState :: AnalysisState | state } action slots Void m MultiStageAnalysisData
 startReachabilityAnalysis = startMultiStageAnalysis reachabilityAnalysisDef
 
 getUnreachableContracts :: AnalysisState -> List ContractPath

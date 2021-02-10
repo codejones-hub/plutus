@@ -2,63 +2,152 @@ module MarloweEditor.State
   ( handleAction
   , editorGetValue
   , {- FIXME: this should be an action -} editorResize
+  , editorSetTheme
   ) where
 
 import Prelude hiding (div)
+import BottomPanel.State (handleAction) as BottomPanel
+import BottomPanel.Types (Action(..), State) as BottomPanel
+import CloseAnalysis (analyseClose)
 import Control.Monad.Except (ExceptT, lift, runExceptT)
 import Control.Monad.Maybe.Extra (hoistMaybe)
 import Control.Monad.Maybe.Trans (MaybeT(..), runMaybeT)
-import Control.Monad.Reader (runReaderT)
+import Control.Monad.Reader (class MonadAsk)
 import Data.Array (filter)
 import Data.Either (Either(..), hush)
 import Data.Foldable (for_, traverse_)
 import Data.Lens (assign, preview, set, use)
 import Data.Lens.Index (ix)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (codePointFromChar)
 import Data.String as String
 import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect)
-import FileEvents (readFileFromDragEvent)
-import FileEvents as FileEvents
+import Env (Env)
+import Examples.Marlowe.Contracts (example) as ME
 import Halogen (HalogenM, liftEffect, modify_, query)
+import Halogen.Extra (mapSubmodule)
 import Halogen.Monaco (Message(..), Query(..)) as Monaco
 import LocalStorage as LocalStorage
 import MainFrame.Types (ChildSlots, _marloweEditorPageSlot)
-import Marlowe (SPParams_)
-import Marlowe as Server
 import Marlowe.Holes (fromTerm)
-import Marlowe.Linter as Linter
+import Marlowe.LinterText as Linter
 import Marlowe.Monaco (updateAdditionalContext)
+import Marlowe.Monaco as MM
 import Marlowe.Parser (parseContract)
-import Marlowe.Semantics (Contract, emptyState)
-import Marlowe.Symbolic.Types.Request as MSReq
-import MarloweEditor.Types (Action(..), AnalysisState(..), State, _analysisState, _bottomPanelView, _editorErrors, _editorWarnings, _keybindings, _selectedHole, _showBottomPanel, _showErrorDetail)
+import Marlowe.Extended (Contract)
+import MarloweEditor.Types (Action(..), BottomPanelView, State, _bottomPanelState, _editorErrors, _editorWarnings, _keybindings, _selectedHole, _showErrorDetail)
 import Monaco (IMarker, isError, isWarning)
-import Network.RemoteData (RemoteData(..))
 import Network.RemoteData as RemoteData
 import Servant.PureScript.Ajax (AjaxError)
-import Servant.PureScript.Settings (SPSettings_)
-import StaticAnalysis.Reachability (getUnreachableContracts, startReachabilityAnalysis)
+import StaticAnalysis.Reachability (analyseReachability, getUnreachableContracts)
+import StaticAnalysis.StaticTools (analyseContract)
+import StaticAnalysis.Types (_analysisState)
 import StaticData (marloweBufferLocalStorageKey)
 import StaticData as StaticData
 import Text.Pretty (pretty)
 import Types (WebData)
+import Web.Event.Extra (preventDefault, readFileFromDragEvent)
+
+toBottomPanel ::
+  forall m a.
+  Functor m =>
+  HalogenM (BottomPanel.State BottomPanelView) (BottomPanel.Action BottomPanelView Action) ChildSlots Void m a ->
+  HalogenM State Action ChildSlots Void m a
+toBottomPanel = mapSubmodule _bottomPanelState BottomPanelAction
 
 handleAction ::
   forall m.
   MonadAff m =>
-  SPSettings_ SPParams_ ->
+  MonadAsk Env m =>
   Action ->
   HalogenM State Action ChildSlots Void m Unit
-handleAction _ (ChangeKeyBindings bindings) = do
+handleAction Init = do
+  editorSetTheme
+  mContents <- liftEffect $ LocalStorage.getItem marloweBufferLocalStorageKey
+  editorSetValue $ fromMaybe ME.example mContents
+
+handleAction (ChangeKeyBindings bindings) = do
   assign _keybindings bindings
   void $ query _marloweEditorPageSlot unit (Monaco.SetKeyBindings bindings unit)
 
-handleAction _ (HandleEditorMessage (Monaco.TextChanged text)) = do
+handleAction (HandleEditorMessage (Monaco.TextChanged text)) = do
   assign _selectedHole Nothing
   liftEffect $ LocalStorage.setItem marloweBufferLocalStorageKey text
+  lintText text
+
+handleAction (HandleDragEvent event) = liftEffect $ preventDefault event
+
+handleAction (HandleDropEvent event) = do
+  liftEffect $ preventDefault event
+  contents <- liftAff $ readFileFromDragEvent event
+  void $ editorSetValue contents
+
+handleAction (MoveToPosition lineNumber column) = do
+  void $ query _marloweEditorPageSlot unit (Monaco.SetPosition { column, lineNumber } unit)
+
+handleAction (LoadScript key) = do
+  for_ (preview (ix key) StaticData.marloweContracts) \contents -> do
+    let
+      prettyContents = case parseContract contents of
+        Right pcon -> show $ pretty pcon
+        Left _ -> contents
+    editorSetValue prettyContents
+    liftEffect $ LocalStorage.setItem marloweBufferLocalStorageKey prettyContents
+
+handleAction (SetEditorText contents) = editorSetValue contents
+
+handleAction (BottomPanelAction (BottomPanel.PanelAction action)) = handleAction action
+
+handleAction (BottomPanelAction action) = do
+  toBottomPanel (BottomPanel.handleAction action)
+  editorResize
+
+handleAction (ShowErrorDetail val) = assign _showErrorDetail val
+
+handleAction SendToSimulator = pure unit
+
+handleAction ViewAsBlockly = pure unit
+
+handleAction (InitMarloweProject contents) = do
+  editorSetValue contents
+  liftEffect $ LocalStorage.setItem marloweBufferLocalStorageKey contents
+
+handleAction (SelectHole hole) = assign _selectedHole hole
+
+handleAction AnalyseContract = runAnalysis $ analyseContract
+
+handleAction AnalyseReachabilityContract = runAnalysis $ analyseReachability
+
+handleAction AnalyseContractForCloseRefund = runAnalysis $ analyseClose
+
+handleAction Save = pure unit
+
+runAnalysis ::
+  forall m.
+  MonadAff m =>
+  (Contract -> HalogenM State Action ChildSlots Void m Unit) ->
+  HalogenM State Action ChildSlots Void m Unit
+runAnalysis doAnalyze =
+  void
+    $ runMaybeT do
+        contents <- MaybeT $ editorGetValue
+        contract <- hoistMaybe $ parseContract' contents
+        lift
+          $ do
+              doAnalyze contract
+              lintText contents
+
+parseContract' :: String -> Maybe Contract
+parseContract' = fromTerm <=< hush <<< parseContract
+
+lintText ::
+  forall m.
+  MonadAff m =>
+  String ->
+  HalogenM State Action ChildSlots Void m Unit
+lintText text = do
   analysisState <- use _analysisState
   let
     parsedContract = parseContract text
@@ -81,88 +170,14 @@ handleAction _ (HandleEditorMessage (Monaco.TextChanged text)) = do
     Just { codeActionProvider: Just caProvider, completionItemProvider: Just ciProvider } -> pure $ updateAdditionalContext caProvider ciProvider additionalContext
     _ -> pure unit
 
-handleAction _ (HandleDragEvent event) = liftEffect $ FileEvents.preventDefault event
-
-handleAction settings (HandleDropEvent event) = do
-  liftEffect $ FileEvents.preventDefault event
-  contents <- liftAff $ readFileFromDragEvent event
-  void $ editorSetValue contents
-
-handleAction _ (MoveToPosition lineNumber column) = do
-  void $ query _marloweEditorPageSlot unit (Monaco.SetPosition { column, lineNumber } unit)
-
-handleAction settings (LoadScript key) = do
-  for_ (preview (ix key) StaticData.marloweContracts) \contents -> do
-    let
-      prettyContents = case parseContract contents of
-        Right pcon -> show $ pretty pcon
-        Left _ -> contents
-    editorSetValue prettyContents
-    liftEffect $ LocalStorage.setItem marloweBufferLocalStorageKey prettyContents
-
-handleAction settings (SetEditorText contents) = do
-  editorSetValue contents
-
-handleAction _ (ShowBottomPanel val) = do
-  assign _showBottomPanel val
-  editorResize
-
-handleAction _ (ShowErrorDetail val) = assign _showErrorDetail val
-
-handleAction _ (ChangeBottomPanelView view) = do
-  assign _bottomPanelView view
-  assign _showBottomPanel true
-  editorResize
-
-handleAction _ SendToSimulator = pure unit
-
-handleAction _ ViewAsBlockly = pure unit
-
-handleAction _ (InitMarloweProject contents) = do
-  editorSetValue contents
-  liftEffect $ LocalStorage.setItem marloweBufferLocalStorageKey contents
-
-handleAction _ (SelectHole hole) = assign _selectedHole hole
-
-handleAction settings AnalyseContract =
-  void
-    $ runMaybeT do
-        contents <- MaybeT $ editorGetValue
-        contract <- hoistMaybe $ parseContract' contents
-        -- when editor and simulator were together the analyse contract could be made
-        -- at any step of the simulator. Now that they are separate, it can only be done
-        -- with initial state
-        let
-          emptySemanticState = emptyState zero
-        assign _analysisState (WarningAnalysis Loading)
-        response <- lift $ checkContractForWarnings contract emptySemanticState
-        assign _analysisState (WarningAnalysis response)
-  where
-  checkContractForWarnings contract state = runAjax $ (flip runReaderT) settings (Server.postMarloweanalysis (MSReq.Request { onlyAssertions: false, contract, state }))
-
-handleAction settings AnalyseReachabilityContract =
-  void
-    $ runMaybeT do
-        contents <- MaybeT $ editorGetValue
-        contract <- hoistMaybe $ parseContract' contents
-        -- when editor and simulator were together the analyse contract could be made
-        -- at any step of the simulator. Now that they are separate, it can only be done
-        -- with initial state
-        let
-          emptySemanticState = emptyState zero
-        newReachabilityAnalysisState <- lift $ startReachabilityAnalysis settings contract emptySemanticState
-        assign _analysisState (ReachabilityAnalysis newReachabilityAnalysisState)
-
-handleAction _ Save = pure unit
-
-parseContract' :: String -> Maybe Contract
-parseContract' = fromTerm <=< hush <<< parseContract
-
 runAjax ::
   forall m a.
   ExceptT AjaxError (HalogenM State Action ChildSlots Void m) a ->
   HalogenM State Action ChildSlots Void m (WebData a)
 runAjax action = RemoteData.fromEither <$> runExceptT action
+
+editorSetTheme :: forall state action msg m. HalogenM state action ChildSlots msg m Unit
+editorSetTheme = void $ query _marloweEditorPageSlot unit (Monaco.SetTheme MM.daylightTheme.name unit)
 
 editorResize :: forall state action msg m. HalogenM state action ChildSlots msg m Unit
 editorResize = void $ query _marloweEditorPageSlot unit (Monaco.Resize unit)

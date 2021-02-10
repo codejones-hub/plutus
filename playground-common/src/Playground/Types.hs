@@ -26,7 +26,7 @@ import           GHC.Generics                                    (Generic)
 import           Language.Haskell.Interpreter                    (CompilationError, SourceCode)
 import qualified Language.Haskell.Interpreter                    as HI
 import           Language.Plutus.Contract.Effects.ExposeEndpoint (EndpointDescription)
-import           Ledger                                          (PubKeyHash, Tx, fromSymbol, pubKeyHash)
+import           Ledger                                          (PubKeyHash, fromSymbol, pubKeyHash)
 import qualified Ledger.Ada                                      as Ada
 import           Ledger.Scripts                                  (ValidatorHash)
 import           Ledger.Slot                                     (Slot)
@@ -110,9 +110,13 @@ type SimulatorAction = ContractCall (Fix FormArgumentF)
 
 type Expression = ContractCall JSON.Value
 
+-- | The example simulations have meaningful (hard-coded) names, but, for any simulation the
+-- user creates in the playground, simulationName = "Simulation " <> show simulationId; the
+-- simulationId is simply present to ensure every simulation is created with a unique name.
 data Simulation =
     Simulation
         { simulationName    :: String
+        , simulationId      :: Int
         , simulationActions :: [SimulatorAction]
         , simulationWallets :: [SimulatorWallet]
         }
@@ -134,8 +138,7 @@ pubKeys Evaluation {..} = pubKeyHash . walletPubKey . simulatorWalletWallet <$> 
 
 data EvaluationResult =
     EvaluationResult
-        { resultBlockchain  :: [[Tx]] -- ^ The blockchain, newest blocks first
-        , resultRollup      :: [[AnnotatedTx]] -- ^ Annotated blockchain, newest blocks first
+        { resultRollup      :: [[AnnotatedTx]] -- ^ Annotated blockchain, newest blocks first
         , emulatorLog       :: [EmulatorEvent] -- ^ The emulator log, newest events first
         , emulatorTrace     :: Text
         , fundsDistribution :: [SimulatorWallet]
@@ -147,7 +150,6 @@ data CompilationResult =
     CompilationResult
         { functionSchema  :: [FunctionSchema FormSchema]
         , knownCurrencies :: [KnownCurrency]
-        , iotsSpec        :: Text
         }
     deriving (Show, Eq, Generic, ToJSON)
 

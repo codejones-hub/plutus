@@ -45,7 +45,10 @@ open import Data.String using (String)
 
 \begin{code}
 
+-- something very much like a substitution
+-- labelled by a builtin and given a first order presentation
 ITel : Builtin → ∀{Φ} → Ctx Φ → SubNf Φ ∅ → Set
+
 data Value : {A : ∅ ⊢Nf⋆ *} → ∅ ⊢ A → Set where
 
   V-ƛ : {A B : ∅ ⊢Nf⋆ *}
@@ -81,7 +84,7 @@ data Value : {A : ∅ ⊢Nf⋆ *} → ∅ ⊢ A → Set where
     → (σ : SubNf Φ' ∅)
     → (p : (Δ , A) ≤C' Γ)
     → ITel b Δ σ
-    → (t : ∅ ⊢ substNf σ (<C'2type (skip p) C))
+    → (t : ∅ ⊢ subNf σ (<C'2type (skip p) C))
     → Value t
 
   V-IΠ : ∀(b : Builtin){Φ Φ'}{Γ : Ctx Φ}{Δ : Ctx Φ'}{K}{C : Φ ⊢Nf⋆ *}
@@ -92,12 +95,12 @@ data Value : {A : ∅ ⊢Nf⋆ *} → ∅ ⊢ A → Set where
     → (σ : SubNf Φ' ∅) -- could try one at a time
       (p : (Δ ,⋆ K) ≤C' Γ)
     → ITel b Δ σ
-    → (t : ∅ ⊢ substNf σ (<C'2type (skip⋆ p) C))
+    → (t : ∅ ⊢ subNf σ (<C'2type (skip⋆ p) C))
     → Value t
 
 ITel b ∅       σ = ⊤
 ITel b (Γ ,⋆ J) σ = ITel b Γ (σ ∘ S) × ∅ ⊢Nf⋆ J
-ITel b (Γ , A) σ = ITel b Γ σ × Σ (∅ ⊢ substNf σ A) Value
+ITel b (Γ , A) σ = ITel b Γ σ × Σ (∅ ⊢ subNf σ A) Value
 
 deval : {A : ∅ ⊢Nf⋆ *}{u : ∅ ⊢ A} → Value u → ∅ ⊢ A
 deval {u = u} _ = u
@@ -128,23 +131,23 @@ IBUILTIN : (b : Builtin)
       (σ : SubNf Φ ∅)
     → (tel : ITel b Γ σ)
       -----------------------------
-    → Σ (∅ ⊢ substNf σ C) λ t → Value t ⊎ Error t 
+    → Σ (∅ ⊢ subNf σ C) λ t → Value t ⊎ Error t 
       -- ^ should be val or error to avoid throwing away work
 IBUILTIN addInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j)) = _ ,, inj₁ (V-con (integer (i + j)))
 IBUILTIN subtractInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j)) = _ ,, inj₁ (V-con (integer (i - j)))
 IBUILTIN multiplyInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j)) = _ ,, inj₁ (V-con (integer (i ** j)))
 IBUILTIN divideInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j)) with j ≟ Data.Integer.ℤ.pos 0
-... | no ¬p = _ ,, inj₂ E-error -- divide by zero
-... | yes p = _ ,, inj₁ (V-con (integer (div i j)))
+... | no ¬p = _ ,, inj₁ (V-con (integer (div i j)))
+... | yes p = _ ,, inj₂ E-error -- divide by zero
 IBUILTIN quotientInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j)) with j ≟ Data.Integer.ℤ.pos 0
-... | no ¬p = _ ,, inj₂ E-error -- divide by zero
-... | yes p = _ ,, inj₁ (V-con (integer (quot i j)))
+... | no ¬p = _ ,, inj₁ (V-con (integer (quot i j)))
+... | yes p = _ ,, inj₂ E-error -- divide by zero
 IBUILTIN remainderInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j)) with j ≟ Data.Integer.ℤ.pos 0
-... | no ¬p = _ ,, inj₂ E-error -- divide by zero
-... | yes p = _ ,, inj₁ (V-con (integer (rem i j)))
+... | no ¬p = _ ,, inj₁ (V-con (integer (rem i j)))
+... | yes p = _ ,, inj₂ E-error -- divide by zero
 IBUILTIN modInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j)) with j ≟ Data.Integer.ℤ.pos 0
-... | no ¬p = _ ,, inj₂ E-error -- divide by zero
-... | yes p = _ ,, inj₁ (V-con (integer (mod i j)))
+... | no ¬p = _ ,, inj₁ (V-con (integer (mod i j)))
+... | yes p = _ ,, inj₂ E-error -- divide by zero
 IBUILTIN lessThanInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j)) with i <? j
 ... | no ¬p = _ ,, inj₁ (V-con (bool false))
 ... | yes p = _ ,, inj₁ (V-con (bool true))
@@ -152,10 +155,10 @@ IBUILTIN lessThanInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integ
 IBUILTIN lessThanEqualsInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j)) with i ≤? j
 ... | no ¬p = _ ,, inj₁ (V-con (bool false))
 ... | yes p = _ ,, inj₁ (V-con (bool true))
-IBUILTIN greaterThanInteger σ  ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j)) with i Builtin.Constant.Type.>? j
+IBUILTIN greaterThanInteger σ  ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j)) with i I>? j
 ... | no ¬p = _ ,, inj₁ (V-con (bool false))
 ... | yes p = _ ,, inj₁ (V-con (bool true))
-IBUILTIN greaterThanEqualsInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j)) with i Builtin.Constant.Type.≥? j
+IBUILTIN greaterThanEqualsInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j)) with i I≥? j
 ... | no ¬p = _ ,, inj₁ (V-con (bool false))
 ... | yes p = _ ,, inj₁ (V-con (bool true))
 IBUILTIN equalsInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer j))  with i ≟ j
@@ -164,6 +167,8 @@ IBUILTIN equalsInteger σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (integer
 IBUILTIN concatenate σ ((tt ,, _ ,, V-con (bytestring b)) ,, _ ,, V-con (bytestring b')) = _ ,, inj₁ (V-con (bytestring (concat b b')))
 IBUILTIN takeByteString σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (bytestring b)) = _ ,, inj₁ (V-con (bytestring (take i b)))
 IBUILTIN dropByteString σ ((tt ,, _ ,, V-con (integer i)) ,, _ ,, V-con (bytestring b)) = _ ,, inj₁ (V-con (bytestring (drop i b)))
+IBUILTIN lessThanByteString σ ((tt ,, _ ,, V-con (bytestring b)) ,, _ ,, V-con (bytestring b')) = _ ,, inj₁ (V-con (bool (B< b b')))
+IBUILTIN greaterThanByteString σ ((tt ,, _ ,, V-con (bytestring b)) ,, _ ,, V-con (bytestring b')) = _ ,, inj₁ (V-con (bool (B> b b')))
 IBUILTIN sha2-256 σ (tt ,, _ ,, V-con (bytestring b)) = _ ,, inj₁ (V-con (bytestring (SHA2-256 b)))
 IBUILTIN sha3-256 σ (tt ,, _ ,, V-con (bytestring b)) = _ ,, inj₁ (V-con (bytestring (SHA3-256 b)))
 IBUILTIN verifySignature σ (((tt ,, _ ,, V-con (bytestring k)) ,, _ ,, V-con (bytestring d)) ,, _ ,, V-con (bytestring c)) with verifySig k d c
@@ -190,7 +195,7 @@ IBUILTIN' : (b : Builtin)
     → (C' : Φ' ⊢Nf⋆ *)
     → (r : substEq (_⊢Nf⋆ *) p C ≡ C')
       -----------------------------
-    → Σ (∅ ⊢ substNf σ C') λ t → Value t ⊎ Error t
+    → Σ (∅ ⊢ subNf σ C') λ t → Value t ⊎ Error t
     
 IBUILTIN' b refl refl σ tel _ refl = IBUILTIN b σ tel
 \end{code}
@@ -274,8 +279,8 @@ data _—→_ : {A : ∅ ⊢Nf⋆ *} → (∅ ⊢ A) → (∅ ⊢ A) → Set whe
     → (q : substEq Ctx p Γ ≡  Γ' , A)
     → (C' : Φ' ⊢Nf⋆ *)
     → (r : substEq (_⊢Nf⋆ *) p C ≡ C')
-    → (t : ∅ ⊢ substNf σ A ⇒ substNf σ C')
-    → (u : ∅ ⊢ substNf σ A)
+    → (t : ∅ ⊢ subNf σ A ⇒ subNf σ C')
+    → (u : ∅ ⊢ subNf σ A)
     → (tel : ITel b Γ' σ)
     → (v : Value u)
       -----------------------------
@@ -290,10 +295,10 @@ data _—→_ : {A : ∅ ⊢Nf⋆ *} → (∅ ⊢ A) → (∅ ⊢ A) → Set whe
     → (q : substEq Ctx p Γ ≡  (Γ' ,⋆ K))
     → (C' : Φ' ,⋆ K ⊢Nf⋆ *)
     → (r : substEq (_⊢Nf⋆ *) p C ≡ C')
-    → (t : ∅ ⊢ substNf σ (Π C'))
+    → (t : ∅ ⊢ subNf σ (Π C'))
     → (tel : ITel b Γ' σ)
       -----------------------------
-    → t ·⋆ A —→ conv⊢ refl (substNf-cons-[]Nf C') (proj₁ (IBUILTIN' b p q (substNf-cons σ A) (tel ,, A) C' r))
+    → t ·⋆ A —→ conv⊢ refl (subNf-cons-[]Nf C') (proj₁ (IBUILTIN' b p q (subNf-cons σ A) (tel ,, A) C' r))
 \end{code}
 
 \begin{code}
@@ -373,6 +378,8 @@ ival equalsInteger = V-I⇒ equalsInteger {Γ = proj₁ (proj₂ (ISIG equalsInt
 ival concatenate = V-I⇒ concatenate {Γ = proj₁ (proj₂ (ISIG concatenate))}{Δ = ∅}{C = proj₂ (proj₂ (ISIG concatenate))} refl refl refl (λ()) (≤Cto≤C' (skip base)) tt (ibuiltin concatenate)
 ival takeByteString = V-I⇒ takeByteString {Γ = proj₁ (proj₂ (ISIG takeByteString))}{Δ = ∅}{C = proj₂ (proj₂ (ISIG takeByteString))} refl refl refl (λ()) (≤Cto≤C' (skip base)) tt (ibuiltin takeByteString)
 ival dropByteString = V-I⇒ dropByteString {Γ = proj₁ (proj₂ (ISIG dropByteString))}{Δ = ∅}{C = proj₂ (proj₂ (ISIG dropByteString))} refl refl refl (λ()) (≤Cto≤C' (skip base)) tt (ibuiltin dropByteString)
+ival lessThanByteString = V-I⇒ lessThanByteString {Γ = proj₁ (proj₂ (ISIG lessThanByteString))}{Δ = ∅}{C = proj₂ (proj₂ (ISIG lessThanByteString))} refl refl refl (λ()) (≤Cto≤C' (skip base)) tt (ibuiltin lessThanByteString)
+ival greaterThanByteString = V-I⇒ greaterThanByteString {Γ = proj₁ (proj₂ (ISIG greaterThanByteString))}{Δ = ∅}{C = proj₂ (proj₂ (ISIG greaterThanByteString))} refl refl refl (λ()) (≤Cto≤C' (skip base)) tt (ibuiltin greaterThanByteString)
 ival sha2-256 = V-I⇒ sha2-256 {Γ = proj₁ (proj₂ (ISIG sha2-256))}{Δ = ∅}{C = proj₂ (proj₂ (ISIG sha2-256))} refl refl refl (λ()) base tt (ibuiltin sha2-256)
 ival sha3-256 = V-I⇒ sha3-256 {Γ = proj₁ (proj₂ (ISIG sha3-256))}{Δ = ∅}{C = proj₂ (proj₂ (ISIG sha3-256))} refl refl refl (λ()) base tt (ibuiltin sha3-256)
 ival verifySignature = V-I⇒ verifySignature {Γ = proj₁ (proj₂ (ISIG verifySignature))}{Δ = ∅}{C = proj₂ (proj₂ (ISIG verifySignature))} refl refl refl (λ()) (≤Cto≤C' (skip (skip base))) tt (ibuiltin verifySignature)
@@ -387,8 +394,8 @@ progress-·⋆ : ∀{K B}{t : ∅ ⊢ Π B} → Progress t → (A : ∅ ⊢Nf⋆
 progress-·⋆ (step p)        A = step (ξ-·⋆ p)
 progress-·⋆ (done (V-Λ t))  A = step β-Λ
 progress-·⋆ (error E-error) A = step E-·⋆
-progress-·⋆ (done (V-IΠ b {C = C} p' q r σ (skip⋆ p) vs t)) A = done (convValue (Πlem p A C σ) (V-IΠ b {C = C} p' q r (substNf-cons σ A) p (vs ,, A) (conv⊢ refl (Πlem p A C σ) (t ·⋆ A))) )
-progress-·⋆ (done (V-IΠ b {C = C} p' q r σ (skip p) vs t))  A = done (convValue (⇒lem p σ C) (V-I⇒ b p' q r (substNf-cons σ A) p (vs ,, A) (conv⊢ refl (⇒lem p σ C) (t ·⋆ A) )))
+progress-·⋆ (done (V-IΠ b {C = C} p' q r σ (skip⋆ p) vs t)) A = done (convValue (Πlem p A C σ) (V-IΠ b {C = C} p' q r (subNf-cons σ A) p (vs ,, A) (conv⊢ refl (Πlem p A C σ) (t ·⋆ A))) )
+progress-·⋆ (done (V-IΠ b {C = C} p' q r σ (skip p) vs t))  A = done (convValue (⇒lem p σ C) (V-I⇒ b p' q r (subNf-cons σ A) p (vs ,, A) (conv⊢ refl (⇒lem p σ C) (t ·⋆ A) )))
 progress-·⋆ (done (V-IΠ b p q r σ base vs t)) A = step (β-sbuiltin⋆ b σ p q _ r t vs)
 -- ^ it's the last one, call BUILTIN
 

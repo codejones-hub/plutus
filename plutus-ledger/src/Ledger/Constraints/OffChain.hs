@@ -46,25 +46,25 @@ import           Data.Set                         (Set)
 import qualified Data.Set                         as Set
 import           Data.Text.Prettyprint.Doc
 import           GHC.Generics                     (Generic)
-import           IOTS                             (IotsType)
 
 import           Language.PlutusTx                (IsData (..))
 import           Language.PlutusTx.Lattice
 import qualified Language.PlutusTx.Numeric        as N
 
-import           Ledger.Address                   (Address (..))
-import qualified Ledger.Address                   as Address
 import           Ledger.Constraints.TxConstraints hiding (requiredSignatories)
-import           Ledger.Crypto                    (PubKeyHash)
-import           Ledger.Scripts                   (Datum (..), DatumHash, MonetaryPolicy, MonetaryPolicyHash, Validator,
-                                                   datumHash, monetaryPolicyHash)
-import           Ledger.Tx                        (Tx, TxOutRef, TxOutTx (..))
-import qualified Ledger.Tx                        as Tx
+import           Ledger.Orphans                   ()
 import           Ledger.Typed.Scripts             (ScriptInstance, ScriptType (..))
 import qualified Ledger.Typed.Scripts             as Scripts
 import           Ledger.Typed.Tx                  (ConnectionError)
 import qualified Ledger.Typed.Tx                  as Typed
-import qualified Ledger.Value                     as Value
+import           Plutus.V1.Ledger.Address         (Address (..))
+import qualified Plutus.V1.Ledger.Address         as Address
+import           Plutus.V1.Ledger.Crypto          (PubKeyHash)
+import           Plutus.V1.Ledger.Scripts         (Datum (..), DatumHash, MonetaryPolicy, MonetaryPolicyHash, Validator,
+                                                   datumHash, monetaryPolicyHash)
+import           Plutus.V1.Ledger.Tx              (Tx, TxOutRef, TxOutTx (..))
+import qualified Plutus.V1.Ledger.Tx              as Tx
+import qualified Plutus.V1.Ledger.Value           as Value
 
 data ScriptLookups a =
     ScriptLookups
@@ -149,7 +149,7 @@ data UnbalancedTx =
         , unBalancedTxRequiredSignatories :: Set PubKeyHash
         }
     deriving stock (Eq, Generic, Show)
-    deriving anyclass (FromJSON, ToJSON, IotsType)
+    deriving anyclass (FromJSON, ToJSON)
 
 makeLensesFor [("unBalancedTxTx", "tx"), ("unBalancedTxRequiredSignatories", "requiredSignatories")] ''UnbalancedTx
 

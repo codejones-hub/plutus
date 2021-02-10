@@ -1,26 +1,27 @@
 module MarloweEditor.View where
 
 import Prelude hiding (div)
+import BottomPanel.Types (Action(..)) as BottomPanel
+import BottomPanel.View (render) as BottomPanel
+import Data.Array (length)
+import Data.Array as Array
 import Data.Enum (toEnum, upFromIncluding)
 import Data.Lens ((^.))
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..))
 import Effect.Aff.Class (class MonadAff)
-import Examples.Haskell.Contracts as HE
-import Halogen (ClassName(..), ComponentHTML, liftEffect)
+import Halogen (ClassName(..), ComponentHTML)
 import Halogen.Classes (codeEditor, group)
+import Halogen.Extra (renderSubmodule)
 import Halogen.HTML (HTML, button, div, div_, option, section, select, slot, text)
 import Halogen.HTML.Events (onClick, onSelectedIndexChange)
 import Halogen.HTML.Properties (class_, classes, disabled, title)
 import Halogen.HTML.Properties as HTML
 import Halogen.Monaco (monacoComponent)
-import LocalStorage as LocalStorage
 import MainFrame.Types (ChildSlots, _marloweEditorPageSlot)
 import Marlowe.Monaco as MM
-import MarloweEditor.BottomPanel (bottomPanel)
-import MarloweEditor.Types (Action(..), State, _keybindings, _showBottomPanel, contractHasErrors, contractHasHoles)
-import Monaco (getModel, setValue) as Monaco
+import MarloweEditor.BottomPanel (panelContents)
+import MarloweEditor.Types (Action(..), BottomPanelView(..), State, _bottomPanelState, _editorErrors, _editorWarnings, _keybindings, contractHasErrors, contractHasHoles)
 import Prim.TypeError (class Warn, Text)
-import StaticData as StaticData
 
 render ::
   forall m.
@@ -30,11 +31,25 @@ render ::
 render state =
   div_
     [ section [ class_ (ClassName "code-panel") ]
-        [ div [ classes (codeEditor $ state ^. _showBottomPanel) ]
+        [ div [ classes [ codeEditor ] ]
             [ marloweEditor state ]
         ]
-    , bottomPanel state
+    , renderSubmodule _bottomPanelState BottomPanelAction (BottomPanel.render panelTitles wrapBottomPanelContents) state
     ]
+  where
+  panelTitles =
+    [ { title: "Static Analysis", view: StaticAnalysisView, classes: [] }
+    , { title: warningsTitle, view: MarloweWarningsView, classes: [] }
+    , { title: errorsTitle, view: MarloweErrorsView, classes: [] }
+    ]
+
+  withCount str arry = str <> if Array.null arry then "" else " (" <> show (length arry) <> ")"
+
+  warningsTitle = withCount "Warnings" $ state ^. _editorWarnings
+
+  errorsTitle = withCount "Errors" $ state ^. _editorErrors
+
+  wrapBottomPanelContents panelView = BottomPanel.PanelAction <$> panelContents state panelView
 
 otherActions :: forall p. State -> HTML p Action
 otherActions state =
@@ -116,13 +131,6 @@ marloweEditor ::
   ComponentHTML Action ChildSlots m
 marloweEditor state = slot _marloweEditorPageSlot unit component unit (Just <<< HandleEditorMessage)
   where
-  setup editor =
-    liftEffect do
-      -- FIXME we shouldn't access local storage from the view
-      mContents <- LocalStorage.getItem StaticData.marloweBufferLocalStorageKey
-      let
-        contents = fromMaybe HE.escrow mContents
-      model <- Monaco.getModel editor
-      Monaco.setValue model contents
+  setup editor = pure unit
 
   component = monacoComponent $ MM.settings setup
