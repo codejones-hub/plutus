@@ -1,0 +1,32 @@
+rotation: null
+defaultBackends:
+- KatipBK
+- AggregationBK
+- EKGViewBK
+setupBackends:
+- KatipBK
+- AggregationBK
+- MonitoringBK
+- EKGViewBK
+hasPrometheus: null
+hasGraylog: null
+hasGUI: null
+traceForwardTo: null
+traceAcceptAt: null
+defaultScribes:
+- - StdoutSK
+  - stdout
+options: {}
+setupScribes:
+- scMaxSev: Emergency
+  scName: stdout
+  scRotation: null
+  scMinSev: Debug
+  scKind: StdoutSK
+  scFormat: ScText
+  scPrivacy: ScPublic
+hasEKG:
+- localhost
+- 12790
+forwardDelay: null
+minSeverity: Info

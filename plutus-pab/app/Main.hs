@@ -71,7 +71,7 @@ import qualified Plutus.PAB.Core                                 as Core
 import qualified Plutus.PAB.Core.ContractInstance                as Instance
 import           Plutus.PAB.Events.Contract                      (ContractInstanceId (..))
 import           Plutus.PAB.PABLogMsg                            (AppMsg (..), ChainIndexServerMsg,
-                                                                  ContractExeLogMsg (..), MetadataLogMessage,
+                                                                  ContractExeLogMsg (..), MetadataLogMessage, MockServerLogMsg,
                                                                   PABLogMsg (..), SigningProcessMsg, WalletMsg)
 import           Plutus.PAB.Types                                (Config (Config), ContractExe (..), PABError,
                                                                   RequestProcessingConfig (..), chainIndexConfig,
@@ -444,7 +444,9 @@ runCliCommand trace _ Config {..} serviceAvailability MockWallet =
                 chainIndexUrl = ChainIndex.ciBaseUrl chainIndexConfig
 
 -- Run mock node server
-runCliCommand _ _ Config {nodeServerConfig} serviceAvailability MockNode = NodeServer.main nodeServerConfig serviceAvailability
+runCliCommand trace _ Config {nodeServerConfig} serviceAvailability MockNode = liftIO $ NodeServer.main t nodeServerConfig serviceAvailability
+    where
+        t = toMockNodeServerLog trace
 
 -- Run mock metadata server
 runCliCommand t _ Config {metadataServerConfig} serviceAvailability Metadata = liftIO $ Metadata.main trace metadataServerConfig serviceAvailability
@@ -588,6 +590,9 @@ toWalletLog = convertLog $ PABMsg . SWalletMsg
 
 toMetaDataLog :: Trace m AppMsg -> Trace m MetadataLogMessage
 toMetaDataLog = convertLog $ PABMsg . SMetaDataLogMsg
+
+toMockNodeServerLog :: Trace m AppMsg -> Trace m MockServerLogMsg
+toMockNodeServerLog = convertLog $ PABMsg . SMockserverLogMsg
 
 pabComponentName :: Text.Text
 pabComponentName = "pab"

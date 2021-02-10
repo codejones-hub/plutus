@@ -28,7 +28,6 @@ import           Data.List.NonEmpty            (NonEmpty (..))
 import qualified Data.Map                      as Map
 import           Data.Maybe                    (fromMaybe)
 import qualified Data.Set                      as Set
-import           Data.Text.Prettyprint.Doc     (Pretty (..))
 import qualified Hedgehog.Gen                  as Gen
 import           System.Random.MWC             as MWC
 
@@ -44,6 +43,7 @@ import qualified Ledger.Tx                     as Tx
 import qualified Wallet.Emulator               as EM
 import           Wallet.Emulator.Chain         (ChainState)
 
+import           Cardano.Node.Types            (GenRandomTxMsg (..))
 import           Control.Monad.Freer.Extra.Log
 
 -- $randomTx
@@ -54,10 +54,6 @@ data GenRandomTx r where
 
 makeEffect ''GenRandomTx
 
-data GenRandomTxMsg = GeneratingRandomTransaction
-
-instance Pretty GenRandomTxMsg where
-    pretty GeneratingRandomTransaction = "Generating a random transaction"
 
 runGenRandomTx ::
        ( Member (State ChainState) effs

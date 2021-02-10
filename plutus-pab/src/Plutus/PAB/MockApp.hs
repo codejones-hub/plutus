@@ -70,7 +70,7 @@ import           Test.QuickCheck.Instances.UUID        ()
 
 import qualified Cardano.ChainIndex.Server             as ChainIndex
 import qualified Cardano.ChainIndex.Types              as ChainIndex
-import           Cardano.Node.Follower                 (NodeFollowerLogMsg)
+import           Cardano.Node.Types                    (NodeFollowerLogMsg)
 import           Wallet.API                            (WalletAPIError)
 import           Wallet.Emulator.Chain                 (ChainControlEffect, ChainEffect, ChainEvent, ChainState,
                                                         handleChain, handleControlChain)

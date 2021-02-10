@@ -1,21 +1,28 @@
-{-# LANGUAGE DeriveAnyClass  #-}
-{-# LANGUAGE DeriveGeneric   #-}
-{-# LANGUAGE DerivingVia     #-}
-{-# LANGUAGE StrictData      #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE DeriveAnyClass    #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE DerivingVia       #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StrictData        #-}
+{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TypeApplications  #-}
 
 module Cardano.Node.Types where
 
+import           Cardano.BM.Data.Tracer         (ToObject (..))
+import           Cardano.BM.Data.Tracer.Extras  (Tagged (..), mkObjectStr)
 import           Control.Lens                   (Iso', iso, makeLenses, view)
 import           Control.Monad.Freer.Log        (LogMessage)
 import           Data.Aeson                     (FromJSON, ToJSON)
 import           Data.Map                       (Map)
 import qualified Data.Map                       as Map
-import           Data.Text.Prettyprint.Doc      (Pretty)
+import           Data.Text.Prettyprint.Doc      (Pretty (..), pretty, (<+>))
 import           Data.Time.Units                (Second)
 import           Data.Time.Units.Extra          ()
 import           GHC.Generics                   (Generic)
 import qualified Language.Plutus.Contract.Trace as Trace
+import           Ledger                         (Slot, Tx, txId)
 import           Servant                        (FromHttpApiData, ToHttpApiData)
 import           Servant.Client                 (BaseUrl)
 import           Wallet.Emulator                (Wallet)
@@ -29,6 +36,39 @@ data BlockReaperConfig =
         , brcBlocksToKeep :: Int
         }
     deriving (Show, Eq, Generic, FromJSON)
+
+
+data GenRandomTxMsg = GeneratingRandomTransaction
+
+instance Pretty GenRandomTxMsg where
+    pretty GeneratingRandomTransaction = "Generating a random transaction"
+
+data NodeFollowerLogMsg =
+    NewFollowerId FollowerID
+    | GetBlocksFor FollowerID
+    | LastBlock Int
+    | NewLastBlock Int
+    | GetCurrentSlot Slot
+
+instance Pretty NodeFollowerLogMsg where
+    pretty  = \case
+        NewFollowerId newID -> "New follower ID:" <+> pretty newID
+        GetBlocksFor i      -> "Get blocks for" <+> pretty i
+        LastBlock i         -> "Last block:" <+> pretty i
+        NewLastBlock i      -> "New last block:" <+> pretty i
+        GetCurrentSlot s    -> "Get current slot:" <+> pretty s
+
+data NodeServerMsg =
+    NodeServerFollowerMsg NodeFollowerLogMsg
+    | NodeGenRandomTxMsg GenRandomTxMsg
+    | NodeMockNodeMsg MockNodeLogMsg
+
+
+instance Pretty NodeServerMsg where
+    pretty = \case
+        NodeServerFollowerMsg m -> pretty m
+        NodeGenRandomTxMsg m    -> pretty m
+        NodeMockNodeMsg m       -> pretty m
 
 data MockServerConfig =
     MockServerConfig
@@ -54,6 +94,14 @@ data AppState =
         }
     deriving (Show)
 
+
+data MockNodeLogMsg =
+        AddingSlot
+        | AddingTx Tx
+
+instance Pretty MockNodeLogMsg where
+    pretty AddingSlot   = "Adding slot"
+    pretty (AddingTx t) = "AddingTx" <+> pretty (Ledger.txId t)
 
 initialChainState :: Trace.InitialDistribution -> ChainState
 initialChainState =
@@ -84,3 +132,30 @@ newtype FollowerID = FollowerID Int
     deriving newtype (ToJSON, FromJSON, ToHttpApiData, FromHttpApiData, Integral, Enum, Real, Num, Pretty)
 
 makeLenses 'AppState
+
+data MockServerLogMsg =
+    StartingSlotCoordination
+    | NoRandomTxGeneration
+    | StartingRandomTx
+    | KeepingOldBlocks
+    | RemovingOldBlocks
+    | StartingMockServer Int
+    deriving (Generic, Show, ToJSON, FromJSON)
+
+instance Pretty MockServerLogMsg where
+    pretty = \case
+        NoRandomTxGeneration     -> "Not creating random transactions"
+        StartingRandomTx         -> "Starting random transaction generation thread"
+        KeepingOldBlocks         -> "Not starting block reaper thread (old blocks will be retained in-memory forever"
+        RemovingOldBlocks        -> "Starting block reaper thread (old blocks will be removed)"
+        StartingMockServer p     -> "Starting Mock Node Server on port " <+> pretty p
+        StartingSlotCoordination -> "Starting slot coordination thread"
+
+instance ToObject MockServerLogMsg where
+    toObject _ = \case
+        NoRandomTxGeneration     ->  mkObjectStr "Not creating random transactions" ()
+        StartingRandomTx         ->  mkObjectStr "Starting random transaction generation thread" ()
+        KeepingOldBlocks         ->  mkObjectStr "Not starting block reaper thread (old blocks will be retained in-memory forever" ()
+        RemovingOldBlocks        ->  mkObjectStr "Starting block reaper thread (old blocks will be removed)" ()
+        StartingMockServer p     ->  mkObjectStr "Starting Mock Node Server on port " (Tagged @"port" p)
+        StartingSlotCoordination ->  mkObjectStr "" ()

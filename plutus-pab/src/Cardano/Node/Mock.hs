@@ -1,12 +1,10 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
-{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
-{-# LANGUAGE TypeOperators       #-}
 
 module Cardano.Node.Mock where
 
@@ -27,19 +25,17 @@ import           Control.Monad.Logger            (MonadLogger, logDebugN)
 import           Data.Foldable                   (traverse_)
 import           Data.List                       (genericDrop)
 import           Data.Text                       (Text)
-import           Data.Text.Prettyprint.Doc       (Pretty (pretty), (<+>))
 import           Data.Time.Units                 (Second, toMicroseconds)
 import           Data.Time.Units.Extra           ()
 import           Servant                         (NoContent (NoContent))
 
 import           Ledger                          (Block, Slot (Slot), Tx)
 
-import qualified Ledger
 import           Ledger.Tx                       (outputs)
 
-import           Cardano.Node.Follower           (NodeFollowerEffect, NodeFollowerLogMsg)
+import           Cardano.Node.Follower           (NodeFollowerEffect)
 import           Cardano.Node.RandomTx
-import           Cardano.Node.Types              as T
+import           Cardano.Node.Types
 import           Cardano.Protocol.ChainEffect    as CE
 import           Cardano.Protocol.FollowerEffect as FE
 import qualified Cardano.Protocol.Socket.Client  as Client
@@ -49,6 +45,7 @@ import           Control.Monad.Freer.Extra.Log
 import           Plutus.PAB.Arbitrary            ()
 import           Plutus.PAB.Utils                (tshow)
 
+import           Data.Text.Prettyprint.Doc       (Pretty (pretty))
 import qualified Wallet.Emulator                 as EM
 import           Wallet.Emulator.Chain           (ChainControlEffect, ChainEffect, ChainEvent, ChainState)
 import qualified Wallet.Emulator.Chain           as Chain
@@ -59,13 +56,6 @@ healthcheck = pure NoContent
 getCurrentSlot :: (Member (State ChainState) effs) => Eff effs Slot
 getCurrentSlot = Eff.gets (view EM.currentSlot)
 
-data MockNodeLogMsg =
-        AddingSlot
-        | AddingTx Tx
-
-instance Pretty MockNodeLogMsg where
-    pretty AddingSlot   = "Adding slot"
-    pretty (AddingTx t) = "AddingTx" <+> pretty (Ledger.txId t)
 
 addBlock ::
     ( Member (LogMsg MockNodeLogMsg) effs
@@ -102,16 +92,7 @@ addTx tx = do
     Chain.queueTx tx
     pure NoContent
 
-data NodeServerMsg =
-    NodeServerFollowerMsg NodeFollowerLogMsg
-    | NodeGenRandomTxMsg GenRandomTxMsg
-    | NodeMockNodeMsg MockNodeLogMsg
 
-instance Pretty NodeServerMsg where
-    pretty = \case
-        NodeServerFollowerMsg m -> pretty m
-        NodeGenRandomTxMsg m    -> pretty m
-        NodeMockNodeMsg m       -> pretty m
 
 type NodeServerEffects m
      = '[ GenRandomTx
@@ -150,8 +131,8 @@ runChainEffects serverHandler clientHandler stateVar eff = do
         $ Eff.runReader clientHandler
         $ Eff.runWriter
         $ reinterpret (handleLogWriter @ChainEvent @[LogMessage ChainEvent] (unto return))
-        $ interpret (handleZoomedState T.chainState)
-        $ interpret (handleZoomedState T.followerState)
+        $ interpret (handleZoomedState chainState)
+        $ interpret (handleZoomedState followerState)
         $ CE.handleChain
         $ interpret Chain.handleControlChain
         $ interpret (mapLog NodeServerFollowerMsg)
