@@ -14,7 +14,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 
 module Language.Plutus.Contract.Test.ContractModel
-    -- * ContractModel
+    -- ContractModel
     ( ModelState
     , modelState, currentSlot, balances
     , handle, contractInstanceId
@@ -23,12 +23,12 @@ module Language.Plutus.Contract.Test.ContractModel
     , Action(..)
     , addCommands
     , HandleSpec(..)
-    -- * GetModelState
+    -- GetModelState
     , GetModelState(..)
     , getModelState
     , viewState
     , viewModelState
-    -- * Spec monad
+    -- Spec monad
     , Spec
     , wait
     , waitUntil
@@ -38,7 +38,7 @@ module Language.Plutus.Contract.Test.ContractModel
     , withdraw
     , transfer
     , ($=), ($~)
-    -- * Dynamic logic
+    -- Dynamic logic
     , DL
     , action
     , DL.anyAction
@@ -53,7 +53,7 @@ module Language.Plutus.Contract.Test.ContractModel
     , DL.forAllDL
     , DL.DynLogic
     , module Language.Plutus.Contract.Test.DynamicLogic.Quantify
-    -- * Running properties
+    -- Running properties
     , Script
     , propRunScript_
     , propRunScript
@@ -152,14 +152,19 @@ class ( Typeable state
     initialState :: state
 
     precondition :: ModelState state -> Command state -> Bool
+    precondition _ _ = True
 
     nextState :: Command state -> Spec state ()
+    nextState _ = return ()
 
     perform :: ModelState state -> Command state -> EmulatorTrace ()
+    perform _ _ = return ()
 
     monitoring :: (ModelState state, ModelState state) -> Command state -> Property -> Property
+    monitoring _ _ = id
 
     shrinkCommand :: ModelState state -> Command state -> [Command state]
+    shrinkCommand _ _ = []
 
 makeLenses 'ModelState
 
