@@ -140,6 +140,7 @@ data MockServerLogMsg =
     | KeepingOldBlocks
     | RemovingOldBlocks
     | StartingMockServer Int
+    | ProcessingChainEvent ChainEvent
     deriving (Generic, Show, ToJSON, FromJSON)
 
 instance Pretty MockServerLogMsg where
@@ -150,6 +151,7 @@ instance Pretty MockServerLogMsg where
         RemovingOldBlocks        -> "Starting block reaper thread (old blocks will be removed)"
         StartingMockServer p     -> "Starting Mock Node Server on port " <+> pretty p
         StartingSlotCoordination -> "Starting slot coordination thread"
+        ProcessingChainEvent e   -> "Processing chain event " <+> pretty e
 
 instance ToObject MockServerLogMsg where
     toObject _ = \case
@@ -159,3 +161,4 @@ instance ToObject MockServerLogMsg where
         RemovingOldBlocks        ->  mkObjectStr "Starting block reaper thread (old blocks will be removed)" ()
         StartingMockServer p     ->  mkObjectStr "Starting Mock Node Server on port " (Tagged @"port" p)
         StartingSlotCoordination ->  mkObjectStr "" ()
+        ProcessingChainEvent e   ->  mkObjectStr "Processing chain event" (Tagged @"event" e)

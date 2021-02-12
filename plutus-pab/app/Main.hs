@@ -71,8 +71,9 @@ import qualified Plutus.PAB.Core                                 as Core
 import qualified Plutus.PAB.Core.ContractInstance                as Instance
 import           Plutus.PAB.Events.Contract                      (ContractInstanceId (..))
 import           Plutus.PAB.PABLogMsg                            (AppMsg (..), ChainIndexServerMsg,
-                                                                  ContractExeLogMsg (..), MetadataLogMessage, MockServerLogMsg,
-                                                                  PABLogMsg (..), SigningProcessMsg, WalletMsg)
+                                                                  ContractExeLogMsg (..), MetadataLogMessage,
+                                                                  MockServerLogMsg, PABLogMsg (..), SigningProcessMsg,
+                                                                  WalletMsg)
 import           Plutus.PAB.Types                                (Config (Config), ContractExe (..), PABError,
                                                                   RequestProcessingConfig (..), chainIndexConfig,
                                                                   metadataServerConfig, nodeServerConfig,

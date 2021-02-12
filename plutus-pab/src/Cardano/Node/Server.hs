@@ -32,15 +32,16 @@ import           Plutus.PAB.Arbitrary            ()
 import           Plutus.PAB.Monitoring           (runLogEffects)
 
 app ::
-    Server.ServerHandler
+ Trace IO MockServerLogMsg
+ -> Server.ServerHandler
  -> Client.ClientHandler
  -> MVar AppState
  -> Application
-app serverHandler clientHandler stateVar =
+app trace serverHandler clientHandler stateVar =
     serve (Proxy @API) $
     hoistServer
         (Proxy @API)
-        (runStdoutLoggingT . processChainEffects serverHandler clientHandler stateVar)
+        (processChainEffects trace serverHandler clientHandler stateVar)
         (healthcheck :<|> addTx :<|> getCurrentSlot :<|>
          (genRandomTx :<|>
           consumeEventHistory stateVar) :<|>
@@ -50,6 +51,7 @@ data Ctx = Ctx { serverHandler :: Server.ServerHandler
                , clientHandler :: Client.ClientHandler
                , serverState   ::  MVar AppState
                , clientState   :: MVar AppState
+               , mockTrace     :: Trace IO MockServerLogMsg
                }
 
 main :: Trace IO MockServerLogMsg -> MockServerConfig -> Availability -> IO ()
@@ -59,14 +61,14 @@ main trace MockServerConfig {..} availability = runLogEffects trace $ do
     clientState <- liftIO $ newMVar (initialAppState mscInitialTxWallets)
     serverState <- liftIO $ newMVar (initialAppState mscInitialTxWallets)
 
-    let ctx = Ctx serverHandler clientHandler serverState clientState
+    let ctx = Ctx serverHandler clientHandler serverState clientState trace
 
     runSlotCoordinator ctx mscSlotLength
     maybe (logInfo NoRandomTxGeneration) (runRandomTxGeneration ctx) mscRandomTxInterval
     maybe (logInfo KeepingOldBlocks) (runBlockReaper ctx) mscBlockReaper
 
     logInfo $ StartingMockServer servicePort
-    liftIO $ Warp.runSettings warpSettings $ app serverHandler clientHandler clientState
+    liftIO $ Warp.runSettings warpSettings $ app trace serverHandler clientHandler clientState
 
         where
             servicePort = baseUrlPort mscBaseUrl
@@ -75,12 +77,12 @@ main trace MockServerConfig {..} availability = runLogEffects trace $ do
 
             runRandomTxGeneration Ctx {..} randomTxInterval = do
                 logInfo StartingRandomTx
-                void $ liftIO $ forkIO $ runStdoutLoggingT $ transactionGenerator randomTxInterval serverHandler clientHandler serverState
+                void $ liftIO $ forkIO $ transactionGenerator trace randomTxInterval serverHandler clientHandler serverState
 
             runBlockReaper Ctx {..} reaperConfig = do
                 logInfo RemovingOldBlocks
-                void $ liftIO $ forkIO $ runStdoutLoggingT $ blockReaper reaperConfig serverHandler clientHandler serverState
+                void $ liftIO $ forkIO $ blockReaper trace reaperConfig serverHandler clientHandler serverState
 
             runSlotCoordinator Ctx {..} slotLength = do
                 logInfo StartingSlotCoordination
-                void $ liftIO $ forkIO $ runStdoutLoggingT $ slotCoordinator slotLength serverHandler clientHandler serverState
+                void $ liftIO $ forkIO $ slotCoordinator trace slotLength serverHandler clientHandler serverState
