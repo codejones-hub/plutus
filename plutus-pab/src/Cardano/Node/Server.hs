@@ -41,7 +41,7 @@ app trace serverHandler clientHandler stateVar =
     serve (Proxy @API) $
     hoistServer
         (Proxy @API)
-        (processChainEffects trace serverHandler clientHandler stateVar)
+        (liftIO . processChainEffects trace serverHandler clientHandler stateVar)
         (healthcheck :<|> addTx :<|> getCurrentSlot :<|>
          (genRandomTx :<|>
           consumeEventHistory stateVar) :<|>
