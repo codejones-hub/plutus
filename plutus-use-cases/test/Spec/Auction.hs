@@ -187,10 +187,10 @@ instance ContractModel AuctionModel where
             deposit w theToken
             deposit w1 $ Ada.lovelaceValueOf bid
 
-    perform _ Init = delay 3
-    perform _ (WaitUntil slot) = void $ Trace.waitUntilSlot slot
-    perform s (Bid w bid) = do
-        Trace.callEndpoint @"bid" (handle s $ BuyerH w) (Ada.lovelaceOf bid)
+    perform _ _ Init = delay 3
+    perform _ _ (WaitUntil slot) = void $ Trace.waitUntilSlot slot
+    perform handle s (Bid w bid) = do
+        Trace.callEndpoint @"bid" (handle $ BuyerH w) (Ada.lovelaceOf bid)
         delay 1
 
     shrinkCommand _ Init      = []
@@ -208,7 +208,7 @@ prop_Auction :: Script AuctionModel -> Property
 prop_Auction script =
     propRunScriptWithOptions (set minLogLevel Info options) spec
         (\ _ -> pure True)  -- TODO: check termination
-        (\ _ -> pure ())
+        (\ _ _ -> pure ())
         script
         (\ _ -> pure ())
     where

@@ -17,12 +17,12 @@ module Language.Plutus.Contract.Test.ContractModel
     -- ContractModel
     ( ModelState
     , modelState, currentSlot, balances
-    , handle, contractInstanceId
     , lockedFunds
     , ContractModel(..)
     , Action(..)
     , addCommands
     , HandleSpec(..)
+    , HandleFun
     -- GetModelState
     , GetModelState(..)
     , getModelState
@@ -65,6 +65,7 @@ import           Control.Monad.Cont
 import           Control.Monad.Freer                                 as Eff
 import           Control.Monad.Freer.Log
 import           Control.Monad.Freer.State
+import           Control.Monad.Writer
 import qualified Data.Aeson                                          as JSON
 import           Data.Foldable
 import           Data.Map                                            (Map)
@@ -72,8 +73,7 @@ import qualified Data.Map                                            as Map
 import           Data.Row                                            (Row)
 import           Data.Typeable
 
-import           Language.Plutus.Contract                            (Contract, ContractInstanceId,
-                                                                      HasBlockchainActions)
+import           Language.Plutus.Contract                            (Contract, HasBlockchainActions)
 import           Language.Plutus.Contract.Test
 import qualified Language.Plutus.Contract.Test.DynamicLogic.Monad    as DL
 import           Language.Plutus.Contract.Test.DynamicLogic.Quantify
@@ -85,7 +85,7 @@ import           Language.PlutusTx.Monoid                            (inv)
 import           Ledger.Slot
 import           Ledger.Value                                        (Value)
 import           Plutus.Trace.Emulator                               as Trace (ContractHandle, EmulatorTrace,
-                                                                               activateContractWallet, chInstanceId)
+                                                                               activateContractWallet)
 
 import           Test.QuickCheck                                     hiding ((.&&.))
 import qualified Test.QuickCheck                                     as QC
@@ -116,13 +116,14 @@ data HandleVal err schema = HandleVal (ContractHandle schema err)
 
 type Handles state = IMap (HandleKey state) (HandleVal (Err state))
 
+type HandleFun state = forall schema. Typeable schema => HandleKey state schema -> Trace.ContractHandle schema (Err state)
+
 data ModelState state = ModelState
-        { _currentSlot   :: Slot
-        , _lastSlot      :: Slot
-        , _balances      :: Map Wallet Value
-        , _forged        :: Value
-        , _walletHandles :: Handles state
-        , _modelState    :: state
+        { _currentSlot :: Slot
+        , _lastSlot    :: Slot
+        , _balances    :: Map Wallet Value
+        , _forged      :: Value
+        , _modelState  :: state
         }
 
 type Script s = StateModel.Script (ModelState s)
@@ -157,8 +158,8 @@ class ( Typeable state
     nextState :: Command state -> Spec state ()
     nextState _ = return ()
 
-    perform :: ModelState state -> Command state -> EmulatorTrace ()
-    perform _ _ = return ()
+    perform :: HandleFun state -> ModelState state -> Command state -> EmulatorTrace ()
+    perform _ _ _ = return ()
 
     monitoring :: (ModelState state, ModelState state) -> Command state -> Property -> Property
     monitoring _ _ = id
@@ -215,22 +216,36 @@ instance GetModelState (Spec s) where
     type StateType (Spec s) = s
     getState = get
 
-handle :: (ContractModel s, Typeable schema) => ModelState s -> HandleKey s schema -> Trace.ContractHandle schema (Err s)
-handle s key =
-    case imLookup key (s ^. walletHandles) of
+handle :: (ContractModel s) => Handles s -> HandleFun s
+handle handles key =
+    case imLookup key handles of
         Just (HandleVal h) -> h
         Nothing            -> error $ "handle: No handle for " ++ show key
 
 lockedFunds :: ModelState s -> Value
 lockedFunds s = s ^. forged <> inv (fold $ s ^. balances)
 
-contractInstanceId :: (ContractModel s, Typeable schema) => ModelState s -> HandleKey s schema -> ContractInstanceId
-contractInstanceId s key = chInstanceId $ handle s key
-
 addCommands :: forall state. ContractModel state => Script state -> [Command state] -> Script state
 addCommands (StateModel.Script s) cmds = StateModel.Script $ s ++ [Var i := ContractAction @state @() cmd | (cmd, i) <- zip cmds [n + 1..] ]
     where
         n = last $ 0 : [ i | Var i := _ <- s ]
+
+newtype EmulatorAction state = EmulatorAction { runEmulatorAction :: Handles state -> EmulatorTrace (Handles state) }
+
+instance Semigroup (EmulatorAction state) where
+    EmulatorAction f <> EmulatorAction g = EmulatorAction (f >=> g)
+
+instance Monoid (EmulatorAction state) where
+    mempty  = EmulatorAction pure
+    mappend = (<>)
+
+type ContractMonad state = Writer (EmulatorAction state)
+
+runEmulator :: (Handles state -> EmulatorTrace ()) -> ContractMonad state ()
+runEmulator a = tell (EmulatorAction $ \ h -> h <$ a h)
+
+getHandles :: EmulatorTrace (Handles state) -> ContractMonad state ()
+getHandles a = tell (EmulatorAction $ \ _ -> a)
 
 instance ContractModel state => Show (Action (ModelState state) a) where
     showsPrec p (ContractAction a) = showsPrec p a
@@ -241,7 +256,7 @@ instance ContractModel state => StateModel (ModelState state) where
 
     data Action (ModelState state) a = ContractAction (Command state)
 
-    type ActionMonad (ModelState state) = EmulatorTrace
+    type ActionMonad (ModelState state) = ContractMonad state
 
     arbitraryAction s = do
         a <- arbitraryCommand s
@@ -253,7 +268,6 @@ instance ContractModel state => StateModel (ModelState state) where
                               , _lastSlot      = 125        -- Set by propRunScript
                               , _balances      = Map.empty
                               , _forged        = mempty
-                              , _walletHandles = IMNil
                               , _modelState    = initialState }
 
     nextState s (ContractAction cmd) _v = runSpec (nextState cmd) s
@@ -261,7 +275,7 @@ instance ContractModel state => StateModel (ModelState state) where
     precondition s (ContractAction cmd) = s ^. currentSlot < s ^. lastSlot - 10 -- No commands if < 10 slots left
                                           && precondition s cmd
 
-    perform s (ContractAction cmd) _env = error "unused" <$ perform s cmd
+    perform s (ContractAction cmd) _env = error "unused" <$ runEmulator (\ h -> perform (handle h) s cmd)
 
     postcondition _s _cmd _env _res = True
 
@@ -283,12 +297,13 @@ instance GetModelState (DL s) where
 
 -- * Running the model
 
-runTr :: CheckOptions -> TracePredicate -> EmulatorTrace () -> Property
+runTr :: CheckOptions -> TracePredicate -> ContractMonad state Property -> Property
 runTr opts predicate trace =
-  flip runCont (const $ property True) $
-    checkPredicateInner opts predicate trace
+  flip runCont (const prop) $
+    checkPredicateInner opts predicate (void $ runEmulatorAction tr IMNil)
                         debugOutput assertResult
   where
+    (prop, tr) = runWriter trace
     debugOutput :: String -> Cont Property ()
     debugOutput out = cont $ \ k -> whenFail (putStrLn out) $ k ()
 
@@ -310,7 +325,7 @@ propRunScript_ :: forall state.
 propRunScript_ handleSpecs script =
     propRunScript handleSpecs
                   (\ _ -> pure True)
-                  (\ _ -> pure ())
+                  (\ _ _ -> pure ())
                   script
                   (\ _ -> pure ())
 
@@ -318,9 +333,9 @@ propRunScript :: forall state.
     ContractModel state =>
     [HandleSpec state] ->
     (ModelState state -> TracePredicate) ->
-    (ModelState state -> EmulatorTrace ()) ->
+    (HandleFun state -> ModelState state -> EmulatorTrace ()) ->
     Script state ->
-    (ModelState state -> PropertyM EmulatorTrace ()) ->
+    (ModelState state -> PropertyM (ContractMonad state) ()) ->
     Property
 propRunScript = propRunScriptWithOptions (set minLogLevel Warning defaultCheckOptions)
 
@@ -329,16 +344,15 @@ propRunScriptWithOptions :: forall state.
     CheckOptions ->
     [HandleSpec state] ->
     (ModelState state -> TracePredicate) ->
-    (ModelState state -> EmulatorTrace ()) ->
+    (HandleFun state -> ModelState state -> EmulatorTrace ()) ->
     Script state ->
-    (ModelState state -> PropertyM EmulatorTrace ()) ->
+    (ModelState state -> PropertyM (ContractMonad state) ()) ->
     Property
 propRunScriptWithOptions opts handleSpecs predicate before script after =
-    monadic (runTr opts finalPredicate . void) $ do
-        handles <- QC.run $ activateWallets @state handleSpecs
-        let initState = StateModel.initialState { _walletHandles = handles
-                                                , _lastSlot      = opts ^. maxSlot }
-        QC.run $ before initState
+    monadic (runTr opts finalPredicate) $ do
+        QC.run $ getHandles $ activateWallets @state handleSpecs
+        let initState = StateModel.initialState { _lastSlot      = opts ^. maxSlot }
+        QC.run $ runEmulator $ \ h -> before (handle h) initState
         (st, _) <- runScriptInState initState script
         after st
     where

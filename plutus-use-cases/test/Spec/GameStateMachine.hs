@@ -83,13 +83,13 @@ instance ContractModel GameModel where
 
     -- 'perform' gets a state, which includes the GameModel state, but also contract handles for the
     -- wallets and what the model thinks the current balances are.
-    perform s cmd = case cmd of
+    perform handle s cmd = case cmd of
         Lock w new val -> do
-            callEndpoint @"lock" (handle s $ WalletKey w)
+            callEndpoint @"lock" (handle $ WalletKey w)
                          LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
             delay 2
         Guess w old new val -> do
-            callEndpoint @"guess" (handle s $ WalletKey w)
+            callEndpoint @"guess" (handle $ WalletKey w)
                 GuessArgs{ guessArgsOldSecret = old
                          , guessArgsNewSecret = new
                          , guessArgsValueTakenOut = Ada.lovelaceValueOf val}
@@ -162,12 +162,13 @@ prop_Game :: Script GameModel -> Property
 prop_Game script = propRunScript_ handleSpec script
 
 propGame' :: LogLevel -> Script GameModel -> Property
-propGame' l s = propRunScriptWithOptions (set minLogLevel l defaultCheckOptions)
-                                         handleSpec test before s after
-    where
-        test   _ = pure True
-        before _ = return ()
-        after  _ = run (delay 10)
+propGame' l s = propRunScriptWithOptions
+                    (set minLogLevel l defaultCheckOptions)
+                    handleSpec
+                    (\ _ -> pure True)
+                    (\ _ _ -> pure ())
+                    s
+                    (\ _ -> pure ())
 
 wallets :: [Wallet]
 wallets = [w1, w2, w3]
