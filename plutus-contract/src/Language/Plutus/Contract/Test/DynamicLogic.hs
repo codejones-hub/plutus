@@ -377,9 +377,6 @@ stuck (Stopping d) s     = stuck d s
 stuck (Weight w d) s     = w < never || stuck d s
 stuck (ForAll _ _) _     = False
 
---canGenerate g p = unsafeGenerate $ isJust <$> keepTryingUntil 100 g p
-
-
 validDLTest :: DynLogic s -> DynLogicTest s -> Bool
 validDLTest _ (DLScript _) = True
 validDLTest _ _            = False
