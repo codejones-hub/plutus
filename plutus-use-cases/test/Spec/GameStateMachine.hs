@@ -218,10 +218,10 @@ noLockedFunds = do
     w <- forAllQ $ elementsQ wallets
     secret <- viewModelState currentSecret
     val    <- viewModelState gameValue
-    when (val > 0) $ do
+    when (val > 1) $ do
         action $ GiveToken w
         action $ Guess w secret secret val
-    assertModel $ isZero . lockedFunds
+    assertModel "Locked funds should be zero" $ isZero . lockedFunds
 
 -- | Check that we can always get the money out of the guessing game (by guessing correctly).
 prop_NoLockedFunds :: Property

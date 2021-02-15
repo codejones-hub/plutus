@@ -11,7 +11,7 @@ module Language.Plutus.Contract.Test.DynamicLogic
     , DynLogic, DynPred
     , DynLogicModel(..)
     , ignore, passTest, afterAny, after, (|||), forAllQ, weight, toStop
-    , done, always
+    , done, errorDL, always
     , forAllScripts, withDLScript
     ) where
 
@@ -51,6 +51,7 @@ weight    :: Double -> DynLogic s -> DynLogic s
 toStop    :: DynLogic s -> DynLogic s
 
 done      :: DynPred s
+errorDL   :: String -> DynLogic s
 always    :: DynPred s -> DynPred s
 
 ignore       = EmptySpec
@@ -69,6 +70,7 @@ weight       = Weight
 toStop       = Stopping
 
 done _       = passTest
+errorDL s    = After (Error s) (const ignore)
 
 always p s   = Stopping (p s) ||| Weight 0.1 (p s) ||| AfterAny (always p)
 
@@ -227,7 +229,9 @@ chooseNextStep s n d =
                     return $ Stepping (Do $ Var n := a) (k (nextState s a (Var n)))
                 AfterAny k -> do
                     m <- keepTryingUntil 100 (arbitraryAction s) $
-                          \(Some act) -> precondition s act && not (restricted act)
+                          \a -> case a of
+                                  Some act -> precondition s act && not (restricted act)
+                                  Error _  -> False
                     case m of
                         Nothing -> return NoStep
                         Just (Some a) ->
@@ -266,9 +270,8 @@ shrinkScript d as = shrink' d as initialState
           [] :
           reverse (takeWhile (not . null) [drop (n-1) as | n <- iterate (*2) 1]) ++
           case step of
-            Do (var := act) ->
-              [case (var, a') of (Var i, Some act') -> Do (Var i := act'):as
-              | a' <- shrinkAction s act]
+            Do (Var i := act) ->
+              [Do (Var i := act'):as | Some act' <- shrinkAction s act]
             Witness a ->
               -- When we shrink a witness, allow one shrink of the
               -- rest of the script... so assuming the witness may be
@@ -369,8 +372,10 @@ stuck EmptySpec    _ = True
 stuck Stop         _ = False
 stuck (After _ _)  _ = False
 stuck (AfterAny _) s = not $ canGenerate 0.01 (arbitraryAction s)
-                              (\(Some act) -> precondition s act
-                                              && not (restricted act))
+                              (\a -> case a of
+                                       Some act -> precondition s act
+                                                && not (restricted act)
+                                       Error _ -> False)
 stuck (Alt True d d') s  = stuck d s && stuck d' s
 stuck (Alt False d d') s = stuck d s || stuck d' s
 stuck (Stopping d) s     = stuck d s
@@ -391,6 +396,7 @@ badActions Stop      _    = []
 badActions (After (Some a) _) s
   | precondition s a = []
   | otherwise        = [Some a]
+badActions (After (Error m) _) s = [Error m]
 badActions (AfterAny _) _ = []
 badActions (Alt _ d d') s = badActions d s ++ badActions d' s
 badActions (Stopping d) s = badActions d s

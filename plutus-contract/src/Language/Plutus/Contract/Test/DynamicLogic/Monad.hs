@@ -61,11 +61,14 @@ weight w = DL $ \ s k -> DL.weight w (k () s)
 getModelStateDL :: DL s s
 getModelStateDL = DL $ \ s k -> k s s
 
-assert :: Bool -> DL s ()
-assert b = unless b empty
+errorDL :: String -> DL s a
+errorDL name = DL $ \ _ _ -> DL.errorDL name
 
-assertModel :: (s -> Bool) -> DL s ()
-assertModel p = assert . p =<< getModelStateDL
+assert :: String -> Bool -> DL s ()
+assert name b = if b then return () else errorDL name
+
+assertModel :: String -> (s -> Bool) -> DL s ()
+assertModel name p = assert name . p =<< getModelStateDL
 
 forAllQ :: Quantifiable q => q -> DL s (Quantifies q)
 forAllQ q = DL $ \ s k -> DL.forAllQ q $ \ x -> k x s

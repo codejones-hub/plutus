@@ -1,5 +1,5 @@
 -- This is a simple state modelling library for use with Haskell
--- QuickCheck. For documentation, see the associated slides.
+-- QuickCheck.
 
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -71,6 +71,7 @@ lookUpVar ((v' :== a) : env) v =
 
 data Any f where
   Some :: (Show a, Typeable a, Eq (f a)) => f a -> Any f
+  Error :: String -> Any f
 
 deriving instance (forall a. Show (Action state a)) => Show (Any (Action state))
 
@@ -79,6 +80,8 @@ instance Eq (Any f) where
     case eqT @a @b of
       Just Refl -> a == b
       Nothing   -> False
+  Error s == Error s' = s == s'
+  _ == _ = False
 
 data Step state where
   (:=) :: (Show a, Typeable a, Eq (Action state a), Typeable (Action state a), Show (Action state a)) =>
@@ -115,7 +118,9 @@ instance (Typeable state, StateModel state) => Arbitrary (Script state) where
         let w = n `div` 2 + 1 in
           frequency [(1, return []),
                      (w, do mact <- arbitraryAction s `suchThatMaybe`
-                                      \(Some act) -> precondition s act
+                                      \a -> case a of
+                                              Some act -> precondition s act
+                                              Error _  -> False
                             case mact of
                               Just (Some act) ->
                                 ((Var step := act):) <$> arbActions (nextState s act (Var step)) (step+1)
