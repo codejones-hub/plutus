@@ -74,7 +74,7 @@ always p s   = Stopping (p s) ||| Weight 0.1 (p s) ||| AfterAny (always p)
 
 data DynLogicTest s = BadPrecondition [TestStep s] [Any (Action s)] s
                     | Looping [TestStep s]
-                    | Stuck [TestStep s]
+                    | Stuck [TestStep s] s
                     | DLScript [TestStep s]
 
 data TestStep s = Do (Step s)
@@ -101,8 +101,8 @@ instance StateModel s => Show (DynLogicTest s) where
                   ["  " ++ showsPrec 11 s ""]
     show (Looping as) =
         unlines $ ["Looping"] ++ bracket (map show as)
-    show (Stuck as) =
-        unlines $ ["Stuck"] ++ bracket (map show as)
+    show (Stuck as s) =
+        unlines $ ["Stuck"] ++ bracket (map show as) ++ ["  " ++ showsPrec 11 s ""]
     show (DLScript as) =
         unlines $ ["DLScript"] ++ bracket (map show as)
 
@@ -154,7 +154,7 @@ generateDLTest d size = generate d 0 (initialStateFor d) []
                               generate d' n s (Witness a:as)
                             useStep NoStep alt = alt
                         foldr (\ step k -> do try <- chooseNextStep s n step; useStep try k)
-                              (return $ Stuck (reverse as))
+                              (return $ Stuck (reverse as) s)
                               [preferred, noAny preferred, d, noAny d]
                 bs -> return $ BadPrecondition (reverse as) bs s
 
@@ -336,21 +336,21 @@ propPruningGeneratedScriptIsNoop d =
   forAll (sized $ \ n -> choose (1, max 1 n) >>= generateDLTest d) $ \test ->
     let script = case test of BadPrecondition s _ _ -> s
                               Looping s             -> s
-                              Stuck s               -> s
+                              Stuck s _             -> s
                               DLScript s            -> s
     in script == pruneDLTest d script
 
 getScript :: DynLogicTest s -> [TestStep s]
 getScript (BadPrecondition s _ _) = s
 getScript (Looping s)             = s
-getScript (Stuck s)               = s
+getScript (Stuck s _)             = s
 getScript (DLScript s)            = s
 
 makeTestFromPruned :: DynLogicModel s => DynLogic s -> [TestStep s] -> DynLogicTest s
 makeTestFromPruned d test = make d initialState test
   where make d s as | not (null bad) = BadPrecondition as bad s
           where bad = badActions d s
-        make d s [] | stuck d s = Stuck []
+        make d s [] | stuck d s = Stuck [] s
                     | otherwise = DLScript []
         make d s (step:as) =
           case make (stepDLtoDL d s step)
@@ -360,7 +360,7 @@ makeTestFromPruned d test = make d initialState test
                     as
           of
             BadPrecondition as bad s -> BadPrecondition (step:as) bad s
-            Stuck as                 -> Stuck (step:as)
+            Stuck as s               -> Stuck (step:as) s
             DLScript as              -> DLScript (step:as)
             Looping{}                -> error "makeTestFromPruned: Looping"
 
