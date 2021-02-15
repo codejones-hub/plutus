@@ -12,7 +12,7 @@ module Language.Plutus.Contract.Test.DynamicLogic
     , DynLogicModel(..)
     , ignore, passTest, afterAny, after, (|||), forAllQ, weight, toStop
     , done, always
-    , forAllScripts
+    , forAllScripts, withDLScript
     ) where
 
 import           Data.Typeable
@@ -122,8 +122,13 @@ class StateModel s => DynLogicModel s where
 forAllScripts :: (DynLogicModel s, Testable a) =>
                    DynLogic s -> (Script s -> a) -> Property
 forAllScripts d k =
-    forAllShrink (sized $ generateDLTest d) (shrinkDLTest d) $ \test ->
-        validDLTest d test .&&. k (scriptFromDL test)
+    forAllShrink (sized $ generateDLTest d) (shrinkDLTest d) $
+        withDLScript d k
+
+withDLScript :: (DynLogicModel s, Testable a) =>
+                   DynLogic s -> (Script s -> a) -> DynLogicTest s -> Property
+withDLScript d k test =
+    validDLTest d test .&&. k (scriptFromDL test)
 
 generateDLTest :: DynLogicModel s => DynLogic s -> Int -> Gen (DynLogicTest s)
 generateDLTest d size = generate d 0 (initialStateFor d) []
