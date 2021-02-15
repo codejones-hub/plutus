@@ -27,7 +27,9 @@ module Language.PlutusCore.DeBruijn.Internal
     , unNameTyDeBruijn
     , fakeNameDeBruijn
     , nameToDeBruijn
+    , nameToLevel
     , tyNameToDeBruijn
+    , tyNameToLevel
     , deBruijnToName
     , deBruijnToTyName
     ) where
@@ -47,22 +49,27 @@ import qualified Data.Text                  as T
 import           Data.Text.Prettyprint.Doc
 import           Data.Typeable
 
-import           Numeric.Natural
-
 import           Control.DeepSeq            (NFData)
+import           Data.Coerce
 import           ErrorCode
 import           GHC.Generics
 
+
 -- | A relative index used for de Bruijn identifiers.
-newtype Index = Index Natural
+newtype Index = Index Int
     deriving stock Generic
     deriving newtype (Show, Num, Eq, Ord, Pretty)
     deriving anyclass NFData
 
 -- | A term name as a de Bruijn index.
 data NamedDeBruijn = NamedDeBruijn { ndbnString :: T.Text, ndbnIndex :: Index }
-    deriving (Show, Generic)
+    deriving (Show, Generic, Eq)
     deriving anyclass NFData
+
+instance HasUnique NamedDeBruijn TermUnique where
+    unique = lens g s where
+        g = TermUnique . coerce ndbnIndex
+        s n (TermUnique u) = n{ndbnIndex=coerce u}
 
 -- | A term name as a de Bruijn index, without the name string.
 newtype DeBruijn = DeBruijn { dbnIndex :: Index }
@@ -184,8 +191,16 @@ getIndex :: (MonadReader Levels m, AsFreeVariableError e, MonadError e m) => Uni
 getIndex u = do
     Levels current ls <- ask
     case BM.lookup u ls of
-        Just ix -> pure $ levelToIndex current ix
-        Nothing -> throwing _FreeVariableError $ FreeUnique u
+        Just lvl -> pure $ levelToIndex current lvl
+        Nothing  -> throwing _FreeVariableError $ FreeUnique u
+
+-- | Get the 'Level' corresponding to a given 'Unique'.
+getLevel :: (MonadReader Levels m, AsFreeVariableError e, MonadError e m) => Unique -> m Index
+getLevel u = do
+    Levels _ ls <- ask
+    case BM.lookup u ls of
+        Just (Level lvl) -> pure lvl
+        Nothing          -> throwing _FreeVariableError $ FreeUnique u
 
 -- | Get the 'Unique' corresponding to a given 'Index'.
 getUnique :: (MonadReader Levels m, AsFreeVariableError e, MonadError e m) => Index -> m Unique
@@ -212,10 +227,20 @@ nameToDeBruijn
     => Name -> m NamedDeBruijn
 nameToDeBruijn (Name str u) = NamedDeBruijn str <$> getIndex u
 
+nameToLevel
+    :: (MonadReader Levels m, AsFreeVariableError e, MonadError e m)
+    => Name -> m NamedDeBruijn
+nameToLevel (Name str u) = NamedDeBruijn str <$> getLevel u
+
 tyNameToDeBruijn
     :: (MonadReader Levels m, AsFreeVariableError e, MonadError e m)
     => TyName -> m NamedTyDeBruijn
 tyNameToDeBruijn (TyName n) = NamedTyDeBruijn <$> nameToDeBruijn n
+
+tyNameToLevel
+    :: (MonadReader Levels m, AsFreeVariableError e, MonadError e m)
+    => TyName -> m NamedTyDeBruijn
+tyNameToLevel (TyName n) = NamedTyDeBruijn <$> nameToLevel n
 
 deBruijnToName
     :: (MonadReader Levels m, AsFreeVariableError e, MonadError e m)

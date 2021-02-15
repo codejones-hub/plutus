@@ -22,6 +22,7 @@ module Language.PlutusCore.Evaluation.Machine.ExMemory
 ) where
 
 import           Language.PlutusCore.Core
+import           Language.PlutusCore.DeBruijn
 import           Language.PlutusCore.Name
 import           Language.PlutusCore.Pretty
 import           Language.PlutusCore.Universe
@@ -109,6 +110,7 @@ deriving via (GenericExMemoryUsage (a, b)) instance
     (ExMemoryUsage a, ExMemoryUsage b) => ExMemoryUsage (a, b)
 
 deriving via (GenericExMemoryUsage Name) instance ExMemoryUsage Name
+deriving via (GenericExMemoryUsage NamedDeBruijn) instance ExMemoryUsage NamedDeBruijn
 deriving via (GenericExMemoryUsage (Type tyname uni ann)) instance
     (ExMemoryUsage tyname, ExMemoryUsage ann) => ExMemoryUsage (Type tyname uni ann)
 deriving via (GenericExMemoryUsage (Kind ann)) instance ExMemoryUsage ann => ExMemoryUsage (Kind ann)
@@ -119,6 +121,7 @@ deriving via (GenericExMemoryUsage (Term tyname name uni fun ann)) instance
 deriving newtype instance ExMemoryUsage TyName
 deriving newtype instance ExMemoryUsage ExMemory
 deriving newtype instance ExMemoryUsage Unique
+deriving newtype instance ExMemoryUsage Index
 
 -- See https://github.com/input-output-hk/plutus/issues/1861
 instance ExMemoryUsage (Some (TypeIn uni)) where

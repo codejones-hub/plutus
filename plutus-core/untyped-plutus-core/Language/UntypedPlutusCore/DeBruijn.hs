@@ -15,6 +15,8 @@ module Language.UntypedPlutusCore.DeBruijn
     , unDeBruijnTerm
     , unDeBruijnProgram
     , unNameDeBruijn
+    , levelifyTerm
+    , levelifyProgram
     ) where
 
 import           Language.PlutusCore.DeBruijn.Internal
@@ -91,6 +93,40 @@ unDeBruijnTermM = \case
     Apply ann t1 t2 -> Apply ann <$> unDeBruijnTermM t1 <*> unDeBruijnTermM t2
     Delay ann t -> Delay ann <$> unDeBruijnTermM t
     Force ann t -> Force ann <$> unDeBruijnTermM t
+    -- boring non-recursive cases
+    Constant ann con -> pure $ Constant ann con
+    Builtin ann bn -> pure $ Builtin ann bn
+    Error ann -> pure $ Error ann
+
+
+-- | Convert a 'Term' with 'TyName's and 'Name's into a 'Term' with 'NamedTyDeBruijn's and 'NamedDeBruijn's.
+levelifyTerm
+    :: (AsFreeVariableError e, MonadError e m)
+    => Term Name uni fun ann -> m (Term NamedDeBruijn uni fun ann)
+levelifyTerm = flip runReaderT (Levels 0 BM.empty) . levelifyTermM
+
+
+-- | Convert a 'Program' with 'TyName's and 'Name's into a 'Program' with 'NamedTyDeBruijn's and 'NamedDeBruijn's.
+levelifyProgram
+    :: (AsFreeVariableError e, MonadError e m)
+    => Program Name uni fun ann -> m (Program NamedDeBruijn uni fun ann)
+levelifyProgram (Program ann ver term) = Program ann ver <$> levelifyTerm term
+
+levelifyTermM
+    :: (MonadReader Levels m, AsFreeVariableError e, MonadError e m)
+    => Term Name uni fun ann
+    -> m (Term NamedDeBruijn uni fun ann)
+levelifyTermM = \case
+    -- variable case
+    Var ann n -> Var ann <$> nameToLevel n
+    -- binder cases
+    LamAbs ann n t -> declareUnique n $ do
+        n' <- nameToLevel n
+        withScope $ LamAbs ann n' <$> levelifyTermM t
+    -- boring recursive cases
+    Apply ann t1 t2 -> Apply ann <$> levelifyTermM t1 <*> levelifyTermM t2
+    Delay ann t -> Delay ann <$> levelifyTermM t
+    Force ann t -> Force ann <$> levelifyTermM t
     -- boring non-recursive cases
     Constant ann con -> pure $ Constant ann con
     Builtin ann bn -> pure $ Builtin ann bn

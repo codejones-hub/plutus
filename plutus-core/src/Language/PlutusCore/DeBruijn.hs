@@ -21,6 +21,9 @@ module Language.PlutusCore.DeBruijn
     , unNameDeBruijn
     , unNameTyDeBruijn
     , fakeNameDeBruijn
+    , levelifyTy
+    , levelifyTerm
+    , levelifyProgram
     ) where
 
 import           Language.PlutusCore.DeBruijn.Internal
@@ -164,3 +167,68 @@ unDeBruijnTermM = \case
     -- boring non-recursive cases
     Constant ann con -> pure $ Constant ann con
     Builtin ann bn -> pure $ Builtin ann bn
+
+-- | Convert a 'Type' with 'TyName's into a 'Type' with 'NamedTyDeBruijn's.
+levelifyTy
+    :: (AsFreeVariableError e, MonadError e m)
+    => Type TyName uni ann -> m (Type NamedTyDeBruijn uni ann)
+levelifyTy = flip runReaderT (Levels 0 BM.empty) . levelifyTyM
+
+-- | Convert a 'Term' with 'TyName's and 'Name's into a 'Term' with 'NamedTyDeBruijn's and 'NamedDeBruijn's.
+levelifyTerm
+    :: (AsFreeVariableError e, MonadError e m)
+    => Term TyName Name uni fun ann -> m (Term NamedTyDeBruijn NamedDeBruijn uni fun ann)
+levelifyTerm = flip runReaderT (Levels 0 BM.empty) . levelifyTermM
+
+
+-- | Convert a 'Program' with 'TyName's and 'Name's into a 'Program' with 'NamedTyDeBruijn's and 'NamedDeBruijn's.
+levelifyProgram
+    :: (AsFreeVariableError e, MonadError e m)
+    => Program TyName Name uni fun ann -> m (Program NamedTyDeBruijn NamedDeBruijn uni fun ann)
+levelifyProgram (Program ann ver term) = Program ann ver <$> levelifyTerm term
+
+levelifyTermM
+    :: (MonadReader Levels m, AsFreeVariableError e, MonadError e m)
+    => Term TyName Name uni fun ann
+    -> m (Term NamedTyDeBruijn NamedDeBruijn uni fun ann)
+levelifyTermM = \case
+    -- variable case
+    Var ann n -> Var ann <$> nameToLevel n
+    -- binder cases
+    TyAbs ann tn k t -> declareUnique tn $ do
+        tn' <- tyNameToLevel tn
+        withScope $ TyAbs ann tn' k <$> levelifyTerm t
+    LamAbs ann n ty t -> declareUnique n $ do
+        n' <- nameToLevel n
+        withScope $ LamAbs ann n' <$> levelifyTyM ty <*> levelifyTerm t
+    -- boring recursive cases
+    Apply ann t1 t2 -> Apply ann <$> levelifyTerm t1 <*> levelifyTerm t2
+    TyInst ann t ty -> TyInst ann <$> levelifyTerm t <*> levelifyTyM ty
+    Unwrap ann t -> Unwrap ann <$> levelifyTerm t
+    IWrap ann pat arg t -> IWrap ann <$> levelifyTyM pat <*> levelifyTyM arg <*> levelifyTerm t
+    Error ann ty -> Error ann <$> levelifyTyM ty
+    -- boring non-recursive cases
+    Constant ann con -> pure $ Constant ann con
+    Builtin ann bn -> pure $ Builtin ann bn
+
+
+levelifyTyM
+    :: (MonadReader Levels m, AsFreeVariableError e, MonadError e m)
+    => Type TyName uni ann
+    -> m (Type NamedTyDeBruijn uni ann)
+levelifyTyM = \case
+    -- variable case
+    TyVar ann n -> TyVar ann <$> tyNameToLevel n
+    -- binder cases
+    TyForall ann tn k ty -> declareUnique tn $ do
+        tn' <- tyNameToLevel tn
+        withScope $ TyForall ann tn' k <$> levelifyTyM ty
+    TyLam ann tn k ty -> declareUnique tn $ do
+        tn' <- tyNameToLevel tn
+        withScope $ TyLam ann tn' k <$> levelifyTyM ty
+    -- boring recursive cases
+    TyFun ann i o -> TyFun ann <$> levelifyTyM i <*> levelifyTyM o
+    TyApp ann fun arg -> TyApp ann <$> levelifyTyM fun <*> levelifyTyM arg
+    TyIFix ann pat arg -> TyIFix ann <$> levelifyTyM pat <*> levelifyTyM arg
+    -- boring non-recursive cases
+    TyBuiltin ann con -> pure $ TyBuiltin ann con
