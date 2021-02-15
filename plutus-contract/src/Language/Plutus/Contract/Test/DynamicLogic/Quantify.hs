@@ -52,9 +52,10 @@ exactlyQ a = Quantification
 
 chooseQ :: (Arbitrary a, Random a, Ord a) => (a, a) -> Quantification a
 chooseQ r@(a, b) = Quantification
-    (Just $ choose r)
-    (\ x -> a <= x && x <= b)
-    shrink
+    (guard (a <= b) >> (Just $ choose r))
+    is
+    (filter is . shrink)
+    where is x = a <= x && x <= b
 
 elementsQ :: Eq a => [a] -> Quantification a
 elementsQ as = Quantification g (`elem` as) (\a -> takeWhile (/=a) as)
