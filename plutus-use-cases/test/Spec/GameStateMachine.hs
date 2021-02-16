@@ -219,6 +219,7 @@ noLockedFunds = do
     secret <- viewModelState currentSecret
     val    <- viewModelState gameValue
     when (val > 0) $ do
+        monitorDL $ label "Unlocking funds"
         action $ GiveToken w
         action $ Guess w secret secret val
     assertModel "Locked funds should be zero" $ isZero . lockedFunds

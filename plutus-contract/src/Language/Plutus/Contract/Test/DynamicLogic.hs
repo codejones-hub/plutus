@@ -11,12 +11,14 @@ module Language.Plutus.Contract.Test.DynamicLogic
     , DynLogic, DynPred
     , DynLogicModel(..)
     , ignore, passTest, afterAny, after, (|||), forAllQ, weight, toStop
-    , done, errorDL, always
+    , done, errorDL, monitorDL, always
     , forAllScripts, withDLScript
     ) where
 
 import           Data.List
 import           Data.Typeable
+
+import           Control.Applicative
 
 import           Test.QuickCheck
 
@@ -34,6 +36,7 @@ data DynLogic s = EmptySpec
                 | Weight Double (DynLogic s)
                 | forall a. (Eq a, Show a, Typeable a) =>
                     ForAll (Quantification a) (a -> DynLogic s)
+                | Monitor (Property -> Property) (DynLogic s)
 
 type DynPred s = s -> DynLogic s
 
@@ -52,6 +55,9 @@ toStop    :: DynLogic s -> DynLogic s
 
 done      :: DynPred s
 errorDL   :: String -> DynLogic s
+
+monitorDL :: (Property -> Property) -> DynLogic s -> DynLogic s
+
 always    :: DynPred s -> DynPred s
 
 ignore       = EmptySpec
@@ -71,6 +77,8 @@ toStop       = Stopping
 
 done _       = passTest
 errorDL s    = After (Error s) (const ignore)
+
+monitorDL    = Monitor
 
 always p s   = Stopping (p s) ||| Weight 0.1 (p s) ||| AfterAny (always p)
 
@@ -134,7 +142,7 @@ forAllScripts d k =
 withDLScript :: (DynLogicModel s, Testable a) =>
                    DynLogic s -> (Script s -> a) -> DynLogicTest s -> Property
 withDLScript d k test =
-    validDLTest d test .&&. k (scriptFromDL test)
+    validDLTest d test .&&. (applyMonitoring d test . property $ k (scriptFromDL test))
 
 generateDLTest :: DynLogicModel s => DynLogic s -> Int -> Gen (DynLogicTest s)
 generateDLTest d size = generate d 0 (initialStateFor d) []
@@ -175,6 +183,7 @@ stopping (Alt b d d')  = Alt b (stopping d) (stopping d')
 stopping (Stopping d)  = d
 stopping (Weight w d)  = Weight w (stopping d)
 stopping (ForAll _ _)  = EmptySpec
+stopping (Monitor f d) = Monitor f (stopping d)
 
 noStopping :: DynLogic s -> DynLogic s
 noStopping EmptySpec     = EmptySpec
@@ -185,6 +194,7 @@ noStopping (Alt b d d')  = Alt b (noStopping d) (noStopping d')
 noStopping (Stopping _)  = EmptySpec
 noStopping (Weight w d)  = Weight w (noStopping d)
 noStopping (ForAll q f)  = ForAll q f
+noStopping (Monitor f d) = Monitor f (noStopping d)
 
 noAny :: DynLogic s -> DynLogic s
 noAny EmptySpec     = EmptySpec
@@ -195,6 +205,7 @@ noAny (Alt b d d')  = Alt b (noAny d) (noAny d')
 noAny (Stopping d)  = Stopping (noAny d)
 noAny (Weight w d)  = Weight w (noAny d)
 noAny (ForAll q f)  = ForAll q f
+noAny (Monitor f d) = Monitor f (noAny d)
 
 nextSteps :: DynLogic s -> [(Double, DynLogic s)]
 nextSteps EmptySpec     = []
@@ -205,6 +216,7 @@ nextSteps (Alt _ d d')  = nextSteps d ++ nextSteps d'
 nextSteps (Stopping d)  = nextSteps d
 nextSteps (Weight w d)  = [(w*w', s) | (w', s) <- nextSteps d, w*w' > never]
 nextSteps (ForAll q f)  = [(1, ForAll q f)]
+nextSteps (Monitor f d) = nextSteps d
 
 chooseOneOf :: [(Double, DynLogic s)] -> Gen (DynLogic s)
 chooseOneOf steps = frequency [(round (w/never), return s) | (w, s) <- steps]
@@ -293,6 +305,7 @@ shrinkWitness (ForAll (q :: Quantification a) _) (a :: a') =
 shrinkWitness (Alt _ d d') a = shrinkWitness d a ++ shrinkWitness d' a
 shrinkWitness (Stopping d) a = shrinkWitness d a
 shrinkWitness (Weight _ d) a = shrinkWitness d a
+shrinkWitness (Monitor _ d)a = shrinkWitness d a
 shrinkWitness _ _            = []
 
 -- The result of pruning a list of actions is a list of actions that
@@ -327,6 +340,7 @@ stepDL (ForAll (q :: Quantification a) f) _ (Witness (a :: a')) =
   case eqT @ a @ a' of
     Just Refl -> [f a | isaQ q a]
     Nothing   -> []
+stepDL (Monitor f d) s step = stepDL d s step
 stepDL _ _ _ = []
 
 stepDLtoDL :: DynLogicModel s => DynLogic s -> s -> TestStep s -> DynLogic s
@@ -381,6 +395,7 @@ stuck (Alt False d d') s = stuck d s || stuck d' s
 stuck (Stopping d) s     = stuck d s
 stuck (Weight w d) s     = w < never || stuck d s
 stuck (ForAll _ _) _     = False
+stuck (Monitor _ d)s     = stuck d s
 
 validDLTest :: DynLogic s -> DynLogicTest s -> Bool
 validDLTest _ (DLScript _) = True
@@ -402,3 +417,29 @@ badActions (Alt _ d d') s = badActions d s ++ badActions d' s
 badActions (Stopping d) s = badActions d s
 badActions (Weight w d) s = if w < never then [] else badActions d s
 badActions (ForAll _ _) _ = []
+badActions (Monitor _ d)s = badActions d s
+
+applyMonitoring d (DLScript s) p =
+  case findMonitoring d initialState s of
+    Just f  -> f p
+    Nothing -> p
+
+findMonitoring Stop      s [] = Just id
+findMonitoring (After (Some a) k) s (Do (var := a'):as)
+  | Some a == Some a' = findMonitoring (k s') s' as
+  where s' = nextState s a' var
+findMonitoring (AfterAny k) s as@(Do (var := a):_)
+  | not (restricted a) = findMonitoring (After (Some a) k) s as
+findMonitoring (Alt b d d') s as =
+  -- Give priority to monitoring matches to the left. Combining both
+  -- results in repeated monitoring from always, which is unexpected.
+  findMonitoring d s as <|> findMonitoring d' s as
+findMonitoring (Stopping d) s as = findMonitoring d s as
+findMonitoring (Weight _ d) s as = findMonitoring d s as
+findMonitoring (ForAll (q :: Quantification a) k) s (Witness (a :: a'):as) =
+  case eqT @ a @ a' of
+    Just Refl -> findMonitoring (k a) s as
+    Nothing   -> Nothing
+findMonitoring (Monitor m d) s as =
+  (m.) <$> findMonitoring d s as
+findMonitoring _ _ _ = Nothing

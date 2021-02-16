@@ -49,6 +49,7 @@ module Language.Plutus.Contract.Test.ContractModel
     , DL.getModelStateDL
     , DL.assert
     , DL.assertModel
+    , DL.monitorDL
     , DL.forAllQ
     , DL.forAllDL
     , DL.DynLogic

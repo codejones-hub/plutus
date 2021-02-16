@@ -10,6 +10,7 @@ module Language.Plutus.Contract.Test.DynamicLogic.Monad
     , getModelStateDL
     , assert
     , assertModel
+    , monitorDL
     , forAllQ
     , forAllDL
     , DL.DynLogic
@@ -69,6 +70,9 @@ assert name b = if b then return () else errorDL name
 
 assertModel :: String -> (s -> Bool) -> DL s ()
 assertModel name p = assert name . p =<< getModelStateDL
+
+monitorDL :: (Property -> Property) -> DL s ()
+monitorDL f = DL $ \s k -> DL.monitorDL f (k () s)
 
 forAllQ :: Quantifiable q => q -> DL s (Quantifies q)
 forAllQ q = DL $ \ s k -> DL.forAllQ q $ \ x -> k x s
