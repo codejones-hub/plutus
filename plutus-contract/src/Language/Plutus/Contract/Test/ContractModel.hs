@@ -167,6 +167,9 @@ class ( Typeable state
     shrinkCommand :: ModelState state -> Command state -> [Command state]
     shrinkCommand _ _ = []
 
+    restricted :: Command state -> Bool
+    restricted _ = False
+
 makeLenses 'ModelState
 
 class Monad m => GetModelState m where
@@ -289,7 +292,7 @@ action :: ContractModel s => Command s -> DL s ()
 action cmd = DL.action (ContractAction @_ @() cmd)
 
 instance ContractModel s => DL.DynLogicModel (ModelState s) where
-    restricted _ = False
+    restricted (ContractAction act) = restricted act
 
 instance GetModelState (DL s) where
     type StateType (DL s) = s
