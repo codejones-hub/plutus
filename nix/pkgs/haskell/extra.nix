@@ -4,22 +4,21 @@
 #
 # These are for e.g. developer usage, or for running formatting tests.
 ############################################################################
-{ lib
+{ stdenv
+, lib
 , haskell-nix
 , fetchFromGitHub
 , fetchFromGitLab
 , index-state
+, compiler-nix-name
 , checkMaterialization
 , buildPackages
 }:
-let
-  compiler-nix-name = "ghc8102";
-in
 {
   Agda = haskell-nix.hackage-package {
     name = "Agda";
     version = "2.6.1.1";
-    plan-sha256 = "1fpj2q02ric566k9pcb812pq219d07l0982rvqq0ijd72mgr9sjz";
+    plan-sha256 = "03gmq1gbbq7w870qjqbr9aiyyxmj1xl182k3cjnby2w59np6isyl";
     # Should use the index-state from the target cabal.project, but that disables plan-sha256. Fixed
     # in recent haskell.nix, delete the index-state passing when we update.
     inherit compiler-nix-name index-state checkMaterialization;
@@ -56,45 +55,47 @@ in
     version = "3.2.0.0";
     inherit compiler-nix-name index-state checkMaterialization;
     # Invalidate and update if you change the version or index-state
-    plan-sha256 = "19kn00zpj1b1p1fyrzwbg062z45x2lgcfap5bb9ra5alf0wxngh3";
+    plan-sha256 = "0n8vpjj8477f50kab9h4pgh92q49260r78fc3pfh2l56lmc6ngfi";
   };
   stylish-haskell = haskell-nix.hackage-package {
     name = "stylish-haskell";
     version = "0.12.2.0";
     inherit compiler-nix-name index-state checkMaterialization;
     # Invalidate and update if you change the version or index-state
-    plan-sha256 = "102zl1rjc8qhr6cf38ja4pxsr39i8pkg1b7pajdc4yb8jz6rdzir";
+    plan-sha256 = "1wdpv3n1lz4dwkw2mvhnbyqq2haskcjiz1py9h1i0www2valm1lj";
   };
   hlint = haskell-nix.hackage-package {
     name = "hlint";
     version = "3.2.1";
     inherit compiler-nix-name index-state checkMaterialization;
     # Invalidate and update if you change the version or index-state
-    plan-sha256 = "0pxqq5lnh7kd8pyhfyh81pq2v00g9lzkb1db8065cdxya6nirpjs";
+    plan-sha256 = "06zc8rs4rbsfjrixy2mazy7rlkxk1smgjrhkp4d3krmabmfqm2wd";
     modules = [{ reinstallableLibGhc = false; }];
   };
-  inherit (
-  let hspkgs = haskell-nix.cabalProject {
+}
+  //
+  # We need to lift this let-binding out far enough, otherwise it can get evaluated several times!
+(
+  let project = haskell-nix.cabalProject' {
     src = fetchFromGitHub {
-      name = "haskell-language-server";
       owner = "haskell";
       repo = "haskell-language-server";
-      rev = "0.6.0";
-      sha256 = "027fq6752024wzzq9izsilm5lkq9gmpxf82rixbimbijw0yk4pwj";
-      fetchSubmodules = true;
+      rev = "0.9.0";
+      sha256 = "18g0d7zac9xwywmp57dcrjnvms70f2mawviswskix78cv0iv4sk5";
     };
-    sha256map = {
-      "https://github.com/bubba/brittany.git"."c59655f10d5ad295c2481537fc8abf0a297d9d1c" = "1rkk09f8750qykrmkqfqbh44dbx1p8aq1caznxxlw8zqfvx39cxl";
-      "https://github.com/bubba/hie-bios.git"."cec139a1c3da1632d9a59271acc70156413017e7" = "1iqk55jga4naghmh8zak9q7ssxawk820vw8932dhympb767dfkha";
-    };
-    # Should use the index-state from the target cabal.project, but that disables plan-sha256. Fixed
-    # in recent haskell.nix, delete the index-state passing when we update.
     inherit compiler-nix-name index-state checkMaterialization;
-    # Plan issues with the benchmarks, can try removing later
-    configureArgs = "--disable-benchmarks";
+    sha256map = {
+      "https://github.com/alanz/ghc-exactprint.git"."6748e24da18a6cea985d20cc3e1e7920cb743795" = "18r41290xnlizgdwkvz16s7v8k2znc7h215sb1snw6ga8lbv60rb";
+    };
     # Invalidate and update if you change the version
-    plan-sha256 = "0rjpf8xnamn063hbzi4wij8h2aiv71ailbpgd4ykfkv7mlc9mzny";
+    plan-sha256 =
+      # See https://github.com/input-output-hk/nix-tools/issues/97
+      if stdenv.isLinux
+      then "137f0k6dvf1m8zpykqfcrrn9dmnypryhhqpaa9jgx6wvn7ra6061"
+      else "1dvp46l6c91v2581pwjybvlg65ppbmpc37f7afvm0qbwrrdncvid";
+    modules = [{
+      packages.ghcide.patches = [ ../../patches/ghcide_partial_iface.patch ];
+    }];
   };
-  in { haskell-language-server = hspkgs.haskell-language-server; hie-bios = hspkgs.hie-bios; })
-    hie-bios haskell-language-server;
-}
+  in { inherit (project.hsPkgs) haskell-language-server hie-bios implicit-hie; }
+)

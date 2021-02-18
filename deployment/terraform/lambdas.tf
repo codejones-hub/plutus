@@ -19,8 +19,8 @@ resource "aws_security_group" "marlowe_symbolic_lambda" {
   }
 
   tags = {
-    Name        = "${var.project}_${var.env}_marlowe_symbolic_lambda"
-    Project     = var.project
+    Name        = "${local.project}_${var.env}_marlowe_symbolic_lambda"
+    Project     = local.project
     Environment = var.env
   }
 }
@@ -125,7 +125,7 @@ resource "aws_lambda_function" "plutus_playground" {
       GITHUB_CLIENT_SECRET = var.plutus_github_client_secret
       JWT_SIGNATURE = var.plutus_jwt_signature
       FRONTEND_URL = "https://${var.env}.${var.plutus_tld}"
-      GITHUB_CALLBACK_PATH = ""
+      GITHUB_CALLBACK_PATH = "/api/oauth/github/callback"
       WEBGHC_URL = "https://${var.env}.${var.plutus_tld}"
     }
   }

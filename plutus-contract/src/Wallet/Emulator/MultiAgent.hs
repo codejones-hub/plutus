@@ -22,31 +22,31 @@ import           Control.Monad
 import           Control.Monad.Freer
 import           Control.Monad.Freer.Error
 import           Control.Monad.Freer.Extras
-import           Control.Monad.Freer.Log        (LogLevel (..), LogMessage, LogMsg, LogObserve, handleLogWriter,
-                                                 handleObserveLog, logMessage)
-import qualified Control.Monad.Freer.Log        as Log
-import           Control.Monad.Freer.Reader
+import           Control.Monad.Freer.Log     (LogMessage, LogMsg, LogObserve, handleObserveLog, mapLog)
 import           Control.Monad.Freer.State
-import           Data.Aeson                     (FromJSON, ToJSON)
-import           Data.Map                       (Map)
-import qualified Data.Map                       as Map
-import qualified Data.Text                      as T
-import           Data.Text.Extras               (tshow)
+import           Data.Aeson                  (FromJSON, ToJSON)
+import           Data.Map                    (Map)
+import qualified Data.Map                    as Map
+import qualified Data.Text                   as T
+import           Data.Text.Extras            (tshow)
 import           Data.Text.Prettyprint.Doc
-import           GHC.Generics                   (Generic)
-import           Ledger                         hiding (to, value)
-import qualified Ledger.AddressMap              as AM
-import qualified Ledger.Index                   as Index
-import qualified Wallet.API                     as WAPI
-import qualified Wallet.Effects                 as Wallet
-import qualified Wallet.Emulator.Chain          as Chain
-import qualified Wallet.Emulator.ChainIndex     as ChainIndex
-import           Wallet.Emulator.LogMessages    (RequestHandlerLogMsg, TxBalanceMsg)
-import qualified Wallet.Emulator.NodeClient     as NC
-import qualified Wallet.Emulator.Notify         as Notify
-import qualified Wallet.Emulator.SigningProcess as SP
-import qualified Wallet.Emulator.Wallet         as Wallet
-import           Wallet.Types                   (AssertionError (..), ContractInstanceId)
+import           GHC.Generics                (Generic)
+
+import           Ledger                      hiding (to, value)
+import qualified Ledger.AddressMap           as AM
+import qualified Ledger.Index                as Index
+import           Plutus.Trace.Emulator.Types (ContractInstanceLog, EmulatedWalletEffects, EmulatedWalletEffects',
+                                              UserThreadMsg)
+import qualified Plutus.Trace.Scheduler      as Scheduler
+import qualified Wallet.API                  as WAPI
+import qualified Wallet.Emulator.Chain       as Chain
+import qualified Wallet.Emulator.ChainIndex  as ChainIndex
+import           Wallet.Emulator.LogMessages (RequestHandlerLogMsg, TxBalanceMsg)
+import qualified Wallet.Emulator.NodeClient  as NC
+import qualified Wallet.Emulator.Notify      as Notify
+import           Wallet.Emulator.Wallet      (Wallet)
+import qualified Wallet.Emulator.Wallet      as Wallet
+import           Wallet.Types                (AssertionError (..))
 
 -- | Assertions which will be checked during execution of the emulator.
 data Assertion
@@ -60,7 +60,7 @@ data EmulatorTimeEvent e =
         { _eteEmulatorTime :: Slot
         , _eteEvent        :: e
         }
-    deriving stock (Eq, Show, Generic)
+    deriving stock (Eq, Show, Generic, Functor, Foldable, Traversable)
     deriving anyclass (ToJSON, FromJSON)
 
 makeLenses ''EmulatorTimeEvent
@@ -79,6 +79,9 @@ data EmulatorEvent' =
     | WalletEvent Wallet.Wallet Wallet.WalletEvent
     | ChainIndexEvent Wallet.Wallet ChainIndex.ChainIndexEvent
     | NotificationEvent Notify.EmulatorNotifyLogMsg
+    | SchedulerEvent Scheduler.SchedulerLog
+    | InstanceEvent ContractInstanceLog
+    | UserThreadEvent UserThreadMsg
     deriving stock (Eq, Show, Generic)
     deriving anyclass (ToJSON, FromJSON)
 
@@ -89,6 +92,9 @@ instance Pretty EmulatorEvent' where
         WalletEvent w e     -> pretty w <> colon <+> pretty e
         ChainIndexEvent w e -> pretty w <> colon <+> pretty e
         NotificationEvent e -> pretty e
+        SchedulerEvent e    -> pretty e
+        InstanceEvent e     -> pretty e
+        UserThreadEvent e   -> pretty e
 
 type EmulatorEvent = EmulatorTimeEvent EmulatorEvent'
 
@@ -107,24 +113,19 @@ chainIndexEvent w = prism' (ChainIndexEvent w) (\case { ChainIndexEvent w' c | w
 notificationEvent :: Prism' EmulatorEvent' Notify.EmulatorNotifyLogMsg
 notificationEvent = prism' NotificationEvent (\case { NotificationEvent e -> Just e; _ -> Nothing })
 
-type EmulatedWalletEffects =
-        '[ Wallet.WalletEffect
-         , Error WAPI.WalletAPIError
-         , Wallet.NodeClientEffect
-         , Wallet.ChainIndexEffect
-         , Wallet.SigningProcessEffect
-         , Wallet.ContractRuntimeEffect
-         , Reader ContractInstanceId
-         , LogObserve (LogMessage T.Text)
-         , LogMsg RequestHandlerLogMsg
-         , LogMsg TxBalanceMsg
-         , LogMsg T.Text
-         ]
+schedulerEvent :: Prism' EmulatorEvent' Scheduler.SchedulerLog
+schedulerEvent = prism' SchedulerEvent (\case { SchedulerEvent e -> Just e; _ -> Nothing })
+
+instanceEvent :: Prism' EmulatorEvent' ContractInstanceLog
+instanceEvent = prism' InstanceEvent (\case { InstanceEvent e -> Just e; _ -> Nothing })
+
+userThreadEvent :: Prism' EmulatorEvent' UserThreadMsg
+userThreadEvent = prism' UserThreadEvent (\case { UserThreadEvent e -> Just e ; _ -> Nothing })
 
 type EmulatedWalletControlEffects =
         '[ NC.NodeClientControlEffect
          , ChainIndex.ChainIndexControlEffect
-         , SP.SigningProcessControlEffect
+         , Wallet.SigningProcessControlEffect
          , LogObserve (LogMessage T.Text)
          , LogMsg T.Text
         ]
@@ -166,10 +167,12 @@ data MultiAgentEffect r where
     -- | A direct action performed by a wallet. Usually represents a "user action", as it is
     -- triggered externally.
     WalletAction :: Wallet.Wallet -> Eff EmulatedWalletEffects r -> MultiAgentEffect r
+
+data MultiAgentControlEffect r where
     -- | An action affecting the emulated parts of a wallet (only available in emulator - see note [Control effects].)
-    WalletControlAction :: Wallet.Wallet -> Eff EmulatedWalletControlEffects r -> MultiAgentEffect r
+    WalletControlAction :: Wallet.Wallet -> Eff EmulatedWalletControlEffects r -> MultiAgentControlEffect r
     -- | An assertion in the event stream, which can inspect the current state.
-    Assertion :: Assertion -> MultiAgentEffect ()
+    Assertion :: Assertion -> MultiAgentControlEffect ()
 
 -- | Run an action in the context of a wallet (ie. agent)
 walletAction
@@ -179,48 +182,62 @@ walletAction
     -> Eff effs r
 walletAction wallet act = send (WalletAction wallet act)
 
+handleMultiAgentEffects ::
+    forall effs.
+    Member MultiAgentEffect effs
+    => Wallet
+    -> Eff (EmulatedWalletEffects' effs)
+    ~> Eff effs
+handleMultiAgentEffects wallet =
+    interpret (raiseWallet @(LogMsg T.Text) wallet)
+        . interpret (raiseWallet @(LogMsg TxBalanceMsg) wallet)
+        . interpret (raiseWallet @(LogMsg RequestHandlerLogMsg) wallet)
+        . interpret (raiseWallet @(LogObserve (LogMessage T.Text)) wallet)
+        . interpret (raiseWallet @WAPI.SigningProcessEffect wallet)
+        . interpret (raiseWallet @WAPI.ChainIndexEffect wallet)
+        . interpret (raiseWallet @WAPI.NodeClientEffect wallet)
+        . interpret (raiseWallet @(Error WAPI.WalletAPIError) wallet)
+        . interpret (raiseWallet @WAPI.WalletEffect wallet)
+
+raiseWallet :: forall f effs.
+    ( Member f EmulatedWalletEffects
+    , Member MultiAgentEffect effs
+    )
+    => Wallet
+    -> f
+    ~> Eff effs
+raiseWallet wllt = walletAction wllt . send
+
 -- | Run a control action in the context of a wallet
 walletControlAction
-    :: (Member MultiAgentEffect effs)
+    :: (Member MultiAgentControlEffect effs)
     => Wallet.Wallet
     -> Eff EmulatedWalletControlEffects r
     -> Eff effs r
 walletControlAction wallet = send . WalletControlAction wallet
 
-assertion :: (Member MultiAgentEffect effs) => Assertion -> Eff effs ()
+assertion :: (Member MultiAgentControlEffect effs) => Assertion -> Eff effs ()
 assertion a = send (Assertion a)
 
 -- | Issue an assertion that the funds for a given wallet have the given value.
-assertOwnFundsEq :: (Member MultiAgentEffect effs) => Wallet.Wallet -> Value -> Eff effs ()
+assertOwnFundsEq :: (Member MultiAgentControlEffect effs) => Wallet.Wallet -> Value -> Eff effs ()
 assertOwnFundsEq wallet = assertion . OwnFundsEqual wallet
 
 -- | Issue an assertion that the given transaction has been validated.
-assertIsValidated :: (Member MultiAgentEffect effs) => Tx -> Eff effs ()
+assertIsValidated :: (Member MultiAgentControlEffect effs) => Tx -> Eff effs ()
 assertIsValidated = assertion . IsValidated
 
 -- | The state of the emulator itself.
 data EmulatorState = EmulatorState {
-    _chainState                 :: Chain.ChainState,
-    _walletStates               :: Map Wallet.Wallet Wallet.WalletState, -- ^ The state of each wallet.
-    _walletClientStates         :: Map Wallet.Wallet NC.NodeClientState, -- ^ The state of each wallet's node client.
-    _walletChainIndexStates     :: Map Wallet.Wallet ChainIndex.ChainIndexState, -- ^ The state of each wallet's chain index
-    _walletSigningProcessStates :: Map Wallet.Wallet SP.SigningProcess, -- ^ The wallet's signing process
-    _emulatorLog                :: [LogMessage EmulatorEvent] -- ^ The emulator log messages, with the newest last.
+    _chainState   :: Chain.ChainState, -- ^ Mockchain
+    _walletStates :: Map Wallet.Wallet Wallet.WalletState, -- ^ The state of each agent.
+    _emulatorLog  :: [LogMessage EmulatorEvent] -- ^ The emulator log messages, with the newest last.
     } deriving (Show)
 
 makeLenses ''EmulatorState
 
 walletState :: Wallet.Wallet -> Lens' EmulatorState Wallet.WalletState
-walletState wallet = walletStates . at wallet . non (Wallet.emptyWalletState wallet)
-
-walletClientState :: Wallet.Wallet -> Lens' EmulatorState NC.NodeClientState
-walletClientState wallet = walletClientStates . at wallet . non NC.emptyNodeClientState
-
-walletChainIndexState :: Wallet.Wallet -> Lens' EmulatorState ChainIndex.ChainIndexState
-walletChainIndexState wallet = walletChainIndexStates . at wallet . non mempty
-
-signingProcessState :: Wallet.Wallet -> Lens' EmulatorState SP.SigningProcess
-signingProcessState wallet = walletSigningProcessStates . at wallet . anon (SP.defaultSigningProcess wallet) (const False)
+walletState wallet = walletStates . at wallet . anon (Wallet.emptyWalletState wallet) (const False)
 
 -- | Get the blockchain as a list of blocks, starting with the oldest (genesis)
 --   block.
@@ -234,7 +251,7 @@ chainUtxo = chainState . Chain.chainNewestFirst . to AM.fromChain
 fundsDistribution :: EmulatorState -> Map Wallet.Wallet Value
 fundsDistribution st =
     let fullState = view chainUtxo st
-        wallets = Map.keys (_walletClientStates st)
+        wallets = st ^.. walletStates . to Map.keys . folded
         walletFunds = flip fmap wallets $ \w ->
             (w, foldMap (txOutValue . txOutTxOut) $ view (AM.fundsAt (Wallet.walletAddress w)) fullState)
     in Map.fromList walletFunds
@@ -247,9 +264,6 @@ emptyEmulatorState :: EmulatorState
 emptyEmulatorState = EmulatorState {
     _chainState = Chain.emptyChainState,
     _walletStates = mempty,
-    _walletClientStates = mempty,
-    _walletChainIndexStates = mempty,
-    _walletSigningProcessStates = mempty,
     _emulatorLog = mempty
     }
 
@@ -280,13 +294,44 @@ emulatorStateInitialDist mp = emulatorStatePool [tx] where
             }
 
 type MultiAgentEffs =
-    '[ Notify.EmulatorContractNotifyEffect
-     , State EmulatorState
+    '[ State EmulatorState
+     , LogMsg EmulatorEvent'
      , Error WAPI.WalletAPIError
      , Error AssertionError
      , Chain.ChainEffect
      , Chain.ChainControlEffect
      ]
+
+handleMultiAgentControl
+    :: forall effs. Members MultiAgentEffs effs
+    => Eff (MultiAgentControlEffect ': effs) ~> Eff effs
+handleMultiAgentControl = interpret $ \case
+    WalletControlAction wallet act -> do
+        let
+            p1 :: AReview EmulatorEvent' Wallet.WalletEvent
+            p1 = walletEvent wallet
+            p2 :: AReview EmulatorEvent' NC.NodeClientEvent
+            p2 = walletClientEvent wallet
+            p3 :: AReview EmulatorEvent' ChainIndex.ChainIndexEvent
+            p3 = chainIndexEvent wallet
+            p4 :: AReview EmulatorEvent' T.Text
+            p4 =  walletEvent wallet . Wallet._GenericLog
+        act
+            & raiseEnd5
+            & NC.handleNodeControl
+            & ChainIndex.handleChainIndexControl
+            & Wallet.handleSigningProcessControl
+            & handleObserveLog
+            & interpret (mapLog (review p4))
+            & interpret (handleZoomedState (walletState wallet))
+            & interpret (mapLog (review p1))
+            & interpret (handleZoomedState (walletState wallet . Wallet.nodeClient))
+            & interpret (mapLog (review p2))
+            & interpret (handleZoomedState (walletState wallet . Wallet.chainIndex))
+            & interpret (mapLog (review p3))
+            & interpret (handleZoomedState (walletState wallet . Wallet.signingProcess))
+            & interpret (writeIntoState emulatorLog)
+    Assertion a -> assert a
 
 handleMultiAgent
     :: forall effs. Members MultiAgentEffs effs
@@ -294,76 +339,41 @@ handleMultiAgent
 handleMultiAgent = interpret $ \case
     -- TODO: catch, log, and rethrow wallet errors?
     WalletAction wallet act ->  do
-        emulatorTime :: Slot <- Chain.getCurrentSlot
         let
-            timed :: forall e. Prism' (EmulatorTimeEvent e) e
-            timed = emulatorTimeEvent emulatorTime
-            p1 :: AReview [LogMessage EmulatorEvent] [Wallet.WalletEvent]
-            p1 = below (logMessage Info . timed . walletEvent wallet)
-            p2 :: AReview [LogMessage EmulatorEvent] [NC.NodeClientEvent]
-            p2 = below (logMessage Info . timed . walletClientEvent wallet)
-            p3 :: AReview [LogMessage EmulatorEvent] (LogMessage ChainIndex.ChainIndexEvent)
-            p3 = _singleton . below (timed . chainIndexEvent wallet)
-            p4 :: AReview [LogMessage EmulatorEvent] (LogMessage T.Text)
-            p4 = _singleton . below (timed . walletEvent wallet . Wallet._GenericLog)
-            p5 :: AReview [LogMessage EmulatorEvent] (LogMessage RequestHandlerLogMsg)
-            p5 = _singleton . below (timed . walletEvent wallet . Wallet._RequestHandlerLog)
-            p6 :: AReview [LogMessage EmulatorEvent] (LogMessage TxBalanceMsg)
-            p6 = _singleton . below (timed . walletEvent wallet . Wallet._TxBalanceLog)
-            p7 :: AReview [LogMessage EmulatorEvent] (LogMessage Notify.EmulatorNotifyLogMsg)
-            p7 = _singleton . below (timed . notificationEvent)
+            p1 :: AReview EmulatorEvent' Wallet.WalletEvent
+            p1 = walletEvent wallet
+            p2 :: AReview EmulatorEvent' NC.NodeClientEvent
+            p2 = walletClientEvent wallet
+            p3 :: AReview EmulatorEvent' ChainIndex.ChainIndexEvent
+            p3 = chainIndexEvent wallet
+            p4 :: AReview EmulatorEvent' T.Text
+            p4 = walletEvent wallet . Wallet._GenericLog
+            p5 :: AReview EmulatorEvent' RequestHandlerLogMsg
+            p5 = walletEvent wallet . Wallet._RequestHandlerLog
+            p6 :: AReview EmulatorEvent' TxBalanceMsg
+            p6 = walletEvent wallet . Wallet._TxBalanceLog
+            p7 :: AReview EmulatorEvent' Notify.EmulatorNotifyLogMsg
+            p7 = notificationEvent
         act
-            & raiseEnd11
+            & raiseEnd9
             & Wallet.handleWallet
             & subsume
             & NC.handleNodeClient
             & ChainIndex.handleChainIndex
-            & SP.handleSigningProcess
-            & interpret (Notify.handleContractRuntime wallet)
-            & runReader (Notify.walletInstanceId wallet)
+            & Wallet.handleSigningProcess
             & handleObserveLog
-            & interpret (handleLogWriter p5)
-            & interpret (handleLogWriter p6)
-            & interpret (handleLogWriter p4)
-            & interpret (handleLogWriter p7)
+            & interpret (mapLog (review p5))
+            & interpret (mapLog (review p6))
+            & interpret (mapLog (review p4))
+            & interpret (mapLog (review p7))
             & interpret (handleZoomedState (walletState wallet))
-            & interpret (handleZoomedWriter p1)
-            & interpret (handleZoomedState (walletClientState wallet))
-            & interpret (handleZoomedWriter p2)
-            & interpret (handleZoomedState (walletChainIndexState wallet))
-            & interpret (handleLogWriter p3)
-            & interpret (handleZoomedState (signingProcessState wallet))
+            & interpret (mapLog (review p1))
+            & interpret (handleZoomedState (walletState wallet . Wallet.nodeClient))
+            & interpret (mapLog (review p2))
+            & interpret (handleZoomedState (walletState wallet . Wallet.chainIndex))
+            & interpret (mapLog (review p3))
+            & interpret (handleZoomedState (walletState wallet . Wallet.signingProcess))
             & interpret (writeIntoState emulatorLog)
-
-    WalletControlAction wallet act -> do
-        emulatorTime :: Slot <- Chain.getCurrentSlot
-        let
-            timed :: forall e. Prism' (EmulatorTimeEvent e) e
-            timed = emulatorTimeEvent emulatorTime
-            p1 :: AReview [LogMessage EmulatorEvent] [Wallet.WalletEvent]
-            p1 = below (logMessage Info . timed . walletEvent wallet)
-            p2 :: AReview [LogMessage EmulatorEvent] [NC.NodeClientEvent]
-            p2 = below (logMessage Info . timed . walletClientEvent wallet)
-            p3 :: AReview [LogMessage EmulatorEvent] (Log.LogMessage ChainIndex.ChainIndexEvent)
-            p3 = _singleton . below (timed . chainIndexEvent wallet)
-            p4 :: AReview [LogMessage EmulatorEvent] (Log.LogMessage T.Text)
-            p4 = _singleton . below (timed . walletEvent wallet . Wallet._GenericLog)
-        act
-            & raiseEnd5
-            & NC.handleNodeControl
-            & ChainIndex.handleChainIndexControl
-            & SP.handleSigningProcessControl
-            & handleObserveLog
-            & interpret (handleLogWriter p4)
-            & interpret (handleZoomedState (walletState wallet))
-            & interpret (handleZoomedWriter p1)
-            & interpret (handleZoomedState (walletClientState wallet))
-            & interpret (handleZoomedWriter p2)
-            & interpret (handleZoomedState (walletChainIndexState wallet))
-            & interpret (handleLogWriter p3)
-            & interpret (handleZoomedState (signingProcessState wallet))
-            & interpret (writeIntoState emulatorLog)
-    Assertion a -> assert a
 
 -- | Issue an 'Assertion'.
 assert :: (Members MultiAgentEffs effs) => Assertion -> Eff effs ()

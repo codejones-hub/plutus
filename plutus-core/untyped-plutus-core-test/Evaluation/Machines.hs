@@ -9,6 +9,7 @@ module Evaluation.Machines
     ) where
 
 import           Language.UntypedPlutusCore
+import           Language.UntypedPlutusCore.Evaluation.HOAS
 import           Language.UntypedPlutusCore.Evaluation.Machine.Cek
 
 import qualified Language.PlutusCore                               as Plc
@@ -18,7 +19,6 @@ import           Language.PlutusCore.Evaluation.Machine.ExMemory
 import           Language.PlutusCore.Evaluation.Machine.Exception
 import           Language.PlutusCore.FsTree
 import           Language.PlutusCore.Generators.Interesting
-import           Language.PlutusCore.Name
 import           Language.PlutusCore.Pretty
 import           Language.PlutusCore.Universe
 
@@ -34,10 +34,10 @@ import           Test.Tasty
 import           Test.Tasty.Hedgehog
 
 testMachine
-    :: PrettyPlc termErr
+    :: (uni ~ DefaultUni, fun ~ DefaultFun, PrettyPlc internal)
     => String
-    -> (Term Name DefaultUni DefaultFun () ->
-            Either (EvaluationException user DefaultFun termErr) (Term Name DefaultUni DefaultFun ()))
+    -> (Term Name uni fun () ->
+           Either (EvaluationException user internal (Term Name uni fun ())) (Term Name uni fun ()))
     -> TestTree
 testMachine machine eval =
     testGroup machine $ fromInterestingTermGens $ \name genTermOfTbv ->
@@ -51,7 +51,8 @@ testMachine machine eval =
 test_machines :: TestTree
 test_machines =
     testGroup "machines"
-        [ testMachine "CEK" $ evaluateCek defBuiltinsRuntime
+        [ testMachine "CEK"  $ evaluateCek  defBuiltinsRuntime
+        , testMachine "HOAS" $ evaluateHoas defBuiltinsRuntime
         ]
 
 testMemory :: ExMemoryUsage a => TestName -> a -> TestNested

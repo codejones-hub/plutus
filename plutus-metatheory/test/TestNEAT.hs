@@ -4,23 +4,26 @@ import           Control.Monad.Except
 import           Data.Coolean
 import           Data.Either
 import           Data.List
-
 import           Language.PlutusCore
 import           Language.PlutusCore.Evaluation.Machine.Ck
 import           Language.PlutusCore.Generators.NEAT.Spec
-import           Language.PlutusCore.Generators.NEAT.Type
+import           Language.PlutusCore.Generators.NEAT.Term
 import           Language.PlutusCore.Lexer
 import           Language.PlutusCore.Normalize
+import           Language.PlutusCore.Pretty
+import qualified Language.UntypedPlutusCore                as U
 import           Test.Tasty
 import           Test.Tasty.HUnit
 
 import           MAlonzo.Code.Main                         (checkKindAgda, checkTypeAgda, inferKindAgda, inferTypeAgda,
                                                             normalizeTypeAgda, normalizeTypeTermAgda, runCKAgda,
-                                                            runLAgda, runTCEKCAgda, runTCEKVAgda, runTCKAgda)
+                                                            runTCEKAgda, runTCKAgda, runTLAgda, runUAgda)
 import           MAlonzo.Code.Scoped                       (deBruijnifyK, unDeBruijnifyK)
 
 import           Language.PlutusCore.DeBruijn
 import           Raw                                       hiding (TypeError, tynames)
+
+import           Debug.Trace
 
 main :: IO ()
 main = defaultMain $ allTests defaultGenOptions
@@ -28,12 +31,12 @@ main = defaultMain $ allTests defaultGenOptions
 allTests :: GenOptions -> TestTree
 allTests genOpts = testGroup "NEAT"
   [ bigTest "type-level"
-      genOpts
+      genOpts {genDepth = 13}
       (Type ())
       (packAssertion prop_Type)
   , bigTest "term-level"
-      genOpts
-      (TyFunG (TyBuiltinG TyIntegerG) (TyBuiltinG TyIntegerG))
+      genOpts {genDepth = 18}
+      (TyBuiltinG TyUnitG)
       (packAssertion prop_Term)
   ]
 
@@ -97,7 +100,8 @@ prop_Term tyG tmG = do
     checkTypeAgda tyDB tmDB
 
   -- 2. run production CK against metatheory CK
-  tmPlcCK <- withExceptT CkP $ liftEither $ evaluateCk defBuiltinsRuntime tm
+  tmPlcCK <- withExceptT CkP $ liftEither $
+    evaluateCk defBuiltinsRuntime tm `catchError` handleError ty
   tmCK <- withExceptT (const $ Ctrex (CtrexTermEvaluationFail tyG tmG)) $
     liftEither $ runCKAgda tmDB
   tmCKN <- withExceptT FVErrorP $ unDeBruijnTerm tmCK
@@ -107,10 +111,31 @@ prop_Term tyG tmG = do
   -- 3. run all the metatheory evaluators against each other. Taking
   -- care to normalize the types in the output of runCKAgda. The other
   -- versions return terms with already normalized types.
-  let evs = [runLAgda,runCKAgda >=> normalizeTypeTermAgda,runTCKAgda,runTCEKVAgda,runTCEKCAgda]
+  let evs = [runTLAgda,normalizeTypeTermAgda <=< runCKAgda,runTCKAgda,runTCEKAgda]
   let tmEvsM = map ($ tmDB) evs
   tmEvs <- withExceptT (const $ Ctrex (CtrexTermEvaluationFail tyG tmG)) $
     liftEither $ sequence tmEvsM
   tmEvsN <- withExceptT FVErrorP $ traverse unDeBruijnTerm tmEvs
 
   unless (length (nub tmEvsN) == 1) $ throwCtrex (CtrexTermEvaluationMismatch tyG tmG tmEvsN)
+  -- 4. untyped_reduce . erase == erase . typed_reduce
+
+  -- erase original named term
+  let tmU = U.erase tm
+  -- turn it into an untyped de Bruij term
+  tmUDB <- withExceptT FVErrorP $ U.deBruijnTerm tmU
+  -- reduce the untyped term
+  tmUDB' <- withExceptT (\e -> trace (show e) (Ctrex (CtrexTermEvaluationFail tyG tmG))) $ liftEither $ runUAgda tmUDB
+  -- turn it back into a named term
+  tmU' <- withExceptT FVErrorP $ U.unDeBruijnTerm tmUDB'
+  -- reduce the orignal de Bruijn typed term
+  tmDB'' <- withExceptT (\e -> trace (show e) (Ctrex (CtrexTermEvaluationFail tyG tmG))) $
+    liftEither $ runTLAgda tmDB
+  -- turn it back into a named term
+  tm'' <- withExceptT FVErrorP $ unDeBruijnTerm tmDB''
+  -- erase it after the fact
+  let tmU'' = U.erase tm''
+  unless (tmU' == tmU'') $
+    throwCtrex (CtrexUntypedTermEvaluationMismatch tyG tmG [tmU',tmU''])
+
+

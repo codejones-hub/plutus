@@ -22,11 +22,11 @@ import           GHC.Generics                                          (Generic)
 import qualified Language.PlutusTx                                     as PlutusTx
 import           Language.PlutusTx.Coordination.Contracts.TokenAccount (Account (..))
 import           Language.PlutusTx.Prelude
+import           Ledger.Contexts                                       (PolicyCtx (..), txSignedBy)
 import           Ledger.Crypto                                         (PubKeyHash)
 import           Ledger.Scripts                                        (MonetaryPolicy, mkMonetaryPolicyScript,
                                                                         monetaryPolicyHash)
 import qualified Ledger.Typed.Scripts                                  as Scripts
-import           Ledger.Validation                                     (PolicyCtx (..), txSignedBy)
 import           Ledger.Value                                          (TokenName, Value)
 import qualified Ledger.Value                                          as Value
 import qualified Prelude                                               as Haskell
@@ -80,6 +80,6 @@ tokenAccount Credential{credAuthority, credName} =
     in Account (sym, credName)
 
 PlutusTx.makeLift ''CredentialAuthority
-PlutusTx.makeIsData ''CredentialAuthority
+PlutusTx.unstableMakeIsData ''CredentialAuthority
 PlutusTx.makeLift ''Credential
-PlutusTx.makeIsData ''Credential
+PlutusTx.unstableMakeIsData ''Credential

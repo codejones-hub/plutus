@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
@@ -18,22 +19,23 @@ import qualified Language.PlutusCore.StdLib.Data.ChurchNat         as StdLib
 import qualified Language.PlutusCore.StdLib.Data.Integer           as StdLib
 import qualified Language.PlutusCore.StdLib.Data.Unit              as StdLib
 import qualified Language.UntypedPlutusCore                        as UPLC
-import qualified Language.UntypedPlutusCore.DeBruijn               as UPLC
 import qualified Language.UntypedPlutusCore.Evaluation.Machine.Cek as UPLC
 
 import           Codec.Serialise
-import           Control.DeepSeq                                   (rnf)
-import qualified Control.Exception                                 as Exn (evaluate)
+import           Control.DeepSeq                                   (NFData, rnf)
 import           Control.Monad
 import           Control.Monad.Trans.Except                        (runExceptT)
 import           Data.Bifunctor                                    (second)
 import qualified Data.ByteString.Lazy                              as BSL
 import           Data.Foldable                                     (traverse_)
+import           Data.Function                                     ((&))
 import           Data.Functor                                      ((<&>))
+import           Data.List                                         (nub)
 import qualified Data.Text                                         as T
 import           Data.Text.Encoding                                (encodeUtf8)
 import qualified Data.Text.IO                                      as T
 import           Data.Text.Prettyprint.Doc                         (Doc, pretty, (<+>))
+import           Data.Traversable                                  (for)
 import           Flat
 import           Options.Applicative
 import           System.CPUTime                                    (getCPUTime)
@@ -83,7 +85,7 @@ type PlcParserError = PLC.Error PLC.DefaultUni PLC.DefaultFun PLC.AlexPosn
 data Input       = FileInput FilePath | StdInput
 data Output      = FileOutput FilePath | StdOutput
 data Language    = TypedPLC | UntypedPLC
-data Timing      = NoTiming | Timing deriving (Eq)  -- Report program execution time?
+data TimingMode  = NoTiming | Timing Integer deriving (Eq)  -- Report program execution time?
 data PrintMode   = Classic | Debug | Readable | ReadableDebug deriving (Show, Read)
 type ExampleName = T.Text
 data ExampleMode = ExampleSingle ExampleName | ExampleAvailable
@@ -102,9 +104,9 @@ instance Show Format where
 data TypecheckOptions = TypecheckOptions Input Format
 data ConvertOptions   = ConvertOptions Language Input Format Output Format PrintMode
 data PrintOptions     = PrintOptions Language Input PrintMode
-data ExampleOptions   = ExampleOptions ExampleMode
+data ExampleOptions   = ExampleOptions Language ExampleMode
 data EraseOptions     = EraseOptions Input Format Output Format PrintMode
-data EvalOptions      = EvalOptions Language Input Format EvalMode PrintMode Timing
+data EvalOptions      = EvalOptions Language Input Format EvalMode PrintMode TimingMode
 data ApplyOptions     = ApplyOptions Language Files Format Output Format PrintMode
 
 -- Main commands
@@ -126,8 +128,8 @@ untypedPLC :: Parser Language
 untypedPLC = flag UntypedPLC UntypedPLC (long "untyped" <> short 'u' <> help "Use untyped Plutus Core (default)")
 -- ^ NB: default is always UntypedPLC
 
-languageMode :: Parser Language
-languageMode = typedPLC <|> untypedPLC
+languagemode :: Parser Language
+languagemode = typedPLC <|> untypedPLC
 
 -- | Parser for an input stream. If none is specified, default to stdin: this makes use in pipelines easier
 input :: Parser Input
@@ -194,18 +196,32 @@ outputformat = option (maybeReader formatReader)
   <> showDefault
   <> help ("Output format: " ++ formatHelp))
 
-timing :: Parser Timing
-timing = flag NoTiming Timing
-  ( long "time-execution"
-  <> short 'x'
-  <> help "Report execution time of program"
+-- -x -> run 100 times and print the mean time
+timing1 :: Parser TimingMode
+timing1 = flag NoTiming (Timing 100)
+  (  short 'x'
+  <> help "Report mean execution time of program over 100 repetitions"
   )
+
+-- -X N -> run N times and print the mean time
+timing2 :: Parser TimingMode
+timing2 = Timing <$> option auto
+  (  long "time-execution"
+  <> short 'X'
+  <> metavar "N"
+  <> help "Report mean execution time of program over N repetitions. Use a large value of N if possible to get accurate results."
+  )
+
+-- We really do need two separate parsers here.
+-- See https://github.com/pcapriotti/optparse-applicative/issues/194#issuecomment-205103230
+timingmode :: Parser TimingMode
+timingmode = timing1 <|> timing2
 
 files :: Parser Files
 files = some (argument str (metavar "[FILES...]"))
 
 applyOpts :: Parser ApplyOptions
-applyOpts = ApplyOptions <$> languageMode <*> files <*> inputformat <*> output <*> outputformat <*> printmode
+applyOpts = ApplyOptions <$> languagemode <*> files <*> inputformat <*> output <*> outputformat <*> printmode
 
 typecheckOpts :: Parser TypecheckOptions
 typecheckOpts = TypecheckOptions <$> input <*> inputformat
@@ -220,10 +236,10 @@ printmode = option auto
         ++ "Readable -> prettyPlcReadableDef, ReadableDebug -> prettyPlcReadableDebug" ))
 
 printOpts :: Parser PrintOptions
-printOpts = PrintOptions <$> languageMode <*> input <*> printmode
+printOpts = PrintOptions <$> languagemode <*> input <*> printmode
 
 convertOpts :: Parser ConvertOptions
-convertOpts = ConvertOptions <$> languageMode <*> input <*> inputformat <*> output <*> outputformat <*> printmode
+convertOpts = ConvertOptions <$> languagemode <*> input <*> inputformat <*> output <*> outputformat <*> printmode
 
 exampleMode :: Parser ExampleMode
 exampleMode = exampleAvailable <|> exampleSingle
@@ -245,7 +261,7 @@ exampleSingle :: Parser ExampleMode
 exampleSingle = ExampleSingle <$> exampleName
 
 exampleOpts :: Parser ExampleOptions
-exampleOpts = ExampleOptions <$> exampleMode
+exampleOpts = ExampleOptions <$> languagemode <*> exampleMode
 
 eraseOpts :: Parser EraseOptions
 eraseOpts = EraseOptions <$> input <*> inputformat <*> output <*> outputformat <*> printmode
@@ -260,7 +276,7 @@ evalmode = option auto
   <> help "Evaluation mode (CK or CEK)" )
 
 evalOpts :: Parser EvalOptions
-evalOpts = EvalOptions <$> languageMode <*> input <*> inputformat <*> evalmode <*> printmode <*> timing
+evalOpts = EvalOptions <$> languagemode <*> input <*> inputformat <*> evalmode <*> printmode <*> timingmode
 
 helpText :: String
 helpText =
@@ -290,9 +306,10 @@ plutusOpts = hsubparser (
             (progDesc "Convert PLC programs between various formats"))
     <> command "example"
            (info (Example <$> exampleOpts)
-            (progDesc $ "Show a typed Plutus Core program example. "
+            (progDesc $ "Show a typed or untyped Plutus Core program example. "
                      ++ "Usage: first request the list of available examples (optional step), "
-                     ++ "then request a particular example by the name of a type/term. "
+                     ++ "then request a particular example by the name of a term (or also a "
+                     ++ "type if --typed is specified). "
                      ++ "Note that evaluating a generated example may result in 'Failure'."))
     <> command "typecheck"
            (info (Typecheck <$> typecheckOpts)
@@ -318,7 +335,7 @@ typedDeBruijnNotSupportedError =
 -- | Convert an untyped program to one where the 'name' type is de Bruijn indices.
 toDeBruijn :: UntypedProgram a -> IO (UntypedProgramDeBruijn a)
 toDeBruijn prog = do
-  r <- PLC.runQuoteT $ runExceptT (UPLC.deBruijnProgram prog)
+  r <- PLC.runQuoteT $ runExceptT @UPLC.FreeVariableError (UPLC.deBruijnProgram prog)
   case r of
     Left e  -> hPutStrLn stderr (show e) >> exitFailure
     Right p -> return $ UPLC.programMapNames (\(UPLC.NamedDeBruijn _ ix) -> UPLC.DeBruijn ix) p
@@ -330,7 +347,7 @@ toDeBruijn prog = do
 fromDeBruijn :: UntypedProgramDeBruijn a -> IO (UntypedProgram a)
 fromDeBruijn prog = do
     let namedProgram = UPLC.programMapNames (\(UPLC.DeBruijn ix) -> UPLC.NamedDeBruijn "v" ix) prog
-    case PLC.runQuote $ runExceptT $ UPLC.unDeBruijnProgram namedProgram of
+    case PLC.runQuote $ runExceptT @UPLC.FreeVariableError $ UPLC.unDeBruijnProgram namedProgram of
       Left e  -> hPutStrLn stderr (show e) >> exitFailure
       Right p -> return p
 
@@ -422,7 +439,7 @@ writeCBOR outp cborMode prog = do
             DeBruijn -> serialiseDbProgramCBOR (() <$ prog)
   case outp of
     FileOutput file -> BSL.writeFile file cbor
-    StdOutput       -> BSL.putStr cbor >> T.putStrLn ""
+    StdOutput       -> BSL.putStr cbor
 
 ---------------- Serialise a program using Flat ----------------
 
@@ -442,7 +459,7 @@ writeFlat outp flatMode prog = do
             DeBruijn -> serialiseDbProgramFlat (() <$ prog)
   case outp of
     FileOutput file -> BSL.writeFile file flatProg
-    StdOutput       -> BSL.putStr flatProg >> T.putStrLn ""  -- FIXME: no newline
+    StdOutput       -> BSL.putStr flatProg
 
 
 ---------------- Write an AST as PLC source ----------------
@@ -486,8 +503,24 @@ runPrint (PrintOptions language inp mode) =
     parsePlcInput language inp >>= print . (getPrintMethod mode)
 
 
----------------- Script application ----------------
+---------------- Erasure ----------------
 
+eraseProgram :: TypedProgram a -> Program a
+eraseProgram = UntypedProgram . UPLC.eraseProgram
+
+-- | Input a program, erase the types, then output it
+runErase :: EraseOptions -> IO ()
+runErase (EraseOptions inp ifmt outp ofmt mode) = do
+  TypedProgram typedProg <- getProgram TypedPLC ifmt inp
+  let untypedProg = () <$ eraseProgram typedProg
+  case ofmt of
+    Plc           -> writePlc outp mode untypedProg
+    Cbor cborMode -> writeCBOR outp cborMode untypedProg
+    Flat flatMode -> writeFlat outp flatMode untypedProg
+
+
+
+---------------- Script application ----------------
 
 -- | Apply one script to a list of others.
 runApply :: ApplyOptions -> IO ()
@@ -509,24 +542,36 @@ runApply (ApplyOptions language inputfiles ifmt outp ofmt mode) = do
 ---------------- Examples ----------------
 
 data TypeExample = TypeExample (PLC.Kind ()) (PLC.Type PLC.TyName PLC.DefaultUni ())
-data TermExample = TermExample
+data TypedTermExample = TypedTermExample
     (PLC.Type PLC.TyName PLC.DefaultUni ())
     (PLC.Term PLC.TyName PLC.Name PLC.DefaultUni PLC.DefaultFun ())
-data SomeExample = SomeTypeExample TypeExample | SomeTermExample TermExample
+data SomeTypedExample = SomeTypeExample TypeExample | SomeTypedTermExample TypedTermExample
+
+data UntypedTermExample = UntypedTermExample
+    (UPLC.Term PLC.Name PLC.DefaultUni PLC.DefaultFun ())
+data SomeUntypedExample = SomeUntypedTermExample UntypedTermExample
+
+data SomeExample = SomeTypedExample SomeTypedExample | SomeUntypedExample SomeUntypedExample
 
 prettySignature :: ExampleName -> SomeExample -> Doc ann
-prettySignature name (SomeTypeExample (TypeExample kind _)) =
+prettySignature name (SomeTypedExample (SomeTypeExample (TypeExample kind _))) =
     pretty name <+> "::" <+> PP.prettyPlcDef kind
-prettySignature name (SomeTermExample (TermExample ty _)) =
+prettySignature name (SomeTypedExample (SomeTypedTermExample (TypedTermExample ty _))) =
     pretty name <+> ":"  <+> PP.prettyPlcDef ty
+prettySignature name (SomeUntypedExample _) =
+    pretty name
 
 prettyExample :: SomeExample -> Doc ann
-prettyExample (SomeTypeExample (TypeExample _ ty))   = PP.prettyPlcDef ty
-prettyExample (SomeTermExample (TermExample _ term)) =
-    PP.prettyPlcDef $ PLC.Program () (PLC.defaultVersion ()) term
+prettyExample =
+    \case
+         SomeTypedExample (SomeTypeExample (TypeExample _ ty)) -> PP.prettyPlcDef ty
+         SomeTypedExample (SomeTypedTermExample (TypedTermExample _ term))
+             -> PP.prettyPlcDef $ PLC.Program () (PLC.defaultVersion ()) term
+         SomeUntypedExample (SomeUntypedTermExample (UntypedTermExample term)) ->
+             PP.prettyPlcDef $ UPLC.Program () (PLC.defaultVersion ()) term
 
-toTermExample :: PLC.Term PLC.TyName PLC.Name PLC.DefaultUni PLC.DefaultFun () -> TermExample
-toTermExample term = TermExample ty term where
+toTypedTermExample :: PLC.Term PLC.TyName PLC.Name PLC.DefaultUni PLC.DefaultFun () -> TypedTermExample
+toTypedTermExample term = TypedTermExample ty term where
     program = PLC.Program () (PLC.defaultVersion ()) term
     errOrTy = PLC.runQuote . runExceptT $ do
         tcConfig <- PLC.getDefTypeCheckConfig ()
@@ -541,34 +586,51 @@ getInteresting =
         Gen.TermOf term _ <- Gen.getSampleTermValue gen
         pure (T.pack name, term)
 
-simpleExamples :: [(ExampleName, SomeExample)]
+simpleExamples :: [(ExampleName, SomeTypedExample)]
 simpleExamples =
-    [ ("succInteger", SomeTermExample $ toTermExample StdLib.succInteger)
-    , ("unit"       , SomeTypeExample $ TypeExample (PLC.Type ()) StdLib.unit)
-    , ("unitval"    , SomeTermExample $ toTermExample StdLib.unitval)
-    , ("bool"       , SomeTypeExample $ TypeExample (PLC.Type ()) StdLib.bool)
-    , ("true"       , SomeTermExample $ toTermExample StdLib.true)
-    , ("false"      , SomeTermExample $ toTermExample StdLib.false)
-    , ("churchNat"  , SomeTypeExample $ TypeExample (PLC.Type ()) StdLib.churchNat)
-    , ("churchZero" , SomeTermExample $ toTermExample StdLib.churchZero)
-    , ("churchSucc" , SomeTermExample $ toTermExample StdLib.churchSucc)
+    [ ("succInteger", SomeTypedTermExample $ toTypedTermExample StdLib.succInteger)
+    , ("unit"       , SomeTypeExample      $ TypeExample (PLC.Type ()) StdLib.unit)
+    , ("unitval"    , SomeTypedTermExample $ toTypedTermExample StdLib.unitval)
+    , ("bool"       , SomeTypeExample      $ TypeExample (PLC.Type ()) StdLib.bool)
+    , ("true"       , SomeTypedTermExample $ toTypedTermExample StdLib.true)
+    , ("false"      , SomeTypedTermExample $ toTypedTermExample StdLib.false)
+    , ("churchNat"  , SomeTypeExample      $ TypeExample (PLC.Type ()) StdLib.churchNat)
+    , ("churchZero" , SomeTypedTermExample $ toTypedTermExample StdLib.churchZero)
+    , ("churchSucc" , SomeTypedTermExample $ toTypedTermExample StdLib.churchSucc)
     ]
 
-getAvailableExamples :: IO [(ExampleName, SomeExample)]
-getAvailableExamples = do
+
+-- TODO: This supplies both typed and untyped examples.  Currently the untyped
+-- examples are obtained by erasing typed ones, but it might be useful to have
+-- some untyped ones that can't be obtained by erasure.
+getAvailableExamples :: Language -> IO [(ExampleName, SomeExample)]
+getAvailableExamples language = do
     interesting <- getInteresting
-    pure $ simpleExamples ++ map (second $ SomeTermExample . toTermExample) interesting
+    let examples = simpleExamples ++ map (second $ SomeTypedTermExample . toTypedTermExample) interesting
+    case language of
+      TypedPLC   -> pure $ map (fmap SomeTypedExample) examples
+      UntypedPLC -> pure $ mapMaybeSnd convert examples
+                    where convert =
+                              \case
+                               SomeTypeExample _ -> Nothing
+                               SomeTypedTermExample (TypedTermExample _ e) ->
+                                   Just . SomeUntypedExample . SomeUntypedTermExample . UntypedTermExample $ UPLC.erase e
+                          mapMaybeSnd _ []     = []
+                          mapMaybeSnd f ((a,b):r) =
+                              case f b of
+                                Nothing -> mapMaybeSnd f r
+                                Just b' -> (a,b') : mapMaybeSnd f r
 
 -- The implementation is a little hacky: we generate interesting examples when the list of examples
--- is requsted and at each lookup of a particular example. I.e. each time we generate distinct
+-- is requested and at each lookup of a particular example. I.e. each time we generate distinct
 -- terms. But types of those terms must not change across requests, so we're safe.
 
-runExample :: ExampleOptions -> IO ()
-runExample (ExampleOptions ExampleAvailable)     = do
-    examples <- getAvailableExamples
+runPrintExample :: ExampleOptions -> IO ()
+runPrintExample (ExampleOptions language ExampleAvailable) = do
+    examples <- getAvailableExamples language
     traverse_ (T.putStrLn . PP.render . uncurry prettySignature) examples
-runExample (ExampleOptions (ExampleSingle name)) = do
-    examples <- getAvailableExamples
+runPrintExample (ExampleOptions language (ExampleSingle name)) = do
+    examples <- getAvailableExamples language
     T.putStrLn $ case lookup name examples of
         Nothing -> "Unknown name: " <> name
         Just ex -> PP.render $ prettyExample ex
@@ -589,23 +651,39 @@ runTypecheck (TypecheckOptions inp fmt) = do
         T.putStrLn (PP.displayPlcDef ty) >> exitSuccess
 
 
----------------- Erasure ----------------
-
--- | Input a program, erase the types, then output it
-runErase :: EraseOptions -> IO ()
-runErase (EraseOptions inp ifmt outp ofmt mode) = do
-  TypedProgram typedProg <- getProgram TypedPLC ifmt inp
-  let untypedProg = () <$ (UntypedProgram $ UPLC.eraseProgram typedProg)
-  case ofmt of
-    Plc           -> writePlc outp mode untypedProg
-    Cbor cborMode -> writeCBOR outp cborMode untypedProg
-    Flat flatMode -> writeFlat outp flatMode untypedProg
-
-
 ---------------- Evaluation ----------------
 
+-- Convert a time in picoseconds into a readble format with appropriate units
+formatTime :: Double -> String
+formatTime t
+    | t >= 1e12 = printf "%.3f s"  (t/1e12)
+    | t >= 1e9  = printf "%.3f ms" (t/1e9)
+    | t >= 1e6  = printf "%.3f μs" (t/1e6)
+    | t >= 1e3  = printf "%.3f ns" (t/1e3)
+    | otherwise = printf "%f ps"   t
+
+{-| Apply an evaluator to a program a number of times and report the mean execution
+time.  The first measurement is often significantly larger than the rest
+(perhaps due to warm-up effects), and this can distort the mean.  To avoid this
+we measure the evaluation time (n+1) times and discard the first result. -}
+timeEval :: NFData a => Integer -> (t -> a) -> t -> IO [a]
+timeEval n evaluate prog
+    | n <= 0 = error "Error: the number of repetitions should be at least 1"
+    | otherwise = do
+  (results, times) <- unzip . tail <$> for (replicate (fromIntegral (n+1)) prog) (timeOnce evaluate)
+  let mean = (fromIntegral $ sum times) / (fromIntegral n) :: Double
+      runs :: String = if n==1 then "run" else "runs"
+  printf "Mean evaluation time (%d %s): %s\n" n runs (formatTime mean)
+  pure results
+    where timeOnce eval prg = do
+            start <- performGC >> getCPUTime
+            let result = eval prg
+                !_ = rnf result
+            end <- getCPUTime
+            pure $ (result, end - start)
+
 runEval :: EvalOptions -> IO ()
-runEval (EvalOptions language inp ifmt evalMode printMode printtime) =
+runEval (EvalOptions language inp ifmt evalMode printMode timingMode) =
     case language of
 
       TypedPLC -> do
@@ -615,13 +693,12 @@ runEval (EvalOptions language inp ifmt evalMode printMode printtime) =
                   CK  -> PLC.unsafeEvaluateCk  PLC.defBuiltinsRuntime
                   CEK -> PLC.unsafeEvaluateCek PLC.defBuiltinsRuntime
             body = void . PLC.toTerm $ prog
-        () <-  Exn.evaluate $ rnf body
-        -- ^ Force evaluation of body to ensure that we're not timing parsing/deserialisation.
+            !_ = rnf body
+        -- Force evaluation of body to ensure that we're not timing parsing/deserialisation.
         -- The parser apparently returns a fully-evaluated AST, but let's be on the safe side.
-        start <- performGC >> getCPUTime
-        case evaluate body of
-              PLC.EvaluationSuccess v -> succeed start v
-              PLC.EvaluationFailure   -> exitFailure
+        case timingMode of
+          NoTiming -> evaluate body & handleResult
+          Timing n -> timeEval n evaluate body >>= handleTimingResults
 
       UntypedPLC ->
           case evalMode of
@@ -630,19 +707,20 @@ runEval (EvalOptions language inp ifmt evalMode printMode printtime) =
                   UntypedProgram prog <- getProgram UntypedPLC ifmt inp
                   let evaluate = UPLC.unsafeEvaluateCek PLC.defBuiltinsRuntime
                       body = void . UPLC.toTerm $ prog
-                  () <- Exn.evaluate $ rnf body
-                  start <- getCPUTime
-                  case evaluate body of
-                    UPLC.EvaluationSuccess v -> succeed start v
-                    UPLC.EvaluationFailure   -> exitFailure
+                      !_ = rnf body
+                  case timingMode of
+                    NoTiming -> evaluate body & handleResult
+                    Timing n -> timeEval n evaluate body >>= handleTimingResults
 
-    where succeed start v = do
-            end <- getCPUTime
-            print $ getPrintMethod printMode v
-            let ms = 1e9 :: Double
-                diff = (fromIntegral (end - start)) / ms
-            when (printtime == Timing) $ printf "Evaluation time: %0.2f ms\n" diff
-            exitSuccess
+    where handleResult result =
+              case result of
+                PLC.EvaluationSuccess v -> (print $ getPrintMethod printMode v) >> exitSuccess
+                PLC.EvaluationFailure   -> exitFailure
+          handleTimingResults results =
+              case nub results of
+                [PLC.EvaluationSuccess _] -> exitSuccess -- We don't want to see the result here
+                [PLC.EvaluationFailure]   -> exitFailure
+                _                         -> error "Timing evaluations returned inconsistent results"
 
 
 ---------------- Driver ----------------
@@ -651,10 +729,10 @@ main :: IO ()
 main = do
     options <- customExecParser (prefs showHelpOnEmpty) plutus
     case options of
-        Apply     opts -> runApply     opts
-        Typecheck opts -> runTypecheck opts
-        Eval      opts -> runEval      opts
-        Example   opts -> runExample   opts
-        Erase     opts -> runErase     opts
-        Print     opts -> runPrint     opts
-        Convert   opts -> runConvert   opts
+        Apply     opts -> runApply        opts
+        Typecheck opts -> runTypecheck    opts
+        Eval      opts -> runEval         opts
+        Example   opts -> runPrintExample opts
+        Erase     opts -> runErase        opts
+        Print     opts -> runPrint        opts
+        Convert   opts -> runConvert      opts

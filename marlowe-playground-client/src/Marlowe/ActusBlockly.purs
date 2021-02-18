@@ -1,14 +1,11 @@
 module Marlowe.ActusBlockly where
 
 import Prelude
-import Blockly (AlignDirection(..), Arg(..), BlockDefinition(..), block, blockType, category, colour, defaultBlockDefinition, name, style, x, xml, y)
 import Blockly.Generator (Generator, getFieldValue, getType, insertGeneratorFunction, mkGenerator, statementToCode)
-import Blockly.Types (Block, BlocklyState)
+import Blockly.Internal (AlignDirection(..), Arg(..), BlockDefinition(..), block, blockType, category, colour, defaultBlockDefinition, name, style, x, xml, y)
+import Blockly.Types (Block, Blockly, BlocklyState)
 import Control.Alternative ((<|>))
 import Control.Monad.Except (runExcept)
-import Control.Monad.ST as ST
-import Control.Monad.ST.Internal (ST, STRef)
-import Control.Monad.ST.Ref as STRef
 import Data.Bifunctor (lmap, rmap)
 import Data.BigInteger (BigInteger)
 import Data.BigInteger as BigInteger
@@ -27,6 +24,7 @@ import Data.Int (fromString)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, isNothing)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Traversable (sequence, traverse_)
+import Effect (Effect)
 import Foreign (F)
 import Foreign.Class (class Decode, class Encode, decode)
 import Foreign.Generic (genericEncode, genericDecode, encodeJSON)
@@ -77,6 +75,7 @@ data ActusValueType
   = ActusDate
   | ActusCycleType
   | ActusDecimalType
+  | ActusIntegerType
   | ActusAssertionContextType
   | ActusAssertionType
 
@@ -241,6 +240,7 @@ toDefinition (ActusContractType PaymentAtMaturity) =
               <> "interest payment cycle %13"
               <> "observation constraints %14"
               <> "payoff analysis constraints %15"
+              <> "collateral amount %16"
         , args0:
             [ DummyCentre
             , Value { name: "start_date", check: "date", align: Right }
@@ -257,6 +257,7 @@ toDefinition (ActusContractType PaymentAtMaturity) =
             , Value { name: "interest_rate_cycle", check: "cycle", align: Right }
             , Value { name: "interest_rate_ctr", check: "assertionCtx", align: Right }
             , Value { name: "payoff_ctr", check: "assertion", align: Right }
+            , Value { name: "collateral", check: "integer", align: Right }
             ]
         , colour: blockColour (ActusContractType PaymentAtMaturity)
         , previousStatement: Just (show BaseContractType)
@@ -286,6 +287,7 @@ toDefinition (ActusContractType LinearAmortizer) =
               <> "principal redemption cycle * %15"
               <> "observation constraints %16"
               <> "payoff analysis constraints %17"
+              <> "collateral amount %18"
         , args0:
             [ DummyCentre
             , Value { name: "start_date", check: "date", align: Right }
@@ -304,6 +306,7 @@ toDefinition (ActusContractType LinearAmortizer) =
             , Value { name: "principal_redemption_cycle", check: "cycle", align: Right }
             , Value { name: "interest_rate_ctr", check: "assertionCtx", align: Right }
             , Value { name: "payoff_ctr", check: "assertion", align: Right }
+            , Value { name: "collateal", check: "integer", align: Right }
             ]
         , colour: blockColour (ActusContractType LinearAmortizer)
         , previousStatement: Just (show BaseContractType)
@@ -354,6 +357,20 @@ toDefinition (ActusValueType ActusDecimalType) =
         , colour: blockColour (ActusValueType ActusDecimalType)
         , inputsInline: Just false
         , output: Just "decimal"
+        }
+        defaultBlockDefinition
+
+toDefinition (ActusValueType ActusIntegerType) =
+  BlockDefinition
+    $ merge
+        { type: show ActusIntegerType
+        , message0: "integer %1"
+        , args0:
+            [ Input { name: "value", text: "10000", spellcheck: false }
+            ]
+        , colour: blockColour (ActusValueType ActusIntegerType)
+        , inputsInline: Just false
+        , output: Just "integer"
         }
         defaultBlockDefinition
 
@@ -456,21 +473,17 @@ workspaceBlocks =
 parse :: forall a. Parser a -> String -> Either String a
 parse p = lmap show <<< runParser' (parens p <|> p)
 
-buildGenerator :: BlocklyState -> Generator
-buildGenerator blocklyState =
-  ST.run
-    ( do
-        gRef <- mkGenerator blocklyState "Actus"
-        g <- STRef.read gRef
-        traverse_ (\t -> mkGenFun gRef t (baseContractDefinition g)) [ BaseContractType ]
-        traverse_ (\t -> mkGenFun gRef t (blockDefinition t g)) actusContractTypes
-        traverse_ (\t -> mkGenFun gRef t (blockDefinition t g)) actusValueTypes
-        traverse_ (\t -> mkGenFun gRef t (blockDefinition t g)) actusPeriodTypes
-        STRef.read gRef
-    )
-
-mkGenFun :: forall a r t. Show a => Show t => STRef r Generator -> t -> (Block -> Either String a) -> ST r Unit
-mkGenFun generator blockType f = insertGeneratorFunction generator (show blockType) ((rmap show) <<< f)
+buildGenerator :: Blockly -> Effect Generator
+buildGenerator blockly = do
+  generator <- mkGenerator blockly "Actus"
+  let
+    mkGenFun :: forall a t. Show a => Show t => t -> (Block -> Either String a) -> Effect Unit
+    mkGenFun blockType f = insertGeneratorFunction generator (show blockType) ((rmap show) <<< f)
+  traverse_ (\t -> mkGenFun t (baseContractDefinition generator)) [ BaseContractType ]
+  traverse_ (\t -> mkGenFun t (blockDefinition t generator)) actusContractTypes
+  traverse_ (\t -> mkGenFun t (blockDefinition t generator)) actusValueTypes
+  traverse_ (\t -> mkGenFun t (blockDefinition t generator)) actusPeriodTypes
+  pure generator
 
 class HasBlockDefinition a b | a -> b where
   blockDefinition :: a -> Generator -> Block -> Either String b
@@ -503,6 +516,7 @@ newtype ActusContract
   , interestCalculationBaseCycle :: ActusValue
   , assertionCtx :: ActusValue
   , assertion :: ActusValue
+  , collateral :: ActusValue
   }
 
 derive instance actusContract :: Generic ActusContract _
@@ -522,6 +536,7 @@ data ActusValue
   = DateValue String String String
   | CycleValue ActusValue BigInteger ActusPeriodType
   | DecimalValue Number
+  | IntegerValue BigInteger
   | ActusAssertionCtx Number Number
   | ActusAssertionNpv Number Number
   | NoActusValue
@@ -600,6 +615,7 @@ instance hasBlockDefinitionActusContract :: HasBlockDefinition ActusContractType
             , interestCalculationBaseCycle: NoActusValue
             , assertionCtx: parseFieldActusValueJson g block "interest_rate_ctr"
             , assertion: parseFieldActusValueJson g block "payoff_ctr"
+            , collateral: parseFieldActusValueJson g block "collateral"
             }
     LAM ->
       Either.Right
@@ -624,6 +640,7 @@ instance hasBlockDefinitionActusContract :: HasBlockDefinition ActusContractType
             , interestCalculationBaseCycle: parseFieldActusValueJson g block "interest_calculation_base_cycle"
             , assertionCtx: parseFieldActusValueJson g block "interest_rate_ctr"
             , assertion: parseFieldActusValueJson g block "payoff_ctr"
+            , collateral: parseFieldActusValueJson g block "collateral"
             }
 
 instance hasBlockDefinitionValue :: HasBlockDefinition ActusValueType ActusValue where
@@ -660,6 +677,10 @@ instance hasBlockDefinitionValue :: HasBlockDefinition ActusValueType ActusValue
     valueString <- getFieldValue block "value"
     value <- fromMaybe (Either.Left "can't parse numeric") $ Either.Right <$> parseFloat valueString
     pure $ DecimalValue value
+  blockDefinition ActusIntegerType g block = do
+    valueString <- getFieldValue block "value"
+    value <- fromMaybe (Either.Left "can't parse numeric") $ Either.Right <$> BigInteger.fromString valueString
+    pure $ IntegerValue value
   blockDefinition ActusAssertionContextType g block = do
     minValueString <- getFieldValue block "min_rrmo"
     minValue <- fromMaybe (Either.Left "can't parse numeric") $ Either.Right <$> parseFloat minValueString
@@ -693,6 +714,15 @@ actusDecimalToNumber (ActusError msg) = Either.Left msg
 actusDecimalToNumber NoActusValue = Either.Right Nothing
 
 actusDecimalToNumber x = Either.Left $ "Unexpected: " <> show x
+
+actusIntegerToNumber :: ActusValue -> Either String (Maybe BigInteger)
+actusIntegerToNumber (IntegerValue n) = Either.Right $ Just $ n
+
+actusIntegerToNumber (ActusError msg) = Either.Left msg
+
+actusIntegerToNumber NoActusValue = Either.Right Nothing
+
+actusIntegerToNumber x = Either.Left $ "Unexpected: " <> show x
 
 blocklyCycleToCycle :: ActusValue -> Either String (Maybe Cycle)
 blocklyCycleToCycle (CycleValue _ value period) =
@@ -752,7 +782,7 @@ blocklyCycleToAnchor NoActusValue = Either.Right Nothing
 blocklyCycleToAnchor x = Either.Left $ "Unexpected: " <> show x -- should be unreachable
 
 actusContractToTerms :: ActusContract -> Either String ContractTerms
-actusContractToTerms raw = do --todo use monad transformers?
+actusContractToTerms raw = do
   let
     c = (unwrap raw)
   contractType <- Either.Right c.contractType
@@ -796,6 +826,7 @@ actusContractToTerms raw = do --todo use monad transformers?
                 Nothing -> []
             )
         }
+  collateral <- actusIntegerToNumber c.collateral
   pure
     $ ContractTerms
         { contractId: "0"
@@ -858,6 +889,7 @@ actusContractToTerms raw = do --todo use monad transformers?
         , ct_FER: 0.0
         , ct_CURS: false
         , constraints: constraint <$> assertionCtx
+        , collateralAmount: fromMaybe (BigInteger.fromInt 0) collateral
         }
 
 aesonCompatibleOptions :: Options

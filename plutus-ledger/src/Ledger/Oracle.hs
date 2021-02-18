@@ -38,13 +38,13 @@ import           Language.PlutusTx.Prelude
 
 import           Ledger.Constraints        (TxConstraints)
 import qualified Ledger.Constraints        as Constraints
-import           Ledger.Crypto             (PrivateKey, PubKey (..), Signature (..))
-import qualified Ledger.Crypto             as Crypto
-import           Ledger.Scripts            (Datum (..), DatumHash (..))
-import qualified Ledger.Scripts            as Scripts
-import           Ledger.Slot               (Slot)
-import           Ledger.Validation         (ValidatorCtx)
-import           LedgerBytes
+import           Plutus.V1.Ledger.Bytes
+import           Plutus.V1.Ledger.Contexts (ValidatorCtx)
+import           Plutus.V1.Ledger.Crypto   (PrivateKey, PubKey (..), Signature (..))
+import qualified Plutus.V1.Ledger.Crypto   as Crypto
+import           Plutus.V1.Ledger.Scripts  (Datum (..), DatumHash (..))
+import qualified Plutus.V1.Ledger.Scripts  as Scripts
+import           Plutus.V1.Ledger.Slot     (Slot)
 
 import qualified Prelude                   as Haskell
 
@@ -207,7 +207,7 @@ signObservation :: IsData a => Slot -> a -> PrivateKey -> SignedMessage (Observa
 signObservation sl vl = signMessage Observation{obsValue=vl, obsSlot=sl}
 
 makeLift ''SignedMessage
-makeIsData ''SignedMessage
+makeIsDataIndexed ''SignedMessage [('SignedMessage,0)]
 
 makeLift ''Observation
-makeIsData ''Observation
+makeIsDataIndexed ''Observation [('Observation,0)]

@@ -1,22 +1,13 @@
-{ writeScriptBin, git, fd, stylish-haskell, runtimeShell }:
+{ writeShellScriptBin, fd, stylish-haskell }:
 
-writeScriptBin "fix-stylish-haskell" ''
-  #!${runtimeShell}
-  set -eou pipefail
-
-  ${git}/bin/git diff > pre-stylish.diff
+writeShellScriptBin "fix-stylish-haskell" ''
+  # stylish-haskell can fail for some files that it can't parse, and fd will terminate
+  # if any of the exec commands fail. Rather than blacklisting the bad files, we simply
+  # ignore the exit code, which is usually unhelpful.
   ${fd}/bin/fd \
     --extension hs \
-    --exclude '*/dist/*' \
-    --exclude '*/docs/*' \
-    --exec ${stylish-haskell}/bin/stylish-haskell -i {}
-  ${git}/bin/git diff > post-stylish.diff
-  if (diff pre-stylish.diff post-stylish.diff > /dev/null)
-  then
-    echo "Changes by stylish have been made. Please commit them."
-  else
-    echo "No stylish changes were made."
-  fi
-  rm pre-stylish.diff post-stylish.diff
-  exit
+    --exclude 'dist-newstyle/*' \
+    --exclude 'dist/*' \
+    --exclude '.stack-work/*' \
+    --exec bash -c "${stylish-haskell}/bin/stylish-haskell -i {} || true"
 ''
