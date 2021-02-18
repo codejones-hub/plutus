@@ -69,6 +69,8 @@ import           Control.Monad.State.Strict
 import           Data.Array
 import           Data.HashMap.Monoidal
 import           Data.Text.Prettyprint.Doc
+import qualified Data.Sequence as Seq
+import Control.Lens (coerced)
 
 {- Note [Scoping]
    The CEK machine does not rely on the global uniqueness condition, so the renamer pass is not a
@@ -90,6 +92,10 @@ things to be monadic (including the PrettyBy instance for CekValue,
 which is a problem.)
 -}
 
+lookupName' :: (HasUnique s unique, Coercible unique Int)
+            => s -> Seq.Seq a -> Maybe a
+lookupName' name = Seq.lookup (name^.unique.coerced)
+
 -- 'Values' for the modified CEK machine.
 data CekValue uni fun =
     VCon ExMemory (Some (ValueOf uni))
@@ -105,7 +111,7 @@ data CekValue uni fun =
       [CekValue uni fun]    -- Arguments we've computed so far.
     deriving (Show, Eq) -- Eq is just for tests.
 
-type CekValEnv uni fun = UniqueMap TermUnique (CekValue uni fun)
+type CekValEnv uni fun = Seq.Seq (CekValue uni fun)
 
 -- | The environment the CEK machine runs in.
 data CekEnv uni fun = CekEnv
@@ -226,7 +232,7 @@ dischargeCekValEnv valEnv =
     -- this to terms which have no free variables remaining, at which point we won't call this
     -- substitution function any more and so we will terminate.
     termSubstFreeNames $ \name -> do
-        val <- lookupName name valEnv
+        val <- lookupName' name valEnv
         Just $ dischargeCekValue val
 
 -- Convert a CekValue into a term by replacing all bound variables with the terms
@@ -302,12 +308,12 @@ runCekM env s a = runState (runExceptT $ runReaderT a env) s
 -- | Extend an environment with a variable name, the value the variable stands for
 -- and the environment the value is defined in.
 extendEnv :: NamedDeBruijn -> CekValue uni fun -> CekValEnv uni fun -> CekValEnv uni fun
-extendEnv = insertByName
+extendEnv _ v e = e Seq.|> v
 
 -- | Look up a variable name in the environment.
 lookupVarName :: NamedDeBruijn -> CekValEnv uni fun -> CekM uni fun (CekValue uni fun)
 lookupVarName varName varEnv = do
-    case lookupName varName varEnv of
+    case lookupName' varName varEnv of
         Nothing  -> throwingWithCause _MachineError OpenTermEvaluatedMachineError $ Just var where
             var = Var () varName
         Just val -> pure val
