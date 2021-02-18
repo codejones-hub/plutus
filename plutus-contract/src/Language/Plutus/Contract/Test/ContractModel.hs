@@ -1,5 +1,4 @@
--- QuickCheck model library for contracts. Builds on top of
--- Language.Plutus.Contract.Test.StateModel.
+-- | Top-level docs
 
 {-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE DataKinds             #-}
@@ -14,21 +13,21 @@
 {-# LANGUAGE TypeFamilies          #-}
 
 module Language.Plutus.Contract.Test.ContractModel
-    -- ContractModel
-    ( ModelState
-    , modelState, currentSlot, balances
+    ( -- * ContractModel
+      --
+      -- $contractModel
+      -- ** Model state
+      ModelState
+    , modelState
+    , currentSlot
+    , balances
+    , forged
     , lockedFunds
+      -- ** ContractModel class
     , ContractModel(..)
-    , Action(..)
-    , addCommands
-    , HandleSpec(..)
-    , HandleFun
-    -- GetModelState
-    , GetModelState(..)
-    , getModelState
-    , viewState
-    , viewModelState
-    -- Spec monad
+    -- ** Spec monad
+    --
+    -- $specMonad
     , Spec
     , wait
     , waitUntil
@@ -38,7 +37,9 @@ module Language.Plutus.Contract.Test.ContractModel
     , withdraw
     , transfer
     , ($=), ($~)
-    -- Dynamic logic
+    -- * Dynamic logic
+    --
+    -- $dynamicLogic
     , DL
     , action
     , DL.anyAction
@@ -46,16 +47,28 @@ module Language.Plutus.Contract.Test.ContractModel
     , DL.anyActions_
     , DL.stopping
     , DL.weight
-    , DL.getModelStateDL
     , DL.assert
-    , DL.assertModel
+    , assertModel
     , DL.monitorDL
+    , forAllDL
+    -- ** Random generation
+    --
+    -- $quantify
     , DL.forAllQ
-    , DL.forAllDL
-    , DL.DynLogic
     , module Language.Plutus.Contract.Test.DynamicLogic.Quantify
-    -- Running properties
+    -- * GetModelState
+    , GetModelState(..)
+    , getModelState
+    , viewState
+    , viewModelState
+    -- * Running properties
+    --
+    -- $runningProperties
     , Script
+    -- ** Wallet contract handles
+    , HandleSpec(..)
+    , HandleFun
+    -- ** Running
     , propRunScript_
     , propRunScript
     , propRunScriptWithOptions
@@ -77,10 +90,12 @@ import           Data.Typeable
 import           Language.Plutus.Contract                            (Contract, HasBlockchainActions)
 import           Language.Plutus.Contract.Test
 import qualified Language.Plutus.Contract.Test.DynamicLogic.Monad    as DL
-import           Language.Plutus.Contract.Test.DynamicLogic.Quantify
-import           Language.Plutus.Contract.Test.StateModel            hiding (Script, arbitraryAction, initialState,
-                                                                      monitoring, nextState, perform, precondition,
-                                                                      shrinkAction)
+import           Language.Plutus.Contract.Test.DynamicLogic.Quantify (Quantifiable, Quantification, arbitraryQ, chooseQ,
+                                                                      elementsQ, exactlyQ, frequencyQ, mapQ, oneofQ,
+                                                                      whereQ)
+import           Language.Plutus.Contract.Test.StateModel            hiding (Action, Script, arbitraryAction,
+                                                                      initialState, monitoring, nextState, perform,
+                                                                      precondition, shrinkAction)
 import qualified Language.Plutus.Contract.Test.StateModel            as StateModel
 import           Language.PlutusTx.Monoid                            (inv)
 import           Ledger.Slot
@@ -91,6 +106,14 @@ import           Plutus.Trace.Emulator                               as Trace (C
 import           Test.QuickCheck                                     hiding ((.&&.))
 import qualified Test.QuickCheck                                     as QC
 import           Test.QuickCheck.Monadic                             as QC
+
+-- $contractModel
+--
+-- Stuff about contract model
+
+-- $specMonad
+--
+-- Stuff about spec monad
 
 data IMap (key :: i -> *) (val :: i -> *) where
     IMNil  :: IMap key val
@@ -171,7 +194,19 @@ class ( Typeable state
     restricted :: Command state -> Bool
     restricted _ = False
 
-makeLenses 'ModelState
+-- | Model state lens
+makeLensesFor [("_modelState",  "modelState")]  'ModelState
+
+-- | Current slot lens
+makeLensesFor [("_currentSlot", "currentSlot")] 'ModelState
+
+makeLensesFor [("_lastSlot",    "lastSlot")]    'ModelState
+
+-- | Balances lens
+makeLensesFor [("_balances",    "balances")]    'ModelState
+
+-- | Forged lens
+makeLensesFor [("_forged",      "forged")]      'ModelState
 
 class Monad m => GetModelState m where
     type StateType m :: *
@@ -226,13 +261,9 @@ handle handles key =
         Just (HandleVal h) -> h
         Nothing            -> error $ "handle: No handle for " ++ show key
 
+-- | Are there locked funds?
 lockedFunds :: ModelState s -> Value
 lockedFunds s = s ^. forged <> inv (fold $ s ^. balances)
-
-addCommands :: forall state. ContractModel state => Script state -> [Command state] -> Script state
-addCommands (StateModel.Script s) cmds = StateModel.Script $ s ++ [Var i := ContractAction @state @() cmd | (cmd, i) <- zip cmds [n + 1..] ]
-    where
-        n = last $ 0 : [ i | Var i := _ <- s ]
 
 newtype EmulatorAction state = EmulatorAction { runEmulatorAction :: Handles state -> EmulatorTrace (Handles state) }
 
@@ -251,10 +282,10 @@ runEmulator a = tell (EmulatorAction $ \ h -> h <$ a h)
 getHandles :: EmulatorTrace (Handles state) -> ContractMonad state ()
 getHandles a = tell (EmulatorAction $ \ _ -> a)
 
-instance ContractModel state => Show (Action (ModelState state) a) where
+instance ContractModel state => Show (StateModel.Action (ModelState state) a) where
     showsPrec p (ContractAction a) = showsPrec p a
 
-deriving instance ContractModel state => Eq (Action (ModelState state) a)
+deriving instance ContractModel state => Eq (StateModel.Action (ModelState state) a)
 
 instance ContractModel state => StateModel (ModelState state) where
 
@@ -285,12 +316,20 @@ instance ContractModel state => StateModel (ModelState state) where
 
     monitoring (s0, s1) (ContractAction cmd) _env _res = monitoring (s0, s1) cmd
 
--- * Dynamic logic
+-- $dynamicLogic
+--
+-- Stuff about dynamic logic
 
 type DL s = DL.DL (ModelState s)
 
 action :: ContractModel s => Command s -> DL s ()
 action cmd = DL.action (ContractAction @_ @() cmd)
+
+assertModel :: String -> (ModelState s -> Bool) -> DL s ()
+assertModel = DL.assertModel
+
+forAllDL :: (ContractModel s, Testable p) => DL s () -> (Script s -> p) -> Property
+forAllDL = DL.forAllDL
 
 instance ContractModel s => DL.DynLogicModel (ModelState s) where
     restricted (ContractAction act) = restricted act
@@ -299,7 +338,14 @@ instance GetModelState (DL s) where
     type StateType (DL s) = s
     getState = DL.getModelStateDL
 
--- * Running the model
+-- $quantify
+--
+-- Quantify stuff
+
+
+-- $runningProperties
+--
+-- Stuff about running properties
 
 runTr :: CheckOptions -> TracePredicate -> ContractMonad state Property -> Property
 runTr opts predicate trace =
