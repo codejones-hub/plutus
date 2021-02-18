@@ -1,5 +1,5 @@
 let
-  packages = import ../nix { rev = "in-gitpod-nix-shell"; };
+  packages = import ../. { rev = "in-gitpod-nix-shell"; };
   inherit (packages) pkgs plutus plutusMusl plutus-playground marlowe-playground plutus-pab marlowe-dashboard deployment;
   inherit (pkgs) stdenv lib utillinux python3 nixpkgs-fmt;
   inherit (plutus) haskell agdaPackages stylish-haskell sphinxcontrib-haddock nix-pre-commit-hooks;
