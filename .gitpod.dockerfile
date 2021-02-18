@@ -57,6 +57,11 @@ COPY web-ghc/web-ghc.cabal web-ghc/web-ghc.cabal
 RUN . /home/gitpod/.nix-profile/etc/profile.d/nix.sh \
   && nix-env -f nix/gitpod-shell.nix -iA nixpkgsInputs
 
+COPY marlowe-dashboard-client marlowe-dashboard-client
+COPY marlowe-playground-client marlowe-playground-client
+COPY plutus-playground-client plutus-playground-client
+COPY plutus-pab-client plutus-pab-client
+
 RUN . /home/gitpod/.nix-profile/etc/profile.d/nix.sh \
   && nix-env -f nix/gitpod-shell.nix -iA localInputs
 
