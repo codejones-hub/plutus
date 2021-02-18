@@ -55,4 +55,4 @@ COPY prettyprinter-configurable/prettyprinter-configurable.cabal prettyprinter-c
 COPY web-ghc/web-ghc.cabal web-ghc/web-ghc.cabal
 
 RUN . /home/gitpod/.nix-profile/etc/profile.d/nix.sh \
-  && nix-env -f nix/gitpod-shell.nix
+  && nix-env -f nix/gitpod-shell.nix -i
