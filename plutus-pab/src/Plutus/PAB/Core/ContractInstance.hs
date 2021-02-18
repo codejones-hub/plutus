@@ -31,22 +31,29 @@ module Plutus.PAB.Core.ContractInstance(
     -- * Calling an endpoint
     , callContractEndpoint
     , callContractEndpoint'
+    -- * STM instances
+    , startSTMInstanceThread
     ) where
 
 import           Cardano.BM.Data.Tracer                          (ToObject (..), TracingVerbosity (..))
 import           Cardano.BM.Data.Tracer.Extras                   (Tagged (..), mkObjectStr)
 import           Control.Arrow                                   ((>>>), (>>^))
+import           Control.Concurrent.STM                          (STM)
+import qualified Control.Concurrent.STM                          as STM
 import           Control.Lens
-import           Control.Monad                                   (unless, void, when)
+import           Control.Monad                                   (forM_, unless, void, when)
 import           Control.Monad.Freer
 import           Control.Monad.Freer.Error                       (Error, throwError)
 import           Control.Monad.Freer.Extras.Log                  (LogMessage, LogMsg, LogObserve, logDebug, logInfo,
                                                                   logWarn, mapLog, surroundInfo)
 import           Control.Monad.Freer.Extras.Modify               (wrapError)
-import           Control.Monad.Freer.Reader                      (Reader, runReader)
+import           Control.Monad.Freer.Reader                      (Reader, ask, runReader)
+import           Control.Monad.IO.Class                          (MonadIO (liftIO))
 import           Data.Aeson                                      (ToJSON (..))
 import qualified Data.Aeson                                      as JSON
 import           Data.Foldable                                   (for_, traverse_)
+import           Data.List.NonEmpty                              (NonEmpty (..))
+import qualified Data.List.NonEmpty                              as NEL
 import qualified Data.Map                                        as Map
 import           Data.Maybe                                      (mapMaybe)
 import           Data.Semigroup                                  (Last (..))
@@ -62,7 +69,7 @@ import           Language.Plutus.Contract.Effects.WriteTx        (WriteTxRespons
 import           Language.Plutus.Contract.Resumable              (IterationID, Request (..), Response (..))
 import           Language.Plutus.Contract.Trace                  (EndpointError (..))
 import           Language.Plutus.Contract.Trace.RequestHandler   (RequestHandler (..), RequestHandlerLogMsg, extract,
-                                                                  maybeToHandler, tryHandler, wrapHandler)
+                                                                  maybeToHandler, tryHandler, tryHandler', wrapHandler)
 import qualified Language.Plutus.Contract.Trace.RequestHandler   as RequestHandler
 
 import           Ledger.Tx                                       (Tx, txId)
@@ -70,8 +77,12 @@ import           Wallet.Effects                                  (ChainIndexEffe
                                                                   SigningProcessEffect, WalletEffect)
 import           Wallet.Emulator.LogMessages                     (TxBalanceMsg)
 
+import           Language.Plutus.Contract                        (AddressChangeRequest (..))
 import           Plutus.PAB.Command                              (saveBalancedTx, saveBalancedTxResult,
                                                                   sendContractEvent)
+import           Plutus.PAB.Core.ContractInstance.STM            (Activity (Done), BlockchainEnv (..),
+                                                                  InstanceState (..))
+import qualified Plutus.PAB.Core.ContractInstance.STM            as InstanceState
 import           Plutus.PAB.Effects.Contract                     (ContractCommand (..), ContractEffect)
 import qualified Plutus.PAB.Effects.Contract                     as Contract
 import           Plutus.PAB.Effects.EventLog                     (EventLogEffect, runCommand, runGlobalQuery)
@@ -626,3 +637,145 @@ contractRequestHandler =
     <> processNextTxAtRequests @effs
     <> processInstanceRequests @effs
     <> processNotificationEffects @effs
+
+processAwaitSlotRequestsSTM ::
+    forall effs.
+    ( Member WalletEffect effs
+    , Member (Reader BlockchainEnv) effs
+    )
+    => RequestHandler effs ContractPABRequest (STM ContractResponse)
+processAwaitSlotRequestsSTM =
+    maybeToHandler (fmap unWaitingForSlot . extract Events.Contract._AwaitSlotRequest)
+    >>> (RequestHandler $ \targetSlot -> fmap AwaitSlotResponse . InstanceState.awaitSlot targetSlot <$> ask)
+
+processEndpointRequestsSTM ::
+    forall effs.
+    ( Member (Reader InstanceState) effs
+    )
+    => RequestHandler effs (Request ContractPABRequest) (Response (STM ContractResponse))
+processEndpointRequestsSTM =
+    maybeToHandler (traverse (extract Events.Contract._UserEndpointRequest))
+    >>> (RequestHandler $ \q@Request{rqID, itID, rqRequest} -> fmap (Response rqID itID) (fmap (UserEndpointResponse (aeDescription rqRequest)) . InstanceState.awaitEndpointResponse q <$> ask))
+
+stmRequestHandler ::
+    forall t effs.
+    ( Member (EventLogEffect (ChainEvent t)) effs
+    , Member ChainIndexEffect effs
+    , Member WalletEffect effs
+    , Member SigningProcessEffect effs
+    , Member ContractRuntimeEffect effs
+    , Member (LogMsg RequestHandlerLogMsg) effs
+    , Member (LogObserve (LogMessage Text.Text)) effs
+    , Member (LogMsg (ContractInstanceMsg t)) effs
+    , Member (LogMsg TxBalanceMsg) effs
+    , Member (Reader ContractInstanceId) effs
+    , Member (Reader BlockchainEnv) effs
+    , Member (Reader InstanceState) effs
+    )
+    => RequestHandler effs (Request ContractPABRequest) (STM (Response ContractResponse))
+stmRequestHandler = fmap sequence (wrapHandler (fmap pure nonBlockingRequests) <> blockingRequests) where
+    nonBlockingRequests =
+        processOwnPubkeyRequests @effs
+        <> processUtxoAtRequests @effs
+        <> processWriteTxRequests @t @effs
+        <> processTxConfirmedRequests @effs
+        <> processNextTxAtRequests @effs
+        <> processInstanceRequests @effs
+        <> processNotificationEffects @effs
+    blockingRequests =
+        wrapHandler (processAwaitSlotRequestsSTM @effs)
+        <> processEndpointRequestsSTM @effs
+
+-- | Start the thread for the contract instance
+startSTMInstanceThread ::
+    forall effs.
+    ( LastMember IO effs
+    )
+    => BlockchainEnv
+    -> ContractInstanceId
+    -> Eff effs InstanceState
+startSTMInstanceThread env instanceID = undefined
+    -- TODO: Store interesting addresses & tx IDs in contract state
+    -- TODO: Separate chain index queries (non-blocking) from waiting for updates (blocking)
+    -- TODO: Properly implement nextTxAt / address changed requests
+
+stmInstanceLoop ::
+    forall t effs.
+    ( LastMember IO effs
+    , Member (EventLogEffect (ChainEvent t)) effs
+    , Member (Error PABError) effs
+    , Member (LogMsg (ContractInstanceMsg t)) effs
+    , Member ChainIndexEffect effs
+    , Member WalletEffect effs
+    , Member SigningProcessEffect effs
+    , Member ContractRuntimeEffect effs
+    , Member (LogMsg RequestHandlerLogMsg) effs
+    , Member (LogObserve (LogMessage Text.Text)) effs
+    , Member (LogMsg (ContractInstanceMsg t)) effs
+    , Member (LogMsg TxBalanceMsg) effs
+    , Member (Reader ContractInstanceId) effs
+    , Member (Reader BlockchainEnv) effs
+    , Member (Reader InstanceState) effs
+    , Member (ContractEffect t) effs
+    )
+    => ContractInstanceId
+    -> Eff effs ()
+stmInstanceLoop instanceId = do
+    requests <- hooks . csCurrentState <$> lookupContractState @t instanceId
+    updateState @t requests
+    case requests of
+        [] -> do
+            ask >>= liftIO . STM.atomically . InstanceState.setActivity Done
+        (x:xs) -> do
+            response <- respondToRequestsSTM @t instanceId (x :| xs)
+            event <- liftIO $ STM.atomically response
+            sendContractMessage @t instanceId event
+            processContractInbox @t instanceId
+            stmInstanceLoop @t instanceId
+
+-- | Update the TVars in the 'InstanceState' with data from the list
+--   of requests.
+updateState ::
+    forall t effs.
+    ( LastMember IO effs
+    , Member (Reader InstanceState) effs
+    )
+    => [Request ContractPABRequest]
+    -> Eff effs ()
+updateState requests = do
+    state <- ask
+    liftIO $ STM.atomically $ do
+        InstanceState.clearEndpoints state
+        forM_ requests $ \r -> do
+            case rqRequest r of
+                AwaitTxConfirmedRequest txid -> InstanceState.addTransaction txid state
+                UtxoAtRequest addr -> InstanceState.addAddress addr state
+                NextTxAtRequest AddressChangeRequest{acreqAddress} -> InstanceState.addAddress acreqAddress state
+                UserEndpointRequest endpoint -> InstanceState.addEndpoint (r { rqRequest = endpoint}) state
+                _ -> pure ()
+
+-- | Run the STM-based request handler on a non-empty list
+--   of requests.
+respondToRequestsSTM ::
+    forall t effs.
+    ( Member (EventLogEffect (ChainEvent t)) effs
+    , Member (Error PABError) effs
+    , Member (LogMsg (ContractInstanceMsg t)) effs
+    , Member ChainIndexEffect effs
+    , Member WalletEffect effs
+    , Member SigningProcessEffect effs
+    , Member ContractRuntimeEffect effs
+    , Member (LogMsg RequestHandlerLogMsg) effs
+    , Member (LogObserve (LogMessage Text.Text)) effs
+    , Member (LogMsg (ContractInstanceMsg t)) effs
+    , Member (LogMsg TxBalanceMsg) effs
+    , Member (Reader ContractInstanceId) effs
+    , Member (Reader BlockchainEnv) effs
+    , Member (Reader InstanceState) effs
+    )
+    => ContractInstanceId
+    -> NonEmpty (Request ContractPABRequest)
+    -> Eff effs (STM (Response ContractResponse))
+respondToRequestsSTM instanceId requests = do
+    logDebug @(ContractInstanceMsg t) $ HandlingRequests instanceId (NEL.toList requests)
+    tryHandler' (stmRequestHandler @t) (NEL.toList requests)
