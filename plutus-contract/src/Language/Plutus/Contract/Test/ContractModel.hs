@@ -1,4 +1,14 @@
--- | Top-level docs
+-- | This module provides a framework for testing Plutus contracts. The testing is model based, so
+--   to test a contract you define a type modelling the state of the contract (or set of contracts)
+--   and provide an instance of the `ContractModel` class. This instance specifies what operations
+--   (`Action`s) the contract supports, how they interact with the model state, and how to execute
+--   them in the blockchain emulator ("Plutus.Trace.Emulator"). Tests are evaluated by running
+--   sequences of actions (random or user-specified) in the emulator and comparing the state of the
+--   blockchain to the model state at the end.
+--
+--   Test cases are written in the `DL` monad, which supports mixing fixed sequences of actions with
+--   random actions, making it easy to write properties like
+--   /it is always possible to get all funds out of the contract/.
 
 {-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE DataKinds             #-}
@@ -106,10 +116,6 @@ import           Test.QuickCheck                                     hiding ((.&
 import qualified Test.QuickCheck                                     as QC
 import           Test.QuickCheck.Monadic                             as QC
 
--- $contractModel
---
--- Stuff about contract model
-
 data IMap (key :: i -> *) (val :: i -> *) where
     IMNil  :: IMap key val
     IMCons :: Typeable i => key i -> val i -> IMap key val -> IMap key val
@@ -150,11 +156,24 @@ type Script s = StateModel.Script (ModelState s)
 instance Show state => Show (ModelState state) where
     show = show . _modelState   -- for now
 
--- $specMonad
---
--- Stuff about spec monad
-
 type Spec state = Eff '[State (ModelState state)]
+
+-- $contractModel
+--
+-- A contract model is a type @state@ with a `ContractModel` instance. The state type should
+-- capture an abstraction of the state of the blockchain relevant to the contract (or contracts)
+-- under test. During test generation and execution, the contract-specific @state@ is wrapped in the
+-- `ModelState` type, which in addition to @state@ tracks common features of the blockchain, like
+-- wallet balances and the current slot.
+
+-- | A `ContractModel` instance captures everything that is needed to generate and run tests of a
+--   contract or set of contracts. It specifies among other things
+--
+--  * what operations are supported by the contract (`Action`),
+--  * when they are valid (`precondition`),
+--  * how to generate random actions (`arbitraryAction`),
+--  * how the operations affect the state (`nextState`), and
+--  * how to run the operations in the emulator (`perform`)
 
 class ( Typeable state
       , Show state
@@ -167,12 +186,26 @@ class ( Typeable state
       , JSON.ToJSON (Err state)
       , JSON.FromJSON (Err state)
       ) => ContractModel state where
+
+    -- | The type of actions that are supported by the contract. An action usually represents a single
+    --   `Plutus.Trace.Emulator.callEndpoint` or a transfer of tokens, but it can be anything
+    --   that can be interpreted in the `EmulatorTrace` monad.
     data Action state
+
+    -- | TODO: get rid of this
     type Err state
+
+    -- | To be able to call a contract endpoint from a wallet a `ContractHandle` is required.
+    --   These are managed by the test framework and all the user needs to do is provide this handle
+    --   key type representing the different handles that a test needs to work with, and when
+    --   creating a property (see `propRunScript_`) provide a list of handle keys together with
+    --   their wallets and contracts.
     data HandleKey state :: Row * -> *
 
+    -- | Given the current model state, provide a QuickCheck generator for a random next action.
     arbitraryAction :: ModelState state -> Gen (Action state)
 
+    -- | The initial state, before any actions have been performed.
     initialState :: state
 
     precondition :: ModelState state -> Action state -> Bool
@@ -224,6 +257,10 @@ viewState l = (^. l) <$> getState
 
 viewModelState :: GetModelState m => Getting a (StateType m) a -> m a
 viewModelState l = viewState (modelStateL . l)
+
+-- $specMonad
+--
+-- Stuff about spec monad
 
 runSpec :: Spec state () -> ModelState state -> ModelState state
 runSpec spec s = Eff.run $ execState s spec
