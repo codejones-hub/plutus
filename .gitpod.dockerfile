@@ -73,3 +73,5 @@ RUN . /home/gitpod/.nix-profile/etc/profile.d/nix.sh \
 
 RUN . /home/gitpod/.nix-profile/etc/profile.d/nix.sh \
   && nix-env -f nix/gitpod-shell.nix -iA ghc
+
+RUN echo '. /home/gitpod/.nix-profile/etc/profile.d/nix.sh' >> /home/gitpod/.profile
