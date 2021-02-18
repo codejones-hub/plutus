@@ -70,7 +70,7 @@ instance ContractModel GameModel where
         WalletKey :: Wallet -> HandleKey GameModel GameStateMachineSchema
 
     -- The commands available to a test case
-    data Command GameModel = Lock      Wallet String Integer
+    data Action GameModel = Lock      Wallet String Integer
                            | Guess     Wallet String String Integer
                            | GiveToken Wallet
         deriving (Eq, Show)
@@ -126,7 +126,7 @@ instance ContractModel GameModel where
 
     -- To generate a random test case we need to know how to generate a random
     -- command given the current model state.
-    arbitraryCommand s = oneof $
+    arbitraryAction s = oneof $
         [ Lock      <$> genWallet <*> genGuess <*> genValue ] ++
         [ Guess w   <$> genGuess  <*> genGuess <*> choose (1, val) | Just w <- [tok], val > 0 ] ++
         [ GiveToken <$> genWallet                                  | tok /= Nothing ]
@@ -143,12 +143,12 @@ instance ContractModel GameModel where
             tok = s ^. modelState . hasToken
             val = s ^. modelState . gameValue
 
-    shrinkCommand _s (Lock w secret val) =
+    shrinkAction _s (Lock w secret val) =
         [Lock w' secret val | w' <- shrinkWallet w] ++
         [Lock w secret val' | val' <- shrink val]
-    shrinkCommand _s (GiveToken w) =
+    shrinkAction _s (GiveToken w) =
         [GiveToken w' | w' <- shrinkWallet w]
-    shrinkCommand _s (Guess w old new val) =
+    shrinkAction _s (Guess w old new val) =
         [Guess w' old new val | w' <- shrinkWallet w] ++
         [Guess w old new val' | val' <- shrink val]
 

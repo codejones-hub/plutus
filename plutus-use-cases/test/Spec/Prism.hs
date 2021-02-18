@@ -144,7 +144,7 @@ deriving instance Show (HandleKey PrismModel s)
 
 instance ContractModel PrismModel where
 
-    data Command PrismModel = Delay | Issue | Revoke | Call | Present
+    data Action PrismModel = Delay | Issue | Revoke | Call | Present
         deriving (Eq, Show)
 
     type Err    PrismModel = PrismError
@@ -154,7 +154,7 @@ instance ContractModel PrismModel where
         UserH    :: HandleKey PrismModel PrismSchema
         ManagerH :: HandleKey PrismModel PrismSchema
 
-    arbitraryCommand _ = QC.elements [Delay, Revoke, Issue, Call, Present]
+    arbitraryAction _ = QC.elements [Delay, Revoke, Issue, Call, Present]
 
     initialState = PrismModel { _isIssued = NoIssue, _stoState = STOReady }
 
@@ -186,8 +186,8 @@ instance ContractModel PrismModel where
         where                     -- v Wait a generous amount of blocks between calls
             wrap m   = m *> delay waitSlots
 
-    shrinkCommand _ Delay = []
-    shrinkCommand _ _     = [Delay]
+    shrinkAction _ Delay = []
+    shrinkAction _ _     = [Delay]
 
     monitoring (_, s) _ = counterexample (show s)
 

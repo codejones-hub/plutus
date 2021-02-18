@@ -159,8 +159,8 @@ type Spec state = Eff '[State (ModelState state)]
 
 class ( Typeable state
       , Show state
-      , Show (Command state)
-      , Eq (Command state)
+      , Show (Action state)
+      , Eq (Action state)
       , Show (Err state)
       , Typeable (Err state)
       , (forall s. Eq (HandleKey state s))
@@ -168,30 +168,30 @@ class ( Typeable state
       , JSON.ToJSON (Err state)
       , JSON.FromJSON (Err state)
       ) => ContractModel state where
-    data Command state
+    data Action state
     type Err state
     data HandleKey state :: Row * -> *
 
-    arbitraryCommand :: ModelState state -> Gen (Command state)
+    arbitraryAction :: ModelState state -> Gen (Action state)
 
     initialState :: state
 
-    precondition :: ModelState state -> Command state -> Bool
+    precondition :: ModelState state -> Action state -> Bool
     precondition _ _ = True
 
-    nextState :: Command state -> Spec state ()
+    nextState :: Action state -> Spec state ()
     nextState _ = return ()
 
-    perform :: HandleFun state -> ModelState state -> Command state -> EmulatorTrace ()
+    perform :: HandleFun state -> ModelState state -> Action state -> EmulatorTrace ()
     perform _ _ _ = return ()
 
-    monitoring :: (ModelState state, ModelState state) -> Command state -> Property -> Property
+    monitoring :: (ModelState state, ModelState state) -> Action state -> Property -> Property
     monitoring _ _ = id
 
-    shrinkCommand :: ModelState state -> Command state -> [Command state]
-    shrinkCommand _ _ = []
+    shrinkAction :: ModelState state -> Action state -> [Action state]
+    shrinkAction _ _ = []
 
-    restricted :: Command state -> Bool
+    restricted :: Action state -> Bool
     restricted _ = False
 
 -- | Model state lens
@@ -289,15 +289,15 @@ deriving instance ContractModel state => Eq (StateModel.Action (ModelState state
 
 instance ContractModel state => StateModel (ModelState state) where
 
-    data Action (ModelState state) a = ContractAction (Command state)
+    data Action (ModelState state) a = ContractAction (Action state)
 
     type ActionMonad (ModelState state) = ContractMonad state
 
     arbitraryAction s = do
-        a <- arbitraryCommand s
+        a <- arbitraryAction s
         return (Some @() (ContractAction a))
 
-    shrinkAction s (ContractAction a) = [ Some @() (ContractAction a') | a' <- shrinkCommand s a ]
+    shrinkAction s (ContractAction a) = [ Some @() (ContractAction a') | a' <- shrinkAction s a ]
 
     initialState = ModelState { _currentSlot   = 0
                               , _lastSlot      = 125        -- Set by propRunScript
@@ -322,7 +322,7 @@ instance ContractModel state => StateModel (ModelState state) where
 
 type DL s = DL.DL (ModelState s)
 
-action :: ContractModel s => Command s -> DL s ()
+action :: ContractModel s => Action s -> DL s ()
 action cmd = DL.action (ContractAction @_ @() cmd)
 
 assertModel :: String -> (ModelState s -> Bool) -> DL s ()

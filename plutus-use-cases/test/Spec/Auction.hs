@@ -135,7 +135,7 @@ instance ContractModel AuctionModel where
         SellerH :: HandleKey AuctionModel SellerSchema
         BuyerH  :: Wallet -> HandleKey AuctionModel BuyerSchema
 
-    data Command AuctionModel = Init | Bid Wallet Integer | WaitUntil Slot
+    data Action AuctionModel = Init | Bid Wallet Integer | WaitUntil Slot
         deriving (Eq, Show)
 
     initialState = AuctionModel { _currentBid = 0
@@ -143,7 +143,7 @@ instance ContractModel AuctionModel where
                                 , _endSlot    = apEndTime params
                                 , _phase      = NotStarted }
 
-    arbitraryCommand s
+    arbitraryAction s
         | p /= NotStarted =
             oneof [ WaitUntil . step <$> choose (1, 10 :: Integer)
                   , Bid  <$> (Wallet <$> choose (2, 4)) <*> choose (1, 1000) ]
@@ -193,9 +193,9 @@ instance ContractModel AuctionModel where
         Trace.callEndpoint @"bid" (handle $ BuyerH w) (Ada.lovelaceOf bid)
         delay 1
 
-    shrinkCommand _ Init      = []
-    shrinkCommand _ (WaitUntil (Slot n))  = [ WaitUntil (Slot n') | n' <- shrink n ]
-    shrinkCommand s (Bid w v) =
+    shrinkAction _ Init      = []
+    shrinkAction _ (WaitUntil (Slot n))  = [ WaitUntil (Slot n') | n' <- shrink n ]
+    shrinkAction s (Bid w v) =
         [ WaitUntil (s ^. currentSlot + 1) ] ++
         [ Bid w v' | v' <- shrink v ]
 
