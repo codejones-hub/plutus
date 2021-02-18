@@ -46,7 +46,8 @@ let
     updateMetadataSamples
   ]);
 
-in
-haskell.packages.shellFor {
-  # nativeBuildInputs = nixpkgsInputs ++ localInputs; # ++ [ agdaWithStdlib sphinxTools ];
-}
+in [
+  (haskell.project.shellFor {}).ghc
+] ++ nixpkgsInputs ++ localInputs
+
+# ++ [ agdaWithStdlib sphinxTools ]
