@@ -79,7 +79,6 @@ let
     deployment.getCreds
   ]);
 
-in
 in {
   inherit (haskell.project.shellFor {}) ghc;
   inherit nixpkgsInputs localInputs agdaWithStdlib sphinxTools;
