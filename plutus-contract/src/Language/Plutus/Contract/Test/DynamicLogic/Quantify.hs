@@ -126,6 +126,7 @@ instance Quantifiable a => Quantifiable [a] where
         `whereQ` (not . null)
         where to (x, xs) = x:xs
               from (x:xs) = (x, xs)
+              from []     = error "quantify: impossible"
 
 validQuantification :: Show a => Quantification a -> Property
 validQuantification q =

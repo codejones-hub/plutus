@@ -5,6 +5,7 @@
 {-# LANGUAGE StandaloneDeriving        #-}
 {-# LANGUAGE TypeApplications          #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
 
 module Language.Plutus.Contract.Test.DynamicLogic
     ( module Language.Plutus.Contract.Test.DynamicLogic.Quantify
@@ -13,6 +14,7 @@ module Language.Plutus.Contract.Test.DynamicLogic
     , ignore, passTest, afterAny, after, (|||), forAllQ, weight, toStop
     , done, errorDL, monitorDL, always
     , forAllScripts, withDLScript
+    , propPruningGeneratedScriptIsNoop
     ) where
 
 import           Data.List
@@ -139,8 +141,7 @@ forAllScripts d k =
     forAllShrink (sized $ generateDLTest d) (shrinkDLTest d) $
         withDLScript d k
 
-withDLScript :: (DynLogicModel s, Testable a) =>
-                   DynLogic s -> (Script s -> a) -> DynLogicTest s -> Property
+withDLScript :: (DynLogicModel s, Testable a) => DynLogic s -> (Script s -> a) -> DynLogicTest s -> Property
 withDLScript d k test =
     validDLTest d test .&&. (applyMonitoring d test . property $ k (scriptFromDL test))
 
@@ -249,12 +250,15 @@ chooseNextStep s n d =
                         Just (Some a) ->
                             return $ Stepping (Do $ Var n := a)
                                               (k (nextState s a (Var n)))
+                        Just Error{} -> error "impossible"
                 ForAll q f -> do
                     x <- generateQ q
                     return $ Stepping (Witness x) (f x)
-                Alt{}      -> error "chooseNextStep: Alt"
-                Stopping{} -> error "chooseNextStep: Stopping"
-                Weight{}   -> error "chooseNextStep: Weight"
+                After Error{} _ -> error "chooseNextStep: After Error"
+                Alt{}           -> error "chooseNextStep: Alt"
+                Stopping{}      -> error "chooseNextStep: Stopping"
+                Weight{}        -> error "chooseNextStep: Weight"
+                Monitor{}       -> error "chooseNextStep: Monitor"
 
 keepTryingUntil :: Int -> Gen a -> (a -> Bool) -> Gen (Maybe a)
 keepTryingUntil 0 _ _ = return Nothing
@@ -419,11 +423,16 @@ badActions (Weight w d) s = if w < never then [] else badActions d s
 badActions (ForAll _ _) _ = []
 badActions (Monitor _ d)s = badActions d s
 
+applyMonitoring :: DynLogicModel s => DynLogic s -> DynLogicTest s -> Property -> Property
 applyMonitoring d (DLScript s) p =
   case findMonitoring d initialState s of
     Just f  -> f p
     Nothing -> p
+applyMonitoring _ Stuck{}           p = p
+applyMonitoring _ Looping{}         p = p
+applyMonitoring _ BadPrecondition{} p = p
 
+findMonitoring :: DynLogicModel s => DynLogic s -> s -> [TestStep s] -> Maybe (Property -> Property)
 findMonitoring Stop      s [] = Just id
 findMonitoring (After (Some a) k) s (Do (var := a'):as)
   | Some a == Some a' = findMonitoring (k s') s' as

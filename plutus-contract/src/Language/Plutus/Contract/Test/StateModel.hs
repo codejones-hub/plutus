@@ -124,6 +124,7 @@ instance (Typeable state, StateModel state) => Arbitrary (Script state) where
                             case mact of
                               Just (Some act) ->
                                 ((Var step := act):) <$> arbActions (nextState s act (Var step)) (step+1)
+                              Just Error{} -> error "impossible"
                               Nothing ->
                                 return [])]
 
