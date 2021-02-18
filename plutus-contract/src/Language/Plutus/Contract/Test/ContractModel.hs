@@ -11,20 +11,24 @@
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 module Language.Plutus.Contract.Test.ContractModel
-    ( -- * ContractModel
+    ( -- * Contract models
       --
       -- $contractModel
+      ContractModel(..)
       -- ** Model state
-      ModelState
+    , ModelState
     , modelState
     , currentSlot
     , balances
     , forged
     , lockedFunds
-      -- ** ContractModel class
-    , ContractModel(..)
+    , GetModelState(..)
+    , getModelState
+    , viewState
+    , viewModelState
     -- ** Spec monad
     --
     -- $specMonad
@@ -56,11 +60,6 @@ module Language.Plutus.Contract.Test.ContractModel
     -- $quantify
     , DL.forAllQ
     , module Language.Plutus.Contract.Test.DynamicLogic.Quantify
-    -- * GetModelState
-    , GetModelState(..)
-    , getModelState
-    , viewState
-    , viewModelState
     -- * Running properties
     --
     -- $runningProperties
@@ -111,10 +110,6 @@ import           Test.QuickCheck.Monadic                             as QC
 --
 -- Stuff about contract model
 
--- $specMonad
---
--- Stuff about spec monad
-
 data IMap (key :: i -> *) (val :: i -> *) where
     IMNil  :: IMap key val
     IMCons :: Typeable i => key i -> val i -> IMap key val -> IMap key val
@@ -154,6 +149,10 @@ type Script s = StateModel.Script (ModelState s)
 
 instance Show state => Show (ModelState state) where
     show = show . _modelState   -- for now
+
+-- $specMonad
+--
+-- Stuff about spec monad
 
 type Spec state = Eff '[State (ModelState state)]
 
@@ -195,18 +194,23 @@ class ( Typeable state
     restricted _ = False
 
 -- | Model state lens
-makeLensesFor [("_modelState",  "modelState")]  'ModelState
+makeLensesFor [("_modelState",  "modelStateL")]  'ModelState
+makeLensesFor [("_currentSlot", "currentSlotL")] 'ModelState
+makeLensesFor [("_lastSlot",    "lastSlotL")]    'ModelState
+makeLensesFor [("_balances",    "balancesL")]    'ModelState
+makeLensesFor [("_forged",      "forgedL")]      'ModelState
 
--- | Current slot lens
-makeLensesFor [("_currentSlot", "currentSlot")] 'ModelState
+modelState :: Getter (ModelState state) state
+modelState = modelStateL
 
-makeLensesFor [("_lastSlot",    "lastSlot")]    'ModelState
+currentSlot :: Getter (ModelState state) Slot
+currentSlot = currentSlotL
 
--- | Balances lens
-makeLensesFor [("_balances",    "balances")]    'ModelState
+balances :: Getter (ModelState state) (Map Wallet Value)
+balances = balancesL
 
--- | Forged lens
-makeLensesFor [("_forged",      "forged")]      'ModelState
+forged :: Getter (ModelState state) Value
+forged = forgedL
 
 class Monad m => GetModelState m where
     type StateType m :: *
@@ -219,25 +223,25 @@ viewState :: GetModelState m => Getting a (ModelState (StateType m)) a -> m a
 viewState l = (^. l) <$> getState
 
 viewModelState :: GetModelState m => Getting a (StateType m) a -> m a
-viewModelState l = viewState (modelState . l)
+viewModelState l = viewState (modelStateL . l)
 
 runSpec :: Spec state () -> ModelState state -> ModelState state
 runSpec spec s = Eff.run $ execState s spec
 
 wait :: forall state. Integer -> Spec state ()
-wait n = modify @(ModelState state) $ over currentSlot (+ Slot n)
+wait n = modify @(ModelState state) $ over currentSlotL (+ Slot n)
 
 waitUntil :: forall state. Slot -> Spec state ()
-waitUntil n = modify @(ModelState state) $ over currentSlot (max n)
+waitUntil n = modify @(ModelState state) $ over currentSlotL (max n)
 
 forge :: forall s. Value -> Spec s ()
-forge v = modify @(ModelState s) $ over forged (<> v)
+forge v = modify @(ModelState s) $ over forgedL (<> v)
 
 burn :: forall s. Value -> Spec s ()
 burn = forge . inv
 
 deposit :: forall s. Wallet -> Value -> Spec s ()
-deposit w val = modify @(ModelState s) (over (balances . at w) (Just . maybe val (<> val)))
+deposit w val = modify @(ModelState s) (over (balancesL . at w) (Just . maybe val (<> val)))
 
 withdraw :: Wallet -> Value -> Spec s ()
 withdraw w val = deposit w (inv val)
@@ -245,11 +249,11 @@ withdraw w val = deposit w (inv val)
 transfer :: Wallet -> Wallet -> Value -> Spec s ()
 transfer fromW toW val = withdraw fromW val >> deposit toW val
 
-($=) :: ASetter s s a b -> b -> Spec s ()
+($=) :: Setter' s a -> a -> Spec s ()
 l $= x = l $~ const x
 
-($~) :: forall s a b. ASetter s s a b -> (a -> b) -> Spec s ()
-l $~ f = modify @(ModelState s) (over (modelState . l) f)
+($~) :: forall s a. Setter' s a -> (a -> a) -> Spec s ()
+l $~ f = modify @(ModelState s) (over (modelStateL . l) f)
 
 instance GetModelState (Spec s) where
     type StateType (Spec s) = s
@@ -307,7 +311,7 @@ instance ContractModel state => StateModel (ModelState state) where
 
     nextState s (ContractAction cmd) _v = runSpec (nextState cmd) s
 
-    precondition s (ContractAction cmd) = s ^. currentSlot < s ^. lastSlot - 10 -- No commands if < 10 slots left
+    precondition s (ContractAction cmd) = s ^. currentSlot < s ^. lastSlotL - 10 -- No commands if < 10 slots left
                                           && precondition s cmd
 
     perform s (ContractAction cmd) _env = error "unused" <$ runEmulator (\ h -> perform (handle h) s cmd)
