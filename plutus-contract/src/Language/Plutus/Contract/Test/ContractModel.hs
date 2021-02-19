@@ -159,7 +159,8 @@ type Script s = StateModel.Script (ModelState s)
 instance Show state => Show (ModelState state) where
     show = show . _contractState   -- for now
 
-type Spec state = Eff '[State (ModelState state)]
+newtype Spec state a = Spec (Eff '[State (ModelState state)] a)
+    deriving (Functor, Applicative, Monad)
 
 -- $contractModel
 --
@@ -266,22 +267,22 @@ viewContractState l = viewModelState (contractStateL . l)
 -- Stuff about spec monad
 
 runSpec :: Spec state () -> ModelState state -> ModelState state
-runSpec spec s = Eff.run $ execState s spec
+runSpec (Spec spec) s = Eff.run $ execState s spec
 
 wait :: forall state. Integer -> Spec state ()
-wait n = modify @(ModelState state) $ over currentSlotL (+ Slot n)
+wait n = Spec $ modify @(ModelState state) $ over currentSlotL (+ Slot n)
 
 waitUntil :: forall state. Slot -> Spec state ()
-waitUntil n = modify @(ModelState state) $ over currentSlotL (max n)
+waitUntil n = Spec $ modify @(ModelState state) $ over currentSlotL (max n)
 
 forge :: forall s. Value -> Spec s ()
-forge v = modify @(ModelState s) $ over forgedL (<> v)
+forge v = Spec $ modify @(ModelState s) $ over forgedL (<> v)
 
 burn :: forall s. Value -> Spec s ()
 burn = forge . inv
 
 deposit :: forall s. Wallet -> Value -> Spec s ()
-deposit w val = modify @(ModelState s) (over (balancesL . at w) (Just . maybe val (<> val)))
+deposit w val = Spec $ modify @(ModelState s) (over (balancesL . at w) (Just . maybe val (<> val)))
 
 withdraw :: Wallet -> Value -> Spec s ()
 withdraw w val = deposit w (inv val)
@@ -293,11 +294,11 @@ transfer fromW toW val = withdraw fromW val >> deposit toW val
 l $= x = l $~ const x
 
 ($~) :: forall s a. Setter' s a -> (a -> a) -> Spec s ()
-l $~ f = modify @(ModelState s) (over (contractStateL . l) f)
+l $~ f = Spec $ modify @(ModelState s) (over (contractStateL . l) f)
 
 instance GetModelState (Spec s) where
     type StateType (Spec s) = s
-    getModelState = get
+    getModelState = Spec get
 
 handle :: (ContractModel s) => Handles s -> HandleFun s
 handle handles key =
