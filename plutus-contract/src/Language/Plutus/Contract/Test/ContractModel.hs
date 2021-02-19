@@ -34,13 +34,16 @@ module Language.Plutus.Contract.Test.ContractModel
     , contractState
     , currentSlot
     , balances
+    , balance
     , forged
-    , lockedFunds
+    , lockedValue
     , GetModelState(..)
-    , viewModelState
     , getContractState
+    , askModelState
+    , askContractState
+    , viewModelState
     , viewContractState
-    -- ** Spec monad
+    -- ** The Spec monad
     --
     -- $specMonad
     , Spec
@@ -51,8 +54,10 @@ module Language.Plutus.Contract.Test.ContractModel
     , deposit
     , withdraw
     , transfer
-    , ($=), ($~)
-    -- * Dynamic logic
+    , modifyContractState
+    , ($=)
+    , ($~)
+    -- * Test scenarios
     --
     -- $dynamicLogic
     , DL
@@ -147,6 +152,12 @@ type Handles state = IMap (HandleKey state) ContractHandle
 
 type HandleFun state = forall schema err. (Typeable schema, Typeable err) => HandleKey state schema err -> Trace.ContractHandle schema err
 
+-- | The `ModelState` models the state of the blockchain. It contains,
+--
+--   * the contract-specific state (`contractState`)
+--   * the current slot (`currentSlot`)
+--   * the wallet balances (`balances`)
+--   * the amount that has been forged (`forged`)
 data ModelState state = ModelState
         { _currentSlot   :: Slot
         , _lastSlot      :: Slot
@@ -160,6 +171,8 @@ type Script s = StateModel.Script (ModelState s)
 instance Show state => Show (ModelState state) where
     show = show . _contractState   -- for now
 
+-- | The `Spec` monad is a state monad over the `ModelState`. It is used exclusively by the
+--   `nextState` function to model the effects of an action on the blockchain.
 newtype Spec state a = Spec (Eff '[State (ModelState state)] a)
     deriving (Functor, Applicative, Monad)
 
@@ -207,6 +220,8 @@ class ( Typeable state
     data HandleKey state :: Row * -> * -> *
 
     -- | Given the current model state, provide a QuickCheck generator for a random next action.
+    --   This is used in the `Arbitrary` instance for `Script`s as well as by `DL.anyAction` and
+    --   `DL.anyActions`.
     arbitraryAction :: ModelState state -> Gen (Action state)
 
     -- | The initial state, before any actions have been performed.
@@ -256,7 +271,7 @@ class ( Typeable state
     monitoring _ _ = id
 
     -- | In some scenarios it's useful to have actions that are never generated randomly, but only
-    --   used explicitly in `DL` script `action`s. To avoid these actions matching an `anyAction`
+    --   used explicitly in `DL` script `action`s. To avoid these actions matching an `DL.anyAction`
     --   when shrinking, they can be marked `restricted`.
     restricted :: Action state -> Bool
     restricted _ = False
@@ -268,67 +283,140 @@ makeLensesFor [("_lastSlot",      "lastSlotL")]      'ModelState
 makeLensesFor [("_balances",      "balancesL")]      'ModelState
 makeLensesFor [("_forged",        "forgedL")]        'ModelState
 
+-- | Get the contract-specific part of the model state.
+--
+--   `Spec` monad update functions: `$=` and `$~`.
 contractState :: Getter (ModelState state) state
 contractState = contractStateL
 
+-- | Get the current slot.
+--
+--   `Spec` monad update functions: `wait` and `waitUntil`.
 currentSlot :: Getter (ModelState state) Slot
 currentSlot = currentSlotL
 
+-- | Get the current wallet balances. These are delta balances, so they start out at zero and can be
+--   negative. The absolute balances used by the emulator can be set in the `CheckOptions` argument
+--   to `propRunScriptWithOptions`.
+--
+--   `Spec` monad update functions: `withdraw`, `deposit`, `transfer`.
 balances :: Getter (ModelState state) (Map Wallet Value)
 balances = balancesL
 
+-- | Get the current balance for a wallet. This is the delta balance, so it starts out at zero and
+--   can be negative. The absolute balance used by the emulator can be set in the `CheckOptions`
+--   argument to `propRunScriptWithOptions`.
+--
+--   `Spec` monad update functions: `withdraw`, `deposit`, `transfer`.
+balance :: Wallet -> Getter (ModelState state) Value
+balance w = balancesL . at w . non mempty
+
+-- | Get the amount of tokens forged so far. This is used to compute `lockedValue`.
+--
+--   `Spec` monad update functions: `forge` and `burn`.
 forged :: Getter (ModelState state) Value
 forged = forgedL
 
+-- | How much value is currently locked by contracts. This computed by subtracting the wallet
+--   `balances` from the `forged` value.
+lockedValue :: ModelState s -> Value
+lockedValue s = s ^. forged <> inv (fold $ s ^. balances)
+
+-- | Monads with read access to the model state: the `Spec` monad used in `nextState`, and the `DL`
+--   monad used to construct test scenarios.
 class Monad m => GetModelState m where
     type StateType m :: *
     getModelState :: m (ModelState (StateType m))
 
+-- | Get the contract state part of the model state.
 getContractState :: GetModelState m => m (StateType m)
 getContractState = _contractState <$> getModelState
 
-viewModelState :: GetModelState m => Getting a (ModelState (StateType m)) a -> m a
-viewModelState l = (^. l) <$> getModelState
+-- | Getting a component of the model state.
+askModelState :: GetModelState m => (ModelState (StateType m) -> a) -> m a
+askModelState f = f <$> getModelState
 
+-- | Getting a component of the contract state.
+askContractState :: GetModelState m => (StateType m -> a) -> m a
+askContractState f = askModelState (f . _contractState)
+
+-- | Getting a component of the model state.
+viewModelState :: GetModelState m => Getting a (ModelState (StateType m)) a -> m a
+viewModelState l = askModelState (^. l)
+
+-- | Getting a component of the contract state.
 viewContractState :: GetModelState m => Getting a (StateType m) a -> m a
 viewContractState l = viewModelState (contractStateL . l)
 
 -- $specMonad
 --
--- Stuff about spec monad
+-- The `Spec` monad is used in the `nextState` function to specify how the model state is affected
+-- by each action.
+--
+-- Note that the model state does not track the absolute `balances` of each wallet, only how the
+-- balance changes over the execution of a contract. Thus, token transfers (using `transfer`,
+-- `deposit` or `withdraw`) always succeed in the model, but might fail when running the
+-- contract in the emulator, causing test failures. The simplest way to deal with this issue is
+-- to make sure that each wallet has enough starting funds to cover any scenario encountered during
+-- testing. The starting funds can be provided in the `CheckOptions` argument to
+-- `propRunScriptWithOptions`.
+-- Another option is to model the starting funds of each contract in the contract state and check
+-- that enough funds are available before performing a transfer.
 
 runSpec :: Spec state () -> ModelState state -> ModelState state
 runSpec (Spec spec) s = Eff.run $ execState s spec
 
-wait :: forall state. Integer -> Spec state ()
-wait n = Spec $ modify @(ModelState state) $ over currentSlotL (+ Slot n)
+modState :: forall state a. Setter' (ModelState state) a -> (a -> a) -> Spec state ()
+modState l f = Spec $ modify @(ModelState state) $ over l f
 
-waitUntil :: forall state. Slot -> Spec state ()
-waitUntil n = Spec $ modify @(ModelState state) $ over currentSlotL (max n)
+-- | Wait the given number of slots. Updates the `currentSlot` of the model state.
+wait :: Integer -> Spec state ()
+wait n = modState currentSlotL (+ Slot n)
 
-forge :: forall s. Value -> Spec s ()
-forge v = Spec $ modify @(ModelState s) $ over forgedL (<> v)
+-- | Wait until the given slot. Has no effect if `currentSlot` is greater than the given slot.
+waitUntil :: Slot -> Spec state ()
+waitUntil n = modState currentSlotL (max n)
 
-burn :: forall s. Value -> Spec s ()
+-- | Forge tokens. Forged tokens start out as `lockedValue` (i.e. owned by the contract) and can be
+--   transferred to wallets using `deposit`.
+forge :: Value -> Spec state ()
+forge v = modState forgedL (<> v)
+
+-- | Burn tokens. Equivalent to @`forge` . `inv`@.
+burn :: Value -> Spec state ()
 burn = forge . inv
 
-deposit :: forall s. Wallet -> Value -> Spec s ()
-deposit w val = Spec $ modify @(ModelState s) (over (balancesL . at w) (Just . maybe val (<> val)))
+-- | Add tokens to the `balance` of a wallet. The added tokens are subtracted from the `lockedValue`
+--   of tokens held by contracts.
+deposit :: Wallet -> Value -> Spec state ()
+deposit w val = modState (balancesL . at w) (Just . maybe val (<> val))
 
-withdraw :: Wallet -> Value -> Spec s ()
+-- | Withdraw tokens from a wallet. The withdrawn tokens are added to the `lockedValue` of tokens
+--   held by contracts.
+withdraw :: Wallet -> Value -> Spec state ()
 withdraw w val = deposit w (inv val)
 
-transfer :: Wallet -> Wallet -> Value -> Spec s ()
+-- | Transfer tokens between wallets, updating their `balances`.
+transfer :: Wallet  -- ^ Transfer from this wallet
+         -> Wallet  -- ^ to this wallet
+         -> Value   -- ^ this many tokens
+         -> Spec state ()
 transfer fromW toW val = withdraw fromW val >> deposit toW val
 
-($=) :: Setter' s a -> a -> Spec s ()
+-- | Modify the contract state.
+modifyContractState :: (state -> state) -> Spec state ()
+modifyContractState f = modState contractStateL f
+
+-- | Set a specific field of the contract state.
+($=) :: Setter' state a -> a -> Spec state ()
 l $= x = l $~ const x
 
-($~) :: forall s a. Setter' s a -> (a -> a) -> Spec s ()
-l $~ f = Spec $ modify @(ModelState s) (over (contractStateL . l) f)
+-- | Modify a specific field of the contract state.
+($~) :: Setter' state a -> (a -> a) -> Spec state ()
+l $~ f = modState (contractStateL . l) f
 
-instance GetModelState (Spec s) where
-    type StateType (Spec s) = s
+instance GetModelState (Spec state) where
+    type StateType (Spec state) = state
     getModelState = Spec get
 
 handle :: (ContractModel s) => Handles s -> HandleFun s
@@ -336,10 +424,6 @@ handle handles key =
     case imLookup key handles of
         Just h  -> h
         Nothing -> error $ "handle: No handle for " ++ show key
-
--- | Are there locked funds?
-lockedFunds :: ModelState s -> Value
-lockedFunds s = s ^. forged <> inv (fold $ s ^. balances)
 
 newtype EmulatorAction state = EmulatorAction { runEmulatorAction :: Handles state -> EmulatorTrace (Handles state) }
 
@@ -394,7 +478,54 @@ instance ContractModel state => StateModel (ModelState state) where
 
 -- $dynamicLogic
 --
--- Stuff about dynamic logic
+-- Test scenarios are described in the `DL` monad (based on dynamic logic) which lets you freely mix
+-- random sequences of actions (`DL.anyAction`, `DL.anyActions_`, `DL.anyActions`) with specific
+-- actions (`action`). It also supports checking properties of the model state (`DL.assert`,
+-- `assertModel`), and random generation (`DL.forAllQ`).
+--
+-- For instance, a unit test for a simple auction contract might look something like this:
+--
+-- @
+--  unitTest :: `DL` AuctionState ()
+--  unitTest = do
+--      `DL.action` $ Bid w1 100
+--      `DL.action` $ Bid w2 150
+--      `DL.action` $ Wait endSlot
+--      `DL.action` $ Collect
+-- @
+--
+--  and could easily be extended with some randomly generated values
+--
+-- @
+--  unitTest :: `DL` AuctionState ()
+--  unitTest = do
+--      bid <- `forAllQ` $ `chooseQ` (1, 100)
+--      `DL.action` $ Bid w1 bid
+--      `DL.action` $ Bid w2 (bid + 50)
+--      `DL.action` $ Wait endSlot
+--      `DL.action` $ Collect
+-- @
+--
+-- More interesting scenarios can be constructed by mixing random and fixed sequences. The following
+-- checks that you can always finish an auction after which point there are no funds locked by the
+-- contract:
+--
+-- @
+-- finishAuction :: `DL` AuctionState ()
+-- finishAuction = do
+--   `DL.anyActions_`
+--   `action` $ Wait endSlot
+--   `action` $ Collect
+--   `assertModel` "Funds are locked!" (`isZero` . `lockedValue`)
+-- @
+--
+-- `DL` scripts are turned into QuickCheck properties using `forAllDL`. For instance,
+--
+-- @
+-- prop_Auction  = `propRunScript_` handles
+--   where handles = ...
+-- prop_Finish = `forAllDL` finishAuction prop_Auction
+-- @
 
 type DL s = DL.DL (ModelState s)
 
@@ -410,8 +541,8 @@ forAllDL = DL.forAllDL
 instance ContractModel s => DL.DynLogicModel (ModelState s) where
     restricted (ContractAction act) = restricted act
 
-instance GetModelState (DL s) where
-    type StateType (DL s) = s
+instance GetModelState (DL state) where
+    type StateType (DL state) = state
     getModelState = DL.getModelStateDL
 
 -- $quantify
@@ -465,6 +596,16 @@ propRunScript :: forall state.
     Property
 propRunScript = propRunScriptWithOptions (set minLogLevel Warning defaultCheckOptions)
 
+-- |
+--
+--   @
+--   options :: Map `Wallet` `Value` -> `Slot` -> `Control.Monad.Freer.Log.LogLevel` -> `CheckOptions`
+--   options dist slot logLevel =
+--      `defaultCheckOptions` `&` `emulatorConfig` . `Plutus.Trace.Emulator.initialChainState` `.~` Left dist
+--                            `&` `maxSlot` `.~` slot
+--                            `&` `minLogLevel` `.~` logLevel
+--   @
+--
 propRunScriptWithOptions :: forall state.
     ContractModel state =>
     CheckOptions ->

@@ -219,7 +219,7 @@ finishAuction = do
     anyActions_
     slot <- viewModelState currentSlot
     when (slot < 101) $ action $ WaitUntil 101
-    assertModel "Locked funds are not zero" (Value.isZero . lockedFunds)
+    assertModel "Locked funds are not zero" (Value.isZero . lockedValue)
 
 prop_FinishAuction :: Property
 prop_FinishAuction = forAllDL finishAuction prop_Auction

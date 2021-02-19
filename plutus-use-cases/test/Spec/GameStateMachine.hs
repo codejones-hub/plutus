@@ -220,7 +220,7 @@ noLockedFunds = do
         monitorDL $ label "Unlocking funds"
         action $ GiveToken w
         action $ Guess w secret secret val
-    assertModel "Locked funds should be zero" $ isZero . lockedFunds
+    assertModel "Locked funds should be zero" $ isZero . lockedValue
 
 -- | Check that we can always get the money out of the guessing game (by guessing correctly).
 prop_NoLockedFunds :: Property
@@ -312,3 +312,4 @@ gameTokenVal :: Value
 gameTokenVal =
     let sym = Scripts.monetaryPolicyHash G.scriptInstance
     in G.token sym "guess"
+
