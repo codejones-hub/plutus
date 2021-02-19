@@ -30,15 +30,15 @@ module Language.Plutus.Contract.Test.ContractModel
       ContractModel(..)
       -- ** Model state
     , ModelState
-    , modelState
+    , contractState
     , currentSlot
     , balances
     , forged
     , lockedFunds
     , GetModelState(..)
-    , getModelState
-    , viewState
     , viewModelState
+    , getContractState
+    , viewContractState
     -- ** Spec monad
     --
     -- $specMonad
@@ -147,17 +147,17 @@ type Handles state = IMap (HandleKey state) ContractHandle
 type HandleFun state = forall schema err. (Typeable schema, Typeable err) => HandleKey state schema err -> Trace.ContractHandle schema err
 
 data ModelState state = ModelState
-        { _currentSlot :: Slot
-        , _lastSlot    :: Slot
-        , _balances    :: Map Wallet Value
-        , _forged      :: Value
-        , _modelState  :: state
+        { _currentSlot   :: Slot
+        , _lastSlot      :: Slot
+        , _balances      :: Map Wallet Value
+        , _forged        :: Value
+        , _contractState :: state
         }
 
 type Script s = StateModel.Script (ModelState s)
 
 instance Show state => Show (ModelState state) where
-    show = show . _modelState   -- for now
+    show = show . _contractState   -- for now
 
 type Spec state = Eff '[State (ModelState state)]
 
@@ -210,6 +210,7 @@ class ( Typeable state
     -- | The initial state, before any actions have been performed.
     initialState :: state
 
+    -- | blabla
     precondition :: ModelState state -> Action state -> Bool
     precondition _ _ = True
 
@@ -229,14 +230,14 @@ class ( Typeable state
     restricted _ = False
 
 -- | Model state lens
-makeLensesFor [("_modelState",  "modelStateL")]  'ModelState
-makeLensesFor [("_currentSlot", "currentSlotL")] 'ModelState
-makeLensesFor [("_lastSlot",    "lastSlotL")]    'ModelState
-makeLensesFor [("_balances",    "balancesL")]    'ModelState
-makeLensesFor [("_forged",      "forgedL")]      'ModelState
+makeLensesFor [("_contractState", "contractStateL")] 'ModelState
+makeLensesFor [("_currentSlot",   "currentSlotL")]   'ModelState
+makeLensesFor [("_lastSlot",      "lastSlotL")]      'ModelState
+makeLensesFor [("_balances",      "balancesL")]      'ModelState
+makeLensesFor [("_forged",        "forgedL")]        'ModelState
 
-modelState :: Getter (ModelState state) state
-modelState = modelStateL
+contractState :: Getter (ModelState state) state
+contractState = contractStateL
 
 currentSlot :: Getter (ModelState state) Slot
 currentSlot = currentSlotL
@@ -249,16 +250,16 @@ forged = forgedL
 
 class Monad m => GetModelState m where
     type StateType m :: *
-    getState :: m (ModelState (StateType m))
+    getModelState :: m (ModelState (StateType m))
 
-getModelState :: GetModelState m => m (StateType m)
-getModelState = _modelState <$> getState
+getContractState :: GetModelState m => m (StateType m)
+getContractState = _contractState <$> getModelState
 
-viewState :: GetModelState m => Getting a (ModelState (StateType m)) a -> m a
-viewState l = (^. l) <$> getState
+viewModelState :: GetModelState m => Getting a (ModelState (StateType m)) a -> m a
+viewModelState l = (^. l) <$> getModelState
 
-viewModelState :: GetModelState m => Getting a (StateType m) a -> m a
-viewModelState l = viewState (modelStateL . l)
+viewContractState :: GetModelState m => Getting a (StateType m) a -> m a
+viewContractState l = viewModelState (contractStateL . l)
 
 -- $specMonad
 --
@@ -292,11 +293,11 @@ transfer fromW toW val = withdraw fromW val >> deposit toW val
 l $= x = l $~ const x
 
 ($~) :: forall s a. Setter' s a -> (a -> a) -> Spec s ()
-l $~ f = modify @(ModelState s) (over (modelStateL . l) f)
+l $~ f = modify @(ModelState s) (over (contractStateL . l) f)
 
 instance GetModelState (Spec s) where
     type StateType (Spec s) = s
-    getState = get
+    getModelState = get
 
 handle :: (ContractModel s) => Handles s -> HandleFun s
 handle handles key =
@@ -346,7 +347,7 @@ instance ContractModel state => StateModel (ModelState state) where
                               , _lastSlot      = 125        -- Set by propRunScript
                               , _balances      = Map.empty
                               , _forged        = mempty
-                              , _modelState    = initialState }
+                              , _contractState = initialState }
 
     nextState s (ContractAction cmd) _v = runSpec (nextState cmd) s
 
@@ -379,7 +380,7 @@ instance ContractModel s => DL.DynLogicModel (ModelState s) where
 
 instance GetModelState (DL s) where
     type StateType (DL s) = s
-    getState = DL.getModelStateDL
+    getModelState = DL.getModelStateDL
 
 -- $quantify
 --

@@ -93,7 +93,7 @@ instance ContractModel GameModel where
                          , guessArgsValueTakenOut = Ada.lovelaceValueOf val}
             delay 1
         GiveToken w' -> do
-            let w = fromJust (s ^. modelState . hasToken)
+            let w = fromJust (s ^. contractState . hasToken)
             payToWallet w w' gameTokenVal
             delay 1
 
@@ -109,7 +109,7 @@ instance ContractModel GameModel where
         wait 2
 
     nextState (Guess w old new val) = do
-        correct <- (old ==) <$> viewModelState currentSecret
+        correct <- (old ==) <$> viewContractState currentSecret
         when correct $ do
             currentSecret $= new
             gameValue     $~ subtract val
@@ -117,7 +117,7 @@ instance ContractModel GameModel where
         wait 1
 
     nextState (GiveToken w) = do
-        w0 <- fromJust <$> viewModelState hasToken
+        w0 <- fromJust <$> viewContractState hasToken
         transfer w0 w gameTokenVal
         hasToken $= Just w
         wait 1
@@ -129,8 +129,8 @@ instance ContractModel GameModel where
         [ Guess w   <$> genGuess  <*> genGuess <*> choose (1, val) | Just w <- [tok], val > 0 ] ++
         [ GiveToken <$> genWallet                                  | tok /= Nothing ]
         where
-            tok = s ^. modelState . hasToken
-            val = s ^. modelState . gameValue
+            tok = s ^. contractState . hasToken
+            val = s ^. contractState . gameValue
 
     -- The 'precondition' says when a particular command is allowed.
     precondition s cmd = case cmd of
@@ -138,8 +138,8 @@ instance ContractModel GameModel where
             Guess w _ _ v -> v <= val && tok == Just w
             GiveToken w   -> tok /= Nothing
         where
-            tok = s ^. modelState . hasToken
-            val = s ^. modelState . gameValue
+            tok = s ^. contractState . hasToken
+            val = s ^. contractState . gameValue
 
     shrinkAction _s (Lock w secret val) =
         [Lock w' secret val | w' <- shrinkWallet w] ++
@@ -214,8 +214,8 @@ noLockedFunds :: DL GameModel ()
 noLockedFunds = do
     anyActions_
     w <- forAllQ $ elementsQ wallets
-    secret <- viewModelState currentSecret
-    val    <- viewModelState gameValue
+    secret <- viewContractState currentSecret
+    val    <- viewContractState gameValue
     when (val > 0) $ do
         monitorDL $ label "Unlocking funds"
         action $ GiveToken w

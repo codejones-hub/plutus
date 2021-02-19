@@ -156,7 +156,7 @@ instance ContractModel PrismModel where
 
     initialState = PrismModel { _isIssued = NoIssue, _stoState = STOReady }
 
-    precondition s Issue = (s ^. modelState . isIssued) /= Issued  -- Multiple Issue (without Revoke) breaks the contract
+    precondition s Issue = (s ^. contractState . isIssued) /= Issued  -- Multiple Issue (without Revoke) breaks the contract
     precondition _ _     = True
 
     nextState cmd = do
@@ -167,8 +167,8 @@ instance ContractModel PrismModel where
             Issue   -> isIssued $= Issued
             Call    -> stoState $~ \ case STOReady -> STOPending; sto -> sto
             Present -> do
-                iss <- (== Issued)     <$> viewModelState isIssued
-                sto <- (== STOPending) <$> viewModelState stoState
+                iss <- (== Issued)     <$> viewContractState isIssued
+                sto <- (== STOPending) <$> viewContractState stoState
                 stoState $= STOReady
                 when (iss && sto) $ do
                     transfer user issuer (Ada.lovelaceValueOf numTokens)

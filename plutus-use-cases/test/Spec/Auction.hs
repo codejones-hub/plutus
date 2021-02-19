@@ -147,20 +147,20 @@ instance ContractModel AuctionModel where
                   , Bid  <$> (Wallet <$> choose (2, 4)) <*> choose (1, 1000) ]
         | otherwise = pure Init
         where
-            p    = s ^. modelState . phase
+            p    = s ^. contractState . phase
             slot = s ^. currentSlot
             step n = slot + fromIntegral n
 
-    precondition s Init = s ^. modelState . phase == NotStarted
-    precondition s cmd  = s ^. modelState . phase /= NotStarted &&
+    precondition s Init = s ^. contractState . phase == NotStarted
+    precondition s cmd  = s ^. contractState . phase /= NotStarted &&
         case cmd of
             WaitUntil slot -> slot > s ^. currentSlot
             _              -> True
 
     -- This command is only for setting up the model state with theToken
     nextState cmd = do
-        slot <- viewState currentSlot
-        end  <- viewModelState endSlot
+        slot <- viewModelState currentSlot
+        end  <- viewContractState endSlot
         case cmd of
             Init -> do
                 phase $= Bidding
@@ -168,19 +168,19 @@ instance ContractModel AuctionModel where
                 wait 3
             WaitUntil slot -> waitUntil slot
             Bid w bid -> do
-                current <- viewModelState currentBid
-                leader  <- viewModelState winner
+                current <- viewContractState currentBid
+                leader  <- viewContractState winner
                 wait 1
                 when (bid > current && slot <= end) $ do
                     withdraw w $ Ada.lovelaceValueOf bid
                     deposit leader $ Ada.lovelaceValueOf current
                     currentBid $= bid
                     winner     $= w
-        slot' <- viewState currentSlot
-        p     <- viewModelState phase
+        slot' <- viewModelState currentSlot
+        p     <- viewContractState phase
         when (slot' > end && p == Bidding) $ do
-            w   <- viewModelState winner
-            bid <- viewModelState currentBid
+            w   <- viewContractState winner
+            bid <- viewContractState currentBid
             phase $= AuctionOver
             deposit w theToken
             deposit w1 $ Ada.lovelaceValueOf bid
@@ -217,7 +217,7 @@ finishAuction :: DL AuctionModel ()
 finishAuction = do
     action Init
     anyActions_
-    slot <- viewState currentSlot
+    slot <- viewModelState currentSlot
     when (slot < 101) $ action $ WaitUntil 101
     assertModel "Locked funds are not zero" (Value.isZero . lockedFunds)
 
