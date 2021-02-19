@@ -116,11 +116,11 @@ import           Test.QuickCheck                                     hiding ((.&
 import qualified Test.QuickCheck                                     as QC
 import           Test.QuickCheck.Monadic                             as QC
 
-data IMap (key :: i -> *) (val :: i -> *) where
+data IMap (key :: i -> j -> *) (val :: i -> j -> *) where
     IMNil  :: IMap key val
-    IMCons :: Typeable i => key i -> val i -> IMap key val -> IMap key val
+    IMCons :: (Typeable i, Typeable j) => key i j -> val i j -> IMap key val -> IMap key val
 
-imLookup :: (Typeable i, Typeable key, Typeable val, Eq (key i)) => key i -> IMap key val -> Maybe (val i)
+imLookup :: (Typeable i, Typeable j, Typeable key, Typeable val, Eq (key i j)) => key i j -> IMap key val -> Maybe (val i j)
 imLookup _ IMNil = Nothing
 imLookup k (IMCons key val m) =
     case cast (key, val) of
@@ -128,20 +128,23 @@ imLookup k (IMCons key val m) =
         _                             -> imLookup k m
 
 data HandleSpec state where
-    HandleSpec :: forall state schema.
+    HandleSpec :: forall state schema err.
                   ( Typeable schema
                   , HasBlockchainActions schema
-                  , ContractConstraints schema )
-                  => HandleKey state schema
+                  , ContractConstraints schema
+                  , Show err
+                  , Typeable err
+                  , JSON.ToJSON err
+                  , JSON.FromJSON err
+                  )
+                  => HandleKey state schema err
                   -> Wallet
-                  -> Contract schema (Err state) ()
+                  -> Contract schema err ()
                   -> HandleSpec state
 
-data HandleVal err schema = HandleVal (ContractHandle schema err)
+type Handles state = IMap (HandleKey state) ContractHandle
 
-type Handles state = IMap (HandleKey state) (HandleVal (Err state))
-
-type HandleFun state = forall schema. Typeable schema => HandleKey state schema -> Trace.ContractHandle schema (Err state)
+type HandleFun state = forall schema err. (Typeable schema, Typeable err) => HandleKey state schema err -> Trace.ContractHandle schema err
 
 data ModelState state = ModelState
         { _currentSlot :: Slot
@@ -179,12 +182,8 @@ class ( Typeable state
       , Show state
       , Show (Action state)
       , Eq (Action state)
-      , Show (Err state)
-      , Typeable (Err state)
-      , (forall s. Eq (HandleKey state s))
-      , (forall s. Show (HandleKey state s))
-      , JSON.ToJSON (Err state)
-      , JSON.FromJSON (Err state)
+      , (forall s e. Eq (HandleKey state s e))
+      , (forall s e. Show (HandleKey state s e))
       ) => ContractModel state where
 
     -- | The type of actions that are supported by the contract. An action usually represents a single
@@ -192,15 +191,18 @@ class ( Typeable state
     --   that can be interpreted in the `EmulatorTrace` monad.
     data Action state
 
-    -- | TODO: get rid of this
-    type Err state
-
     -- | To be able to call a contract endpoint from a wallet a `ContractHandle` is required.
     --   These are managed by the test framework and all the user needs to do is provide this handle
     --   key type representing the different handles that a test needs to work with, and when
     --   creating a property (see `propRunScript_`) provide a list of handle keys together with
-    --   their wallets and contracts.
-    data HandleKey state :: Row * -> *
+    --   their wallets and contracts. Handle keys are indexed by the schema and error type of the
+    --   contract and should be defined as a GADT. For example, a handle type for a contract with
+    --   one seller and multiple buyers could look like this.
+    --
+    --   >  data HandleKey MyModel s e where
+    --   >      Buyer  :: Wallet -> HandleKey MyModel MySchema MyError
+    --   >      Seller :: HandleKey MyModel MySchema MyError
+    data HandleKey state :: Row * -> * -> *
 
     -- | Given the current model state, provide a QuickCheck generator for a random next action.
     arbitraryAction :: ModelState state -> Gen (Action state)
@@ -299,8 +301,8 @@ instance GetModelState (Spec s) where
 handle :: (ContractModel s) => Handles s -> HandleFun s
 handle handles key =
     case imLookup key handles of
-        Just (HandleVal h) -> h
-        Nothing            -> error $ "handle: No handle for " ++ show key
+        Just h  -> h
+        Nothing -> error $ "handle: No handle for " ++ show key
 
 -- | Are there locked funds?
 lockedFunds :: ModelState s -> Value
@@ -406,7 +408,7 @@ activateWallets [] = return IMNil
 activateWallets (HandleSpec key wallet contract : spec) = do
     h <- activateContractWallet wallet contract
     m <- activateWallets spec
-    return $ IMCons key (HandleVal h) m
+    return $ IMCons key h m
 
 propRunScript_ :: forall state.
     ContractModel state =>

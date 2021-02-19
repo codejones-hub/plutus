@@ -139,20 +139,18 @@ doRevoke Issued  = Revoked
 waitSlots :: Integer
 waitSlots = 2
 
-deriving instance Eq   (HandleKey PrismModel s)
-deriving instance Show (HandleKey PrismModel s)
+deriving instance Eq   (HandleKey PrismModel s e)
+deriving instance Show (HandleKey PrismModel s e)
 
 instance ContractModel PrismModel where
 
     data Action PrismModel = Delay | Issue | Revoke | Call | Present
         deriving (Eq, Show)
 
-    type Err    PrismModel = PrismError
-
-    data HandleKey PrismModel s where
-        MirrorH  :: HandleKey PrismModel PrismSchema
-        UserH    :: HandleKey PrismModel PrismSchema
-        ManagerH :: HandleKey PrismModel PrismSchema
+    data HandleKey PrismModel s e where
+        MirrorH  :: HandleKey PrismModel PrismSchema PrismError
+        UserH    :: HandleKey PrismModel PrismSchema PrismError
+        ManagerH :: HandleKey PrismModel PrismSchema PrismError
 
     arbitraryAction _ = QC.elements [Delay, Revoke, Issue, Call, Present]
 

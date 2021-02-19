@@ -59,15 +59,13 @@ data GameModel = GameModel
 
 makeLenses 'GameModel
 
-deriving instance Eq (HandleKey GameModel schema)
-deriving instance Show (HandleKey GameModel schema)
+deriving instance Eq (HandleKey GameModel schema err)
+deriving instance Show (HandleKey GameModel schema err)
 
 instance ContractModel GameModel where
 
-    type Err    GameModel = GameError
-
-    data HandleKey GameModel schema where
-        WalletKey :: Wallet -> HandleKey GameModel GameStateMachineSchema
+    data HandleKey GameModel schema err where
+        WalletKey :: Wallet -> HandleKey GameModel GameStateMachineSchema GameError
 
     -- The commands available to a test case
     data Action GameModel = Lock      Wallet String Integer

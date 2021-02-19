@@ -124,16 +124,14 @@ data Phase = NotStarted | Bidding | AuctionOver
 
 makeLenses 'AuctionModel
 
-deriving instance Eq (HandleKey AuctionModel s)
-deriving instance Show (HandleKey AuctionModel s)
+deriving instance Eq (HandleKey AuctionModel s e)
+deriving instance Show (HandleKey AuctionModel s e)
 
 instance ContractModel AuctionModel where
 
-    type Err AuctionModel = SM.SMContractError
-
-    data HandleKey AuctionModel s where
-        SellerH :: HandleKey AuctionModel SellerSchema
-        BuyerH  :: Wallet -> HandleKey AuctionModel BuyerSchema
+    data HandleKey AuctionModel s e where
+        SellerH :: HandleKey AuctionModel SellerSchema SM.SMContractError
+        BuyerH  :: Wallet -> HandleKey AuctionModel BuyerSchema SM.SMContractError
 
     data Action AuctionModel = Init | Bid Wallet Integer | WaitUntil Slot
         deriving (Eq, Show)
