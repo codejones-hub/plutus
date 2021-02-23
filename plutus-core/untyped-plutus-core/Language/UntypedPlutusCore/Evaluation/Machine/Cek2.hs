@@ -3,6 +3,7 @@
 -- string names. I.e. 'Unique's are used instead of string names. This is for efficiency reasons.
 -- The CEK machines handles name capture by design.
 
+{-# LANGUAGE BangPatterns       #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DeriveAnyClass        #-}
@@ -46,7 +47,6 @@ import           ErrorCode
 import           PlutusPrelude
 
 import           Language.UntypedPlutusCore.Core
-import           Language.UntypedPlutusCore.Subst
 
 import           Language.PlutusCore.Constant
 import           Language.PlutusCore.DeBruijn
@@ -226,13 +226,18 @@ mkBuiltinApplication ex bn arity0 forces0 args0 =
 dischargeCekValEnv
     :: (Closed uni, uni `Everywhere` ExMemoryUsage)
     => CekValEnv uni fun -> TermWithMem uni fun -> TermWithMem uni fun
-dischargeCekValEnv valEnv =
-    -- We recursively discharge the environments of Cek values, but we will gradually end up doing
-    -- this to terms which have no free variables remaining, at which point we won't call this
-    -- substitution function any more and so we will terminate.
-    termSubstFreeNames $ \name -> do
-        val <- lookupName' name valEnv
-        Just $ dischargeCekValue val
+dischargeCekValEnv valEnv = go (1 :: Int)
+  where
+   go !lvl = \case
+    var@(Var _ name) -> let n = name^.unique.coerced
+                       in if n < lvl
+                          then var
+                          else dischargeCekValue $ valEnv !! (n - lvl)
+    (LamAbs ann name body) -> LamAbs ann name $ go (lvl+1) body
+    (Apply ann fun arg)    -> Apply ann (go lvl fun) $ go lvl arg
+    (Delay ann term)       -> Delay ann $ go lvl term
+    (Force ann term)       -> Force ann $ go lvl term
+    t -> t
 
 -- Convert a CekValue into a term by replacing all bound variables with the terms
 -- they're bound to (which themselves have to be obtain by recursively discharging values).
