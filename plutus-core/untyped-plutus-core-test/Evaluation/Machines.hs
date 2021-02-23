@@ -10,6 +10,7 @@ module Evaluation.Machines
 
 import           Language.UntypedPlutusCore
 import           Language.UntypedPlutusCore.Evaluation.Machine.Cek
+import qualified           Language.UntypedPlutusCore.Evaluation.Machine.Cek2 as Cek2
 
 import qualified Language.PlutusCore                               as Plc
 import           Language.PlutusCore.Builtins
@@ -31,6 +32,9 @@ import           Data.Text.Prettyprint.Doc.Render.Text
 import           Hedgehog                                          hiding (Size, Var, eval)
 import           Test.Tasty
 import           Test.Tasty.Hedgehog
+import Control.Monad.Except
+import Language.PlutusCore.Quote
+import Data.Either
 
 testMachine
     :: (uni ~ DefaultUni, fun ~ DefaultFun, PrettyPlc internal)
@@ -47,10 +51,28 @@ testMachine machine eval =
                 Left err     -> fail $ show err
                 Right resAct -> resAct === resExp
 
+
+testMachine2
+    :: (uni ~ DefaultUni, fun ~ DefaultFun, PrettyPlc internal)
+    => String
+    -> (Term Name uni fun () ->
+           Either (EvaluationException user internal (Term NamedDeBruijn uni fun ())) (Term NamedDeBruijn uni fun ()))
+    -> TestTree
+testMachine2 machine eval =
+    testGroup machine $ fromInterestingTermGens $ \name genTermOfTbv ->
+        testProperty name . withTests 200 . property $ do
+            TermOf term val <- forAllWith mempty genTermOfTbv
+            let resExp = erase <$> makeKnown @(Plc.Term TyName Name DefaultUni DefaultFun ()) val
+            case extractEvaluationResult . eval $ erase term of
+                Left err     -> fail $ show err
+                Right resAct -> fmap (fromRight undefined . runExcept @FreeVariableError . runQuoteT . unDeBruijnTerm) resAct === resExp
+
+
 test_machines :: TestTree
 test_machines =
     testGroup "machines"
         [ testMachine "CEK" $ evaluateCek defBuiltinsRuntime
+        , testMachine2 "CEK2" $ \ t -> Cek2.evaluateCek defBuiltinsRuntime $ fromRight undefined $ runExcept @FreeVariableError $ deBruijnTerm t
         ]
 
 testMemory :: ExMemoryUsage a => TestName -> a -> TestNested
