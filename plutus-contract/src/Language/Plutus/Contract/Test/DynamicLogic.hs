@@ -10,7 +10,7 @@
 module Language.Plutus.Contract.Test.DynamicLogic
     ( module Language.Plutus.Contract.Test.DynamicLogic.Quantify
     , DynLogic, DynPred
-    , DynLogicModel(..)
+    , DynLogicModel(..), DynLogicTest(..), TestStep(..)
     , ignore, passTest, afterAny, after, (|||), forAllQ, weight, toStop
     , done, errorDL, monitorDL, always
     , forAllScripts, withDLScript

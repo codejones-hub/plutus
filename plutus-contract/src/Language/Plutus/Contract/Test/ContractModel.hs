@@ -62,15 +62,31 @@ module Language.Plutus.Contract.Test.ContractModel
     -- $dynamicLogic
     , DL
     , action
-    , DL.anyAction
-    , DL.anyActions
-    , DL.anyActions_
-    , DL.stopping
-    , DL.weight
+    , anyAction
+    , anyActions
+    , anyActions_
+    , forAllDL
+
+    -- ** Failures
+    --
+    -- $dynamicLogic_errors
     , DL.assert
     , assertModel
+    , DL.stopping
+    , DL.weight
     , DL.monitorDL
-    , forAllDL
+
+    -- ** Test cases
+    --
+    -- $dynamicLogic_test_cases
+    , withDLTest
+    , DL.DynLogicTest(..)
+    , DL.TestStep(..)
+
+    -- ** Shrinking
+    --
+    -- $dynamicLogic_shrinking
+
     -- ** Random generation
     --
     -- $quantify
@@ -356,7 +372,7 @@ viewContractState l = viewModelState (contractStateL . l)
 -- Note that the model state does not track the absolute `balances` of each wallet, only how the
 -- balance changes over the execution of a contract. Thus, token transfers (using `transfer`,
 -- `deposit` or `withdraw`) always succeed in the model, but might fail when running the
--- contract in the emulator, causing test failures. The simplest way to deal with this issue is
+-- contract in the emulator, causing test failures. The simplest way to deal with this is
 -- to make sure that each wallet has enough starting funds to cover any scenario encountered during
 -- testing. The starting funds can be provided in the `CheckOptions` argument to
 -- `propRunScriptWithOptions`.
@@ -516,26 +532,110 @@ instance ContractModel state => StateModel (ModelState state) where
 --   `DL.anyActions_`
 --   `action` $ Wait endSlot
 --   `action` $ Collect
---   `assertModel` "Funds are locked!" (`isZero` . `lockedValue`)
+--   `assertModel` "Funds are locked!" (`Ledger.Value.isZero` . `lockedValue`)
 -- @
 --
--- `DL` scripts are turned into QuickCheck properties using `forAllDL`. For instance,
+-- `DL` scripts are turned into QuickCheck properties using `forAllDL`.
+
+-- $dynamicLogic_test_cases
+--
+-- `Do` and `Witness`.
+
+withDLTest :: (ContractModel state, Testable p) => DL state () -> (Script state -> p) -> DL.DynLogicTest (ModelState state) -> Property
+withDLTest = DL.withDLTest
+
+-- $dynamicLogic_errors
+--
+-- In addition to failing the check that the emulator run matches the model, there are a few other
+-- ways that test scenarios can fail:
+--
+-- * an explicit `action` does not satisfy its `precondition`
+-- * a failed `DL.assert` or `assertModel`
+-- * an `Control.Applicative.empty` set of `Control.Applicative.Alternative`s, or a `fail`
+-- * the scenario fails to terminate (see `DL.stopping`)
+--
+-- All of these occur at test case generation time, and thus do not directly say anything about the
+-- contract implementation. However, together with the check that the model agrees with the emulator
+-- they indirectly imply properties of the implementation. An advantage of this is that `DL` test
+-- scenarios can be checked without running the contract through the emulator, which is much much
+-- faster. For instance,
 --
 -- @
+-- prop_FinishModel = `forAllDL` finishAuction $ const True
+-- @
+--
+-- would check that the model does not think there will be any locked funds after the auction is
+-- finished. Once this property passes, one can run the slower property that also checks that the
+-- emulator agrees.
+
+-- $dynamicLogic_shrinking
+--
+-- Shrinking a test case generated from a `DL` scenario works the same way as shrinking an
+-- `Arbitrary` sequence: actions are removed whenever possible, and otherwise shrunk using
+-- `shrinkAction`.
+
+-- | The monad for writing test scenarios. It supports non-deterministic choice through
+--   `Control.Applicative.Alternative`, failure with `MonadFail`, and access to the model state
+--   through `GetModelState`. It is lazy, so scenarios can be potentially infinite, although the
+--   probability of termination needs to be high enough that concrete test cases are always finite.
+--   See `DL.stopping` for more information on termination.
+type DL state = DL.DL (ModelState state)
+
+-- | Generate a specific action. Fails if the action's `precondition` is not satisfied.
+action :: ContractModel state => Action state -> DL state ()
+action cmd = DL.action (ContractAction @_ @() cmd)
+
+-- | Generate a random action using `arbitraryAction`. The generated action is guaranteed to satisfy
+--   its `precondition`. Fails with `DL.Stuck` if no action satisfying the precondition can be found
+--   after 100 attempts.
+anyAction :: DL state ()
+anyAction = DL.anyAction
+
+-- | Generate a sequence of random actions using `arbitraryAction`. All actions satisfy their
+--   `precondition`s. The argument is the expected number of actions in the sequence chosen from a
+--   geometric distribution, unless in the `DL.stopping` stage, in which case as few actions as
+--   possible are generated.
+anyActions :: Int -> DL state ()
+anyActions = DL.anyActions
+
+-- | Generate a sequence of random actions using `arbitraryAction`. All actions satisfy their
+--   `precondition`s. Actions are generated until the `DL.stopping` stage is reached.
+anyActions_ :: DL state ()
+anyActions_ = DL.anyActions_
+
+-- | Fail unless the given predicate holds of the model state.
+--
+--   Equivalent to
+--
+-- @
+-- assertModel msg p = do
+--   s <- `getModelState`
+--   `DL.assert` msg (p s)
+-- @
+assertModel :: String -> (ModelState state -> Bool) -> DL state ()
+assertModel = DL.assertModel
+
+-- | Turn a `DL` scenario into a QuickCheck property. Generates a random `Script` matching the
+--   scenario and feeds it to the given property. The property can be a full property running the
+--   emulator and checking the results, defined using `propRunScript_`, `propRunScript`, or
+--   `propRunScriptWithOptions`:
+--
+-- @
+-- finishAuction :: `DL` AuctionState ()
 -- prop_Auction  = `propRunScript_` handles
 --   where handles = ...
 -- prop_Finish = `forAllDL` finishAuction prop_Auction
 -- @
-
-type DL s = DL.DL (ModelState s)
-
-action :: ContractModel s => Action s -> DL s ()
-action cmd = DL.action (ContractAction @_ @() cmd)
-
-assertModel :: String -> (ModelState s -> Bool) -> DL s ()
-assertModel = DL.assertModel
-
-forAllDL :: (ContractModel s, Testable p) => DL s () -> (Script s -> p) -> Property
+--
+--   However, there is also value in a property that does not run the emulator at all:
+--
+-- @
+-- prop_FinishModel = `forAllDL` finishAuction $ const True
+-- @
+--
+--   This will check all the assertions and other failure conditions of the `DL` scenario very
+--   quickly.
+forAllDL :: (ContractModel state, Testable p) => DL state () -> (Script state -> p) -> Property
 forAllDL = DL.forAllDL
 
 instance ContractModel s => DL.DynLogicModel (ModelState s) where
