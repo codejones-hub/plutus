@@ -197,20 +197,19 @@ levelifyTermM = \case
     -- binder cases
     TyAbs ann tn k t -> declareUnique tn $ do
         tn' <- tyNameToLevel tn
-        withScope $ TyAbs ann tn' k <$> levelifyTerm t
+        withScope $ TyAbs ann tn' k <$> levelifyTermM t
     LamAbs ann n ty t -> declareUnique n $ do
         n' <- nameToLevel n
-        withScope $ LamAbs ann n' <$> levelifyTyM ty <*> levelifyTerm t
+        withScope $ LamAbs ann n' <$> levelifyTyM ty <*> levelifyTermM t
     -- boring recursive cases
-    Apply ann t1 t2 -> Apply ann <$> levelifyTerm t1 <*> levelifyTerm t2
-    TyInst ann t ty -> TyInst ann <$> levelifyTerm t <*> levelifyTyM ty
-    Unwrap ann t -> Unwrap ann <$> levelifyTerm t
-    IWrap ann pat arg t -> IWrap ann <$> levelifyTyM pat <*> levelifyTyM arg <*> levelifyTerm t
+    Apply ann t1 t2 -> Apply ann <$> levelifyTermM t1 <*> levelifyTermM t2
+    TyInst ann t ty -> TyInst ann <$> levelifyTermM t <*> levelifyTyM ty
+    Unwrap ann t -> Unwrap ann <$> levelifyTermM t
+    IWrap ann pat arg t -> IWrap ann <$> levelifyTyM pat <*> levelifyTyM arg <*> levelifyTermM t
     Error ann ty -> Error ann <$> levelifyTyM ty
     -- boring non-recursive cases
     Constant ann con -> pure $ Constant ann con
     Builtin ann bn -> pure $ Builtin ann bn
-
 
 levelifyTyM
     :: (MonadReader Levels m, AsFreeVariableError e, MonadError e m)
