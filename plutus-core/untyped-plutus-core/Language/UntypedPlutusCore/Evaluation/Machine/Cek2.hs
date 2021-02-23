@@ -94,7 +94,7 @@ which is a problem.)
 
 lookupName' :: (HasUnique s unique, Coercible unique Int)
             => s -> Seq.Seq a -> Maybe a
-lookupName' name = Seq.lookup (name^.unique.coerced)
+lookupName' name = Seq.lookup (name^.unique.coerced -1) -- (-1 because our debruijn indices count starting from 1 (1--based))
 
 -- 'Values' for the modified CEK machine.
 data CekValue uni fun =
@@ -308,7 +308,7 @@ runCekM env s a = runState (runExceptT $ runReaderT a env) s
 -- | Extend an environment with a variable name, the value the variable stands for
 -- and the environment the value is defined in.
 extendEnv :: NamedDeBruijn -> CekValue uni fun -> CekValEnv uni fun -> CekValEnv uni fun
-extendEnv _ v e = e Seq.|> v
+extendEnv _ v e = v Seq.<| e
 
 -- | Look up a variable name in the environment.
 lookupVarName :: NamedDeBruijn -> CekValEnv uni fun -> CekM uni fun (CekValue uni fun)
