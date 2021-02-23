@@ -69,7 +69,6 @@ import           Control.Monad.State.Strict
 import           Data.Array
 import           Data.HashMap.Monoidal
 import           Data.Text.Prettyprint.Doc
-import qualified Data.Sequence as Seq
 import Control.Lens (coerced)
 
 {- Note [Scoping]
@@ -93,8 +92,8 @@ which is a problem.)
 -}
 
 lookupName' :: (HasUnique s unique, Coercible unique Int)
-            => s -> Seq.Seq a -> Maybe a
-lookupName' name = Seq.lookup (name^.unique.coerced -1) -- (-1 because our debruijn indices count starting from 1 (1--based))
+            => s -> [a] -> Maybe a
+lookupName' name e = Just (e !! (name^.unique.coerced -1)) -- (-1 because our debruijn indices count starting from 1 (1--based))
 
 -- 'Values' for the modified CEK machine.
 data CekValue uni fun =
@@ -111,7 +110,7 @@ data CekValue uni fun =
       [CekValue uni fun]    -- Arguments we've computed so far.
     deriving (Show, Eq) -- Eq is just for tests.
 
-type CekValEnv uni fun = Seq.Seq (CekValue uni fun)
+type CekValEnv uni fun = [CekValue uni fun]
 
 -- | The environment the CEK machine runs in.
 data CekEnv uni fun = CekEnv
@@ -308,7 +307,7 @@ runCekM env s a = runState (runExceptT $ runReaderT a env) s
 -- | Extend an environment with a variable name, the value the variable stands for
 -- and the environment the value is defined in.
 extendEnv :: NamedDeBruijn -> CekValue uni fun -> CekValEnv uni fun -> CekValEnv uni fun
-extendEnv _ v e = v Seq.<| e
+extendEnv _ v e = v : e
 
 -- | Look up a variable name in the environment.
 lookupVarName :: NamedDeBruijn -> CekValEnv uni fun -> CekM uni fun (CekValue uni fun)
