@@ -26,6 +26,10 @@ import           Test.QuickCheck
 
 import           Language.Plutus.Contract.Test.DynamicLogic.CanGenerate
 
+-- | A `Quantification` over a type @a@ is a generator that can be used with
+--   `Language.Plutus.Contract.Test.ContractModel.forAllQ` to generate random values in
+--   DL scenarios. In addition to a QuickCheck generator a `Quantification` contains a shrinking
+--   strategy that ensures that shrunk values stay in the range of the generator.
 data Quantification a = Quantification
   { genQ :: Maybe (Gen a),
     isaQ :: a -> Bool,
@@ -41,15 +45,18 @@ generateQ q = fromJust (genQ q) `suchThat` isaQ q
 shrinkQ :: Quantification a -> a -> [a]
 shrinkQ q a = filter (isaQ q) (shrQ q a)
 
+-- | Pack up an `Arbitrary` instance as a `Quantification`. Treats all values as being in range.
 arbitraryQ :: Arbitrary a => Quantification a
 arbitraryQ = Quantification (Just arbitrary) (const True) shrink
 
+-- | Generates exactly the given value. Does not shrink.
 exactlyQ :: Eq a => a -> Quantification a
 exactlyQ a = Quantification
     (Just $ return a)
     (==a)
     (const [])
 
+-- | Generate a random value in a given range (inclusive).
 chooseQ :: (Arbitrary a, Random a, Ord a) => (a, a) -> Quantification a
 chooseQ r@(a, b) = Quantification
     (guard (a <= b) >> (Just $ choose r))
@@ -57,11 +64,18 @@ chooseQ r@(a, b) = Quantification
     (filter is . shrink)
     where is x = a <= x && x <= b
 
+-- | Pick a random value from a list. Treated as an empty choice if the list is empty:
+--
+-- @
+-- `Language.Plutus.Contract.Test.ContractModel.forAllQ` (`elementsQ` []) == `Control.Applicative.empty`
+-- @
 elementsQ :: Eq a => [a] -> Quantification a
 elementsQ as = Quantification g (`elem` as) (\a -> takeWhile (/=a) as)
     where g | null as   = Nothing
             | otherwise = Just (elements as)
 
+-- | Choose from a weighted list of quantifications. Treated as an `Control.Applicative.empty`
+--   choice if no quantification has weight > 0.
 frequencyQ :: [(Int, Quantification a)] -> Quantification a
 frequencyQ iqs =
     Quantification
@@ -76,15 +90,26 @@ frequencyQ iqs =
           shr ((i, q):iqs) a = [a' | i > 0, isaQ q a, a' <- shrQ q a]
                                ++ shr iqs a
 
+-- | Choose from a list of quantifications. Same as `frequencyQ` with all weights the same (and >
+--   0).
 oneofQ :: [Quantification a] -> Quantification a
 oneofQ qs = frequencyQ $ map (1, ) qs
 
+-- | `Quantification` is not a `Functor`, since it also keeps track of the range of the generators.
+--   However, if you have two functions
+-- @
+-- to   :: a -> b
+-- from :: b -> a
+-- @
+--   satisfying @from . to = id@ you can go from a quantification over @a@ to one over @b@. Note
+--   that the @from@ function need only be defined on the image of @to@.
 mapQ :: (a -> b, b -> a) -> Quantification a -> Quantification b
 mapQ (f, g) q = Quantification
     ((f <$>) <$> genQ q)
     (isaQ q . g)
     (map f . shrQ q . g)
 
+-- | Restrict the range of a quantification.
 whereQ :: Quantification a -> (a -> Bool) -> Quantification a
 whereQ q p = Quantification
     (case genQ q of
@@ -99,9 +124,24 @@ pairQ q q' = Quantification
     (\(a, a') -> isaQ q a && isaQ q' a')
     (\(a, a') -> map (, a') (shrQ q a) ++ map (a, ) (shrQ q' a'))
 
+-- | Generalization of `Quantification`s, which lets you treat lists and tuples of quantifications
+--   as quantifications. For instance,
+--
+-- @
+--   ...
+--   (die1, die2) <- `Language.Plutus.Contract.Test.ContractModel.forAllQ` (`chooseQ` (1, 6), `chooseQ` (1, 6))
+--   ...
+-- @
 class (Eq (Quantifies q), Show (Quantifies q), Typeable (Quantifies q))
         => Quantifiable q where
+    -- | The type of values quantified over.
+    --
+    -- @
+    -- `Quantifies` (`Quantification` a) = a
+    -- @
     type Quantifies q
+
+    -- | Computing the actual `Quantification`.
     quantify :: q -> Quantification (Quantifies q)
 
 instance (Eq a, Show a, Typeable a) => Quantifiable (Quantification a) where

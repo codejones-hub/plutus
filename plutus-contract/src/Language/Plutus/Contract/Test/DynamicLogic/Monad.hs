@@ -55,7 +55,6 @@ anyActions n = stopping <|> weight (1 / fromIntegral n)
 anyActions_ :: DL s ()
 anyActions_ = stopping <|> (anyAction >> anyActions_)
 
--- | Write stuff about termination here!
 stopping :: DL s ()
 stopping = DL $ \ s k -> DL.toStop (k () s)
 
@@ -85,6 +84,8 @@ assertModel name p = assert name . p =<< getModelStateDL
 monitorDL :: (Property -> Property) -> DL s ()
 monitorDL f = DL $ \s k -> DL.monitorDL f (k () s)
 
+-- | Generate a random value using the given `Quantification` (or list/tuple of quantifications).
+--   Generated values will only shrink to smaller values that could also have been generated.
 forAllQ :: Quantifiable q => q -> DL s (Quantifies q)
 forAllQ q = DL $ \ s k -> DL.forAllQ q $ \ x -> k x s
 

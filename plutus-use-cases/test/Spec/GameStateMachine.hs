@@ -28,7 +28,6 @@ import           Data.Maybe
 import           Data.Text.Prettyprint.Doc
 import           Data.Void
 import           Test.QuickCheck                                           as QC hiding ((.&&.))
-import           Test.QuickCheck.Monadic
 import           Test.Tasty                                                hiding (after)
 import qualified Test.Tasty.HUnit                                          as HUnit
 
@@ -217,9 +216,9 @@ noLockedFunds = do
     secret <- viewContractState currentSecret
     val    <- viewContractState gameValue
     when (val > 0) $ do
-        monitorDL $ label "Unlocking funds"
+        monitor $ label "Unlocking funds"
         action $ GiveToken w
-        action $ Guess w secret secret val
+        action $ Guess w "" secret val
     assertModel "Locked funds should be zero" $ isZero . lockedValue
 
 -- | Check that we can always get the money out of the guessing game (by guessing correctly).

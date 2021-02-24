@@ -11,6 +11,7 @@
 --   /it is always possible to get all funds out of the contract/.
 
 {-# LANGUAGE AllowAmbiguousTypes        #-}
+{-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -65,44 +66,38 @@ module Language.Plutus.Contract.Test.ContractModel
     , anyAction
     , anyActions
     , anyActions_
-    , forAllDL
 
     -- ** Failures
     --
     -- $dynamicLogic_errors
     , DL.assert
     , assertModel
-    , DL.stopping
-    , DL.weight
-    , DL.monitorDL
-
-    -- ** Test cases
-    --
-    -- $dynamicLogic_test_cases
-    , withDLTest
-    , DL.DynLogicTest(..)
-    , DL.TestStep(..)
-
-    -- ** Shrinking
-    --
-    -- $dynamicLogic_shrinking
+    , stopping
+    , weight
+    , monitor
 
     -- ** Random generation
     --
     -- $quantify
     , DL.forAllQ
     , module Language.Plutus.Contract.Test.DynamicLogic.Quantify
-    -- * Running properties
+
+    -- * Properties
     --
     -- $runningProperties
     , Script
     -- ** Wallet contract handles
+    --
+    -- $walletHandles
+    , SchemaConstraints
     , HandleSpec(..)
     , HandleFun
-    -- ** Running
+    -- ** Emulator properties
     , propRunScript_
     , propRunScript
     , propRunScriptWithOptions
+    -- ** DL properties
+    , forAllDL
     ) where
 
 import           Control.Lens
@@ -121,9 +116,9 @@ import           Data.Typeable
 import           Language.Plutus.Contract                            (Contract, HasBlockchainActions)
 import           Language.Plutus.Contract.Test
 import qualified Language.Plutus.Contract.Test.DynamicLogic.Monad    as DL
-import           Language.Plutus.Contract.Test.DynamicLogic.Quantify (Quantifiable, Quantification, arbitraryQ, chooseQ,
-                                                                      elementsQ, exactlyQ, frequencyQ, mapQ, oneofQ,
-                                                                      whereQ)
+import           Language.Plutus.Contract.Test.DynamicLogic.Quantify (Quantifiable (..), Quantification, arbitraryQ,
+                                                                      chooseQ, elementsQ, exactlyQ, frequencyQ, mapQ,
+                                                                      oneofQ, whereQ)
 import           Language.Plutus.Contract.Test.StateModel            hiding (Action, Script, arbitraryAction,
                                                                       initialState, monitoring, nextState, perform,
                                                                       precondition, shrinkAction)
@@ -136,7 +131,7 @@ import           Plutus.Trace.Emulator                               as Trace (C
 
 import           Test.QuickCheck                                     hiding ((.&&.))
 import qualified Test.QuickCheck                                     as QC
-import           Test.QuickCheck.Monadic                             as QC
+import           Test.QuickCheck.Monadic                             as QC (PropertyM, monadic, run)
 
 data IMap (key :: i -> j -> *) (val :: i -> j -> *) where
     IMNil  :: IMap key val
@@ -149,24 +144,43 @@ imLookup k (IMCons key val m) =
         Just (key', val') | key' == k -> Just val'
         _                             -> imLookup k m
 
+-- $walletHandles
+--
+-- In order to call contract endpoints using `Plutus.Trace.Emulator.callEndpoint`, a `ContractHandle`
+-- is required. This is obtained by calling `activateContractWallet` with a wallet and a contract.
+-- This is taken care of behind the scenes by the `propRunScript` functions given a list of
+-- `HandleSpec`s, associating `HandleKey`s with `Wallet`s and `Contract`s. Before testing starts,
+-- `activateContractWallet` is called for all entries in the list and the mapping from `HandleKey` to
+-- `ContractHandle` is provided in the `HandleFun` argument to `perform`.
+
+-- | The constraints required on contract schemas and error types to enable calling contract
+--   endpoints (`Plutus.Trace.Emulator.callEndpoint`).
+type SchemaConstraints schema err =
+        ( Typeable schema
+        , HasBlockchainActions schema
+        , ContractConstraints schema
+        , Show err
+        , Typeable err
+        , JSON.ToJSON err
+        , JSON.FromJSON err
+        )
+
+-- | A `HandleSpec` associates a `HandleKey` with a concrete `Wallet` and `Contract`. The contract
+--   schema and error types are hidden from the outside.
 data HandleSpec state where
-    HandleSpec :: forall state schema err.
-                  ( Typeable schema
-                  , HasBlockchainActions schema
-                  , ContractConstraints schema
-                  , Show err
-                  , Typeable err
-                  , JSON.ToJSON err
-                  , JSON.FromJSON err
-                  )
-                  => HandleKey state schema err
-                  -> Wallet
-                  -> Contract schema err ()
+    HandleSpec :: SchemaConstraints schema err
+                  => HandleKey state schema err -- ^ The handle key used when looking up handles in `perform`
+                  -> Wallet                     -- ^ The wallet who owns the handle
+                  -> Contract schema err ()     -- ^ The contract that is the target of the handle
                   -> HandleSpec state
 
 type Handles state = IMap (HandleKey state) ContractHandle
 
-type HandleFun state = forall schema err. (Typeable schema, Typeable err) => HandleKey state schema err -> Trace.ContractHandle schema err
+
+-- | A function returning the `ContractHandle` corresponding to a `HandleKey`. A `HandleFun` is
+--   provided to the `perform` function to enable calling contract endpoints with
+--   `Plutus.Trace.Emulator.callEndpoint`.
+type HandleFun state = forall schema err. (Typeable schema, Typeable err) => HandleKey state schema err -> ContractHandle schema err
 
 -- | The `ModelState` models the state of the blockchain. It contains,
 --
@@ -182,6 +196,7 @@ data ModelState state = ModelState
         , _contractState :: state
         }
 
+-- | A `Script` is essentially a list of `Action`s.
 type Script s = StateModel.Script (ModelState s)
 
 instance Show state => Show (ModelState state) where
@@ -226,9 +241,9 @@ class ( Typeable state
     --   These are managed by the test framework and all the user needs to do is provide this handle
     --   key type representing the different handles that a test needs to work with, and when
     --   creating a property (see `propRunScript_`) provide a list of handle keys together with
-    --   their wallets and contracts. Handle keys are indexed by the schema and error type of the
-    --   contract and should be defined as a GADT. For example, a handle type for a contract with
-    --   one seller and multiple buyers could look like this.
+    --   their wallets and contracts (a `HandleSpec`). Handle keys are indexed by the schema and
+    --   error type of the contract and should be defined as a GADT. For example, a handle type for
+    --   a contract with one seller and multiple buyers could look like this.
     --
     --   >  data HandleKey MyModel s e where
     --   >      Buyer  :: Wallet -> HandleKey MyModel MySchema MyError
@@ -279,8 +294,10 @@ class ( Typeable state
 
     -- | The `monitoring` function allows you to collect statistics of your testing using QuickCheck
     --   functions like `Test.QuickCheck.label`, `Test.QuickCheck.collect`,
-    --   `Test.QuickCheck.classify`, and `Test.QuickCheck.tabulate`. Statistics on which actions are
-    --   executed are always collected.
+    --   `Test.QuickCheck.classify`, and `Test.QuickCheck.tabulate`. This function is called by
+    --   `propRunScript` (and friends) for any actions in the given `Script`.
+    --
+    --   Statistics on which actions are executed are always collected.
     monitoring :: (ModelState state, ModelState state)  -- ^ Model state before and after the action
                -> Action state                          -- ^ The action that was performed
                -> Property -> Property
@@ -348,19 +365,19 @@ class Monad m => GetModelState m where
 getContractState :: GetModelState m => m (StateType m)
 getContractState = _contractState <$> getModelState
 
--- | Getting a component of the model state.
+-- | Get a component of the model state.
 askModelState :: GetModelState m => (ModelState (StateType m) -> a) -> m a
 askModelState f = f <$> getModelState
 
--- | Getting a component of the contract state.
+-- | Get a component of the contract state.
 askContractState :: GetModelState m => (StateType m -> a) -> m a
 askContractState f = askModelState (f . _contractState)
 
--- | Getting a component of the model state.
+-- | Get a component of the model state using a lens.
 viewModelState :: GetModelState m => Getting a (ModelState (StateType m)) a -> m a
 viewModelState l = askModelState (^. l)
 
--- | Getting a component of the contract state.
+-- | Get a component of the contract state using a lens.
 viewContractState :: GetModelState m => Getting a (StateType m) a -> m a
 viewContractState l = viewModelState (contractStateL . l)
 
@@ -537,22 +554,15 @@ instance ContractModel state => StateModel (ModelState state) where
 --
 -- `DL` scripts are turned into QuickCheck properties using `forAllDL`.
 
--- $dynamicLogic_test_cases
---
--- `Do` and `Witness`.
-
-withDLTest :: (ContractModel state, Testable p) => DL state () -> (Script state -> p) -> DL.DynLogicTest (ModelState state) -> Property
-withDLTest = DL.withDLTest
-
 -- $dynamicLogic_errors
 --
 -- In addition to failing the check that the emulator run matches the model, there are a few other
 -- ways that test scenarios can fail:
 --
 -- * an explicit `action` does not satisfy its `precondition`
--- * a failed `DL.assert` or `assertModel`
--- * an `Control.Applicative.empty` set of `Control.Applicative.Alternative`s, or a `fail`
--- * the scenario fails to terminate (see `DL.stopping`)
+-- * a failed `DL.assert` or `assertModel`, or a monad `fail`
+-- * an `Control.Applicative.empty` set of `Control.Applicative.Alternative`s
+-- * the scenario fails to terminate (see `stopping`)
 --
 -- All of these occur at test case generation time, and thus do not directly say anything about the
 -- contract implementation. However, together with the check that the model agrees with the emulator
@@ -568,17 +578,11 @@ withDLTest = DL.withDLTest
 -- finished. Once this property passes, one can run the slower property that also checks that the
 -- emulator agrees.
 
--- $dynamicLogic_shrinking
---
--- Shrinking a test case generated from a `DL` scenario works the same way as shrinking an
--- `Arbitrary` sequence: actions are removed whenever possible, and otherwise shrunk using
--- `shrinkAction`.
-
 -- | The monad for writing test scenarios. It supports non-deterministic choice through
 --   `Control.Applicative.Alternative`, failure with `MonadFail`, and access to the model state
 --   through `GetModelState`. It is lazy, so scenarios can be potentially infinite, although the
 --   probability of termination needs to be high enough that concrete test cases are always finite.
---   See `DL.stopping` for more information on termination.
+--   See `stopping` for more information on termination.
 type DL state = DL.DL (ModelState state)
 
 -- | Generate a specific action. Fails if the action's `precondition` is not satisfied.
@@ -593,15 +597,72 @@ anyAction = DL.anyAction
 
 -- | Generate a sequence of random actions using `arbitraryAction`. All actions satisfy their
 --   `precondition`s. The argument is the expected number of actions in the sequence chosen from a
---   geometric distribution, unless in the `DL.stopping` stage, in which case as few actions as
+--   geometric distribution, unless in the `stopping` stage, in which case as few actions as
 --   possible are generated.
 anyActions :: Int -> DL state ()
 anyActions = DL.anyActions
 
 -- | Generate a sequence of random actions using `arbitraryAction`. All actions satisfy their
---   `precondition`s. Actions are generated until the `DL.stopping` stage is reached.
+--   `precondition`s. Actions are generated until the `stopping` stage is reached.
 anyActions_ :: DL state ()
 anyActions_ = DL.anyActions_
+
+-- | Test case generation from `DL` scenarios have a target length of the action sequence to be
+--   generated that is based on the QuickCheck size parameter (see `sized`). However, given that
+--   scenarios can contain explicit `action`s it might not be possible to stop the scenario once the
+--   target length has been reached.
+--
+--   Instead, once the target number of actions have been reached, generation goes into the
+--   /stopping/ phase. In this phase branches starting with an `anyAction` or `DL.forAllQ` are
+--   avoided if possible. Conversely, before the stopping phase, branches starting with `stopping`
+--   are avoided unless there are no other possible choices.
+--
+--   For example, here is the definition of `anyActions_`:
+--
+-- @
+-- `anyActions_` = `stopping` `Control.Applicative.<|>` (`anyAction` >> `anyActions_`)
+-- @
+--
+--   The effect of this definition is that the second branch will be taken until the desired number
+--   of actions have been generated, at which point the `stopping` branch will be taken and
+--   generation stops (or continues with whatever comes after the `anyActions_` call).
+--
+--   Now, it might not be possible, or too hard, to find a way to terminate a scenario. For
+--   instance, this scenario has no finite test cases:
+--
+-- @
+-- looping = `anyAction` >> looping
+-- @
+--
+--   To prevent test case generation from looping, if a scenario has not terminated after generating
+--   @2 * n + 20@ actions, where @n@ is when the stopping phase kicks in, generation fails with a
+--   `DL.Looping` error.
+stopping :: DL state ()
+stopping = DL.stopping
+
+-- | By default, `Control.Applicative.Alternative` choice (`Control.Applicative.<|>`) picks the two
+--   branches with equal probability. To change this you can use `weight`, which multiplies the
+--   relative probability of picking a branch by the given number.
+--
+--   For instance, the following scenario picks the action @a@ with probability @2/3@ and the action
+--   @b@ with probability @1/3@:
+--
+-- @
+-- biasedChoice a b = `weight` 2 (`action` a) `Control.Applicative.<|>` `weight` (`action` b)
+-- @
+--
+--   Calls to `weight` need to appear at the top-level after a choice, preceding any actions
+--   (`action`/`anyAction`) or random generation (`forAllQ`), or they will have no effect.
+weight :: Double -> DL state ()
+weight = DL.weight
+
+-- | The `monitor` function allows you to collect statistics of your testing using QuickCheck
+--   functions like `Test.QuickCheck.label`, `Test.QuickCheck.collect`, `Test.QuickCheck.classify`,
+--   and `Test.QuickCheck.tabulate`. See also the `monitoring` method of `ContractModel` which is
+--   called for all actions in a test case (regardless of whether they are generated by an explicit
+--   `action` or an `anyAction`).
+monitor :: (Property -> Property) -> DL state ()
+monitor = DL.monitorDL
 
 -- | Fail unless the given predicate holds of the model state.
 --
@@ -618,7 +679,8 @@ assertModel = DL.assertModel
 -- | Turn a `DL` scenario into a QuickCheck property. Generates a random `Script` matching the
 --   scenario and feeds it to the given property. The property can be a full property running the
 --   emulator and checking the results, defined using `propRunScript_`, `propRunScript`, or
---   `propRunScriptWithOptions`:
+--   `propRunScriptWithOptions`. Assuming a model for an auction contract and `DL` scenario that
+--   checks that you can always complete the auction, you can write:
 --
 -- @
 -- finishAuction :: `DL` AuctionState ()
@@ -634,7 +696,8 @@ assertModel = DL.assertModel
 -- @
 --
 --   This will check all the assertions and other failure conditions of the `DL` scenario very
---   quickly.
+--   quickly. Once this property passes a large number of tests, you can run the full property
+--   checking that the model agrees with reality.
 forAllDL :: (ContractModel state, Testable p) => DL state () -> (Script state -> p) -> Property
 forAllDL = DL.forAllDL
 
@@ -647,12 +710,24 @@ instance GetModelState (DL state) where
 
 -- $quantify
 --
--- Quantify stuff
+-- `DL` scenarios support random generation using `DL.forAllQ`. This does not take a normal
+-- QuickCheck `Gen` generator, but a `DL.Quantification`, which aside from a generator also keeps
+-- track of which values can be generated. This means test cases coming from scenarios containing
+-- `DL.forAll` can be prevented from shrinking to something that could not have been generated in
+-- the first place.
 
 
 -- $runningProperties
 --
--- Stuff about running properties
+-- Once you have a `ContractModel` and some `DL` scenarios you need to turn these into QuickCheck
+-- properties that can be run by `quickCheck`. The functions `propRunScript_`, `propRunScript`, and
+-- `propRunScriptWithOptions` take a sequence of actions (a `Script`), runs it through the
+-- blockchain emulator ("Plutus.Trace.Emulator") and checks that the model and the emulator agrees
+-- on who owns what tokens at the end.
+--
+-- To generate a `Script` you can use the `Arbitrary` instance, which generates a random sequence of
+-- actions using `arbitraryAction`, or you can use `forAllDL` to generate a `Script` from a `DL`
+-- scenario.
 
 runTr :: CheckOptions -> TracePredicate -> ContractMonad state Property -> Property
 runTr opts predicate trace =
@@ -674,7 +749,7 @@ activateWallets (HandleSpec key wallet contract : spec) = do
     m <- activateWallets spec
     return $ IMCons key h m
 
-propRunScript_ :: forall state.
+propRunScript_ ::
     ContractModel state =>
     [HandleSpec state] ->
     Script state ->
@@ -686,7 +761,7 @@ propRunScript_ handleSpecs script =
                   script
                   (\ _ -> pure ())
 
-propRunScript :: forall state.
+propRunScript ::
     ContractModel state =>
     [HandleSpec state] ->
     (ModelState state -> TracePredicate) ->
@@ -706,7 +781,7 @@ propRunScript = propRunScriptWithOptions (set minLogLevel Warning defaultCheckOp
 --                            `&` `minLogLevel` `.~` logLevel
 --   @
 --
-propRunScriptWithOptions :: forall state.
+propRunScriptWithOptions ::
     ContractModel state =>
     CheckOptions ->
     [HandleSpec state] ->
@@ -717,7 +792,7 @@ propRunScriptWithOptions :: forall state.
     Property
 propRunScriptWithOptions opts handleSpecs predicate before script after =
     monadic (runTr opts finalPredicate) $ do
-        QC.run $ getHandles $ activateWallets @state handleSpecs
+        QC.run $ getHandles $ activateWallets handleSpecs
         let initState = StateModel.initialState { _lastSlot      = opts ^. maxSlot }
         QC.run $ runEmulator $ \ h -> before (handle h) initState
         (st, _) <- runScriptInState initState script
