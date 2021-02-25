@@ -163,9 +163,7 @@ propGame' l s = propRunScriptWithOptions
                     (set minLogLevel l defaultCheckOptions)
                     handleSpec
                     (\ _ -> pure True)
-                    (\ _ _ -> pure ())
                     s
-                    (\ _ -> pure ())
 
 wallets :: [Wallet]
 wallets = [w1, w2, w3]

@@ -147,11 +147,11 @@ imLookup k (IMCons key val m) =
 -- $walletHandles
 --
 -- In order to call contract endpoints using `Plutus.Trace.Emulator.callEndpoint`, a `ContractHandle`
--- is required. This is obtained by calling `activateContractWallet` with a wallet and a contract.
--- This is taken care of behind the scenes by the `propRunScript` functions given a list of
--- `HandleSpec`s, associating `HandleKey`s with `Wallet`s and `Contract`s. Before testing starts,
--- `activateContractWallet` is called for all entries in the list and the mapping from `HandleKey` to
--- `ContractHandle` is provided in the `HandleFun` argument to `perform`.
+-- is required. Contract handles are managed behind the scenes by the `propRunScript` functions,
+-- based on a given a list of `HandleSpec`s, associating `HandleKey`s with `Wallet`s and
+-- `Contract`s. Before testing starts, `activateContractWallet` is called for all entries in the
+-- list and the mapping from `HandleKey` to `ContractHandle` is provided in the `HandleFun` argument
+-- to `perform`.
 
 -- | The constraints required on contract schemas and error types to enable calling contract
 --   endpoints (`Plutus.Trace.Emulator.callEndpoint`).
@@ -755,48 +755,38 @@ propRunScript_ ::
     Script state ->
     Property
 propRunScript_ handleSpecs script =
-    propRunScript handleSpecs
-                  (\ _ -> pure True)
-                  (\ _ _ -> pure ())
-                  script
-                  (\ _ -> pure ())
+    propRunScript handleSpecs (\ _ -> pure True) script
 
 propRunScript ::
     ContractModel state =>
     [HandleSpec state] ->
     (ModelState state -> TracePredicate) ->
-    (HandleFun state -> ModelState state -> EmulatorTrace ()) ->
     Script state ->
-    (ModelState state -> PropertyM (ContractMonad state) ()) ->
     Property
 propRunScript = propRunScriptWithOptions (set minLogLevel Warning defaultCheckOptions)
 
 -- |
 --
---   @
---   options :: Map `Wallet` `Value` -> `Slot` -> `Control.Monad.Freer.Log.LogLevel` -> `CheckOptions`
---   options dist slot logLevel =
---      `defaultCheckOptions` `&` `emulatorConfig` . `Plutus.Trace.Emulator.initialChainState` `.~` Left dist
---                            `&` `maxSlot` `.~` slot
---                            `&` `minLogLevel` `.~` logLevel
---   @
+-- @
+-- options :: Map `Wallet` `Value` -> `Slot` -> `Control.Monad.Freer.Log.LogLevel` -> `CheckOptions`
+-- options dist slot logLevel =
+--    `defaultCheckOptions` `&` `emulatorConfig` . `Plutus.Trace.Emulator.initialChainState` `.~` Left dist
+--                          `&` `maxSlot` `.~` slot
+--                          `&` `minLogLevel` `.~` logLevel
+-- @
 --
 propRunScriptWithOptions ::
     ContractModel state =>
     CheckOptions ->
     [HandleSpec state] ->
     (ModelState state -> TracePredicate) ->
-    (HandleFun state -> ModelState state -> EmulatorTrace ()) ->
     Script state ->
-    (ModelState state -> PropertyM (ContractMonad state) ()) ->
     Property
-propRunScriptWithOptions opts handleSpecs predicate before script after =
+propRunScriptWithOptions opts handleSpecs predicate script =
     monadic (runTr opts finalPredicate) $ do
         QC.run $ getHandles $ activateWallets handleSpecs
-        let initState = StateModel.initialState { _lastSlot      = opts ^. maxSlot }
-        QC.run $ runEmulator $ \ h -> before (handle h) initState
-        (st, _) <- runScriptInState initState script
-        after st
+        let initState = StateModel.initialState { _lastSlot = opts ^. maxSlot }
+        void $ runScriptInState initState script
     where
         finalState     = stateAfter script
         finalPredicate = predicate finalState .&&. checkBalances finalState

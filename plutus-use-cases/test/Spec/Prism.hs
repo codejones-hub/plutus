@@ -144,7 +144,7 @@ deriving instance Show (HandleKey PrismModel s e)
 
 instance ContractModel PrismModel where
 
-    data Action PrismModel = Delay | Issue | Revoke | Call | Present
+    data Action PrismModel = Setup | Delay | Issue | Revoke | Call | Present
         deriving (Eq, Show)
 
     data HandleKey PrismModel s e where
@@ -162,6 +162,7 @@ instance ContractModel PrismModel where
     nextState cmd = do
         wait waitSlots
         case cmd of
+            Setup   -> return ()
             Delay   -> wait 1
             Revoke  -> isIssued $~ doRevoke
             Issue   -> isIssued $= Issued
@@ -176,6 +177,11 @@ instance ContractModel PrismModel where
                 return ()
 
     perform handle s cmd = case cmd of
+        Setup   -> do
+            Trace.callEndpoint @"role" (handle UserH)    UnlockSTO
+            Trace.callEndpoint @"role" (handle MirrorH)  Mirror
+            Trace.callEndpoint @"role" (handle ManagerH) CredMan
+            delay 5
         Delay   -> wrap $ delay 1
         Issue   -> wrap $ Trace.callEndpoint @"issue"              (handle MirrorH) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
         Revoke  -> wrap $ Trace.callEndpoint @"revoke"             (handle MirrorH) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
@@ -198,17 +204,10 @@ finalPredicate _ =
         [ assertNotDone contract (Trace.walletInstanceTag w) "Contract stopped"
         | w <- [ issuer, user, mirror, credentialManager ] ]
 
-prop_Prism :: Script PrismModel -> Property
-prop_Prism script = propRunScript @PrismModel spec finalPredicate before script after
+prop_Prism :: Property     -- vvvvv Setup roles first
+prop_Prism = forAllDL (action Setup >> anyActions_) $ propRunScript @PrismModel spec finalPredicate
     where
         spec = [ HandleSpec UserH    user contract
                , HandleSpec MirrorH  mirror contract
                , HandleSpec ManagerH credentialManager contract ]
-        before :: HandleFun PrismModel -> ModelState PrismModel -> Trace.EmulatorTrace ()
-        before handle s = do
-            Trace.callEndpoint @"role" (handle UserH)    UnlockSTO
-            Trace.callEndpoint @"role" (handle MirrorH)  Mirror
-            Trace.callEndpoint @"role" (handle ManagerH) CredMan
-            delay 5
-        after _ = return () -- monitor $ collect $ s ^. balances . at user
 

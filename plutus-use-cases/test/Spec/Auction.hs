@@ -206,9 +206,7 @@ prop_Auction :: Script AuctionModel -> Property
 prop_Auction script =
     propRunScriptWithOptions (set minLogLevel Info options) spec
         (\ _ -> pure True)  -- TODO: check termination
-        (\ _ _ -> pure ())
         script
-        (\ _ -> pure ())
     where
         spec = HandleSpec SellerH w1 seller :
                [ HandleSpec (BuyerH w) w buyer | w <- map Wallet [2..4] ]
