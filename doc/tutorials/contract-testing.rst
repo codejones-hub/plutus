@@ -18,11 +18,16 @@ Link to other sections :ref:`like this <modelling-contracts>`.
 Modelling contracts
 -------------------
 
-You can include Haskell code using ``literalinclude``:
+You can include Haskell code like this:
 
 .. literalinclude:: GameModel.hs
-   :start-after: START_MODELSTATE
-   :end-before: END_MODELSTATE
+    :start-after: START_MODELSTATE
+    :end-before: END_MODELSTATE
+
+Linking to the haddock docs: `arbitraryAction`_
 
 .. note::
     This is a note.
+
+.. _arbitraryAction: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:arbitraryAction
+
