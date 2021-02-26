@@ -65,6 +65,8 @@
           (hsPkgs."fingertree" or (errorHandler.buildDepError "fingertree"))
           (hsPkgs."uuid" or (errorHandler.buildDepError "uuid"))
           (hsPkgs."aeson-pretty" or (errorHandler.buildDepError "aeson-pretty"))
+          (hsPkgs."QuickCheck" or (errorHandler.buildDepError "QuickCheck"))
+          (hsPkgs."random" or (errorHandler.buildDepError "random"))
           (hsPkgs."unordered-containers" or (errorHandler.buildDepError "unordered-containers"))
           (hsPkgs."foldl" or (errorHandler.buildDepError "foldl"))
           (hsPkgs."streaming" or (errorHandler.buildDepError "streaming"))
@@ -142,7 +144,15 @@
           "Plutus/Trace/Playground"
           "Plutus/Trace/Scheduler"
           "Plutus/Trace/Tag"
-          ] ++ (pkgs.lib).optional (!(compiler.isGhcjs && true || system.isGhcjs)) "Language/Plutus/Contract/Test";
+          ] ++ (pkgs.lib).optionals (!(compiler.isGhcjs && true || system.isGhcjs)) [
+          "Language/Plutus/Contract/Test"
+          "Language/Plutus/Contract/Test/ContractModel"
+          "Language/Plutus/Contract/Test/DynamicLogic"
+          "Language/Plutus/Contract/Test/DynamicLogic/CanGenerate"
+          "Language/Plutus/Contract/Test/DynamicLogic/Monad"
+          "Language/Plutus/Contract/Test/DynamicLogic/Quantify"
+          "Language/Plutus/Contract/Test/StateModel"
+          ];
         hsSourceDirs = [ "src" ];
         };
       tests = {
