@@ -10,11 +10,10 @@ A guessing game contract
 ------------------------
 
 Explain the contract. Double back-ticks for fixed-width font
-``Language.PlutusTx.Coordination.Contracts.GameStateMachine``. Or use ``:hsobj:``:
-:hsobj:`Language.PlutusTx.Coordination.Contracts.GameStateMachine`.
-Link to other sections `like this <modelling_contracts>`_.
+``Language.PlutusTx.Coordination.Contracts.GameStateMachine``.
+Link to other sections :ref:`like this <modelling-contracts>`.
 
-.. _modelling_contracts:
+.. _modelling-contracts:
 
 Modelling contracts
 -------------------
