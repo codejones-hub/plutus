@@ -34,11 +34,10 @@ example here_. The game is played as follows:
    changes. 
 
 As an extra wrinkle, when the first player creates the contract, a new
-token is also forged (of a new token type [#]_). Only the player
-currently holding the token is allowed to make a guess--which gives us
-an opportunity to illustrate forging and passing around tokens.
+token is also forged. Only the player currently holding the token is
+allowed to make a guess--which gives us an opportunity to illustrate
+forging and passing around tokens.
 
-.. [#] Ulf, is this true?
 
 Emulated wallets
 ----------------
@@ -57,6 +56,67 @@ tutorial, we'll settle for three:
     :start-after: START_DEFINE_WALLETS
     :end-before:  END_DEFINE_WALLETS
 
+Values and tokens
+-----------------
+
+Wallets contain 'values', which are mixtures of different quantities
+of one or more types of token. The most common token is, of course, the ADA;
+we can import functions manipulating ADA, and the ``Value`` type
+itself, as follows:
+
+.. literalinclude:: GameModel.hs
+   :start-after: START_ADAIMPORTS
+   :end-before:  END_ADAIMPORTS
+
+With these imports, we can construct values in the ADA currency:
+
+.. code-block:: text
+
+  > Ada.lovelaceValueOf 1
+  Value {getValue = Map {unMap = [(,Map {unMap = [(,1)]})]}}
+
+We will also need a game token. After importing the ``Scripts`` module
+
+.. literalinclude:: GameModel.hs
+   :start-after: START_SCRIPTSIMPORT
+   :end-before:  END_SCRIPTSIMPORT
+
+we can define it as follows, applying a monetary policy defined in the code under test:
+
+.. literalinclude:: GameModel.hs
+   :start-after:  START_GAMETOKEN
+   :end-before:   END_GAMETOKEN
+
+The value of the token is (with a little extra formatting):
+
+.. code-block:: text
+
+  > gameTokenVal
+  Value {getValue = Map {unMap =
+    [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,
+      Map {unMap = [(guess,1)]})]}}
+
+We can even construct a ``Value`` containing an ADA and a game token:
+
+.. code-block:: text
+
+  > Ada.lovelaceValueOf 1 <> gameTokenVal
+  Value {getValue = Map {unMap =
+    [(,
+      Map {unMap = [(,1)]}),
+     (f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,
+      Map {unMap = [(guess,1)]})]}}
+
+If you inspect the output closely, you will see that a ``Value``
+contains maps nested within another ``Map``. The outer ``Map`` is
+indexed by hashes of monetary policy scripts, so each inner ``Map``
+contains a bag of tokens managed by the same policy. Token names can
+be chosen freely, and each policy can manage any number of its own
+token types. In this case the game token is called a "guess", and the
+script managing game tokens has the hash
+f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da. A little
+confusingly, the ADA token name is displayed as an empty string, as is
+the hash of the corresponding monetary policy.
                  
 Introducing contract models
 ---------------------------
@@ -97,7 +157,7 @@ In this case we define three actions:
    can make a guess.
 
 A generated test is called a ``Script``, and is (essentially) a
-sequence of ``Action``. We can run tests by using `propRunScript_`_:
+sequence of Action_. We can run tests by using `propRunScript_`_:
 
 .. literalinclude:: GameModel.hs
     :start-after: START_GAME_PROPERTY
@@ -107,7 +167,7 @@ When we test this property, ``quickCheck`` will generated random
 scripts to be tested. But what is the ``handleSpec``?
 `propRunScript_`_ needs to know which contract handles it should create
 for use in this test, and the ``handleSpec`` tells it. Every handle is
-*named* by a ``HandleKey``, which is another datatype associated with
+*named* by a HandleKey_, which is another datatype associated with
 the ContractModel_ class. It needs to be defined as a GADT, because it
 also defines the types of the associated contract schema and contract
 errors:
@@ -139,7 +199,7 @@ Of course, trying to test this property will not yet succeed:
     GSM.hs:65:10-32: No instance nor default method for class operation arbitraryAction
                  
 The contract modelling library cannot generate test cases, unless *we*
-specify how to generate ``Action``, which we will do next.
+specify how to generate Action_, which we will do next.
     
 .. _ContractModel: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:ContractModel
 
@@ -165,7 +225,7 @@ negative amounts would be error cases that we choose not to test.
 *** Is this really a good idea? Will a player who accidentally tries
 to claim a negative sum actually lose money? ***
 
-Now we can define a generator for ``Action``, as a method of the
+Now we can define a generator for Action_, as a method of the
 ContractModel_ class:
 
 .. literalinclude:: GameModel.hs
@@ -213,7 +273,7 @@ interesting: it tells us the distribution of generated Actions,
 aggregated across all the tests. We can see that each action was
 generated around one third of the time, which is to be expected since
 our generator does not weight them at all. Keep an eye on this table
-as we extend our generation; if any ``Action`` disappears altogether,
+as we extend our generation; if any Action_ disappears altogether,
 or is generated very rarely, then this indicates a problem in our
 tests.
 
@@ -315,21 +375,6 @@ stored password, game value, and wallet contents appropriately. (Here
 At the end of each test, the ContractModel_ framework checks that
 every wallet contains the tokens that the model says it should.
 
-The code above refers to the game token, ``gameTokenVal``, and of course we
-have to define this. A suitable definition is
-
-.. literalinclude:: GameModel.hs
-   :start-after:  START_GAMETOKEN
-   :end-before:   END_GAMETOKEN
-
-*** Can you explain this code, Ulf? ***
-
-We need to make the following imports also:
-
-.. literalinclude:: GameModel.hs
-   :start-after: START_NEXTSTATEIMPORTS
-   :end-before:  END_NEXTSTATEIMPORTS
-
 We can exercise the nextState_ function already by generating and
 'running' tests, even though we have not yet connected these tests to
 the real contract. Doing so immediately reveals a problem:
@@ -352,30 +397,178 @@ token* to wallet 2, but this makes no sense because the game token has
 not yet been forged--so the ``fromJust`` in the nextState_ function
 fails. We will see how to prevent this in the next section.
 
+Restricting test cases with preconditions
+-----------------------------------------
+
+As we just saw, not every sequence of actions makes sense as a test
+case; we need a way to *restrict* test cases to be 'sensible'. Note
+this is *not* the same as restricting tests to 'the happy path': we
+*want* to test unexpected sequences of actions, and indeed, this is
+part of the strength of property-based testing. But there are some
+actions--like trying to give the game token to a wallet before it has been
+forged--that are not even interesting to test. These are the cases
+that we rule out by defining preconditions for actions; the effect is
+to prevent such test cases ever being generated.
+
+To introduce preconditions, we add a definition of the precondition_
+method to our ContractModel_ instance.
+
+.. code-block:: haskell
+                
+   precondition :: ModelState state -> Action state -> Bool
+
+The precondition_ is parameterised on the entire model state, which
+includes the contents of wallets as well as our contract state, so we
+will need to extract this state as well as the fields we need from
+it. For now, we just restrict ``GiveToken`` actions to states in which
+the token exists:
+
+.. code-block:: haskell
+
+    precondition s (GiveToken _) = tok /= Nothing
+        where
+            tok = s ^. contractState . hasToken
+    precondition s _             = True
+
+Now if we try to run tests, something more interesting happens:
+
+.. code-block:: text
+                
+  > quickCheck prop_Game
+  *** Failed! Falsified (after 5 tests and 2 shrinks):
+  Script
+   [Var 1 := Lock (Wallet {getWallet = 2}) "hello" 0]
+  Expected funds of W2 to change by Value {getValue = Map {unMap = [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
+  but they changed by
+  Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}}
+  Test failed.
+  Emulator log:
+  [INFO] Slot 1: TxnValidate 4febabe136e65d5fb4683b378570e6f43f92056e489281ad2e6302a9fa127874
+  [INFO] Slot 1: 00000000-0000-4000-8000-000000000000 {Contract instance for wallet 1}:
+                   Contract instance started
+  [INFO] Slot 1: 00000000-0000-4000-8000-000000000001 {Contract instance for wallet 2}:
+                   Contract instance started
+  [INFO] Slot 1: 00000000-0000-4000-8000-000000000002 {Contract instance for wallet 3}:
+                   Contract instance started
+
+The test has failed, of course. The generated (and simplified) test case only performs one action:
+
+.. code-block:: text
+                
+  Script
+   [Var 1 := Lock (Wallet {getWallet = 2}) "hello" 0]
+
+Wallet 2 attempts to create a game contract guarding zero
+ADA. Inspecting the error message, we can see that wallet 2 ended up
+with the wrong contents:
+
+.. code-block:: text
+                
+  Expected funds of W2 to change by Value {getValue = Map {unMap = [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
+  but they changed by
+  Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}}
+
+Our model predicted that wallet 2 would end up containing the game
+token, but in fact its contents were unchanged.
+
+In this test, we have actually performed actions on the emulated
+blockchain, as the emulator log shows us: one transaction has been
+validated, and we have started three contract instances (one for each
+wallet in the test). But we have *not* created a game token for wallet
+2, because thus far we have not defined how actions in a test should
+be performed--so the ``Lock`` action in the test case behaves as a
+no-op, which of course does not deposit a game token in wallet 2. It
+is time to link actions in a test to the emulator.
+   
 Performing actions
 ------------------
 
 So far we are generating Actions, but we have not yet linked them to
 the contract they are supposed to test--so 'running' the tests, as we
-did above, did not invoke the contract at all. 
- 
-Introduce the class (where to import it from). Need a model
-state. Minimal class definition to get some tests running (action
-type, generate and perform commands).
+did above, did not invoke the contract at all. To do so, we must import the emulator
 
-Need to introduce:
-  - performing actions
-    GiveToken needs to know where the token is
-    State needs to be introduced, initialState, nextState
-    precondition to force token to be forged first
-  - defining the token type
+.. literalinclude:: GameModel.hs
+   :start-after: START_IMPORTEMULATOR
+   :end-before:  END_IMPORTEMULATOR
+         
+Then we define the perform_ method of the ContractModel_ class:
 
-Defining 'expected behaviour'... how funds move. Need to know:
- - is the guess correct?
- - does the guesser have the token?
- - how much is in the contract right now?
+.. code-block:: haskell
+                
+  perform :: HandleFun state
+             -> ModelState state
+             -> Action state
+             -> Plutus.Trace.Emulator.EmulatorTrace ()
 
-   
+The job of the perform_ method in this case is just to invoke the
+contract end-points, using the API defined in the code under test, and
+transfer the game token from one wallet to another as specified by
+``GiveToken`` actions.
+
+.. code-block:: haskell
+                
+    perform handle s cmd = case cmd of
+        Lock w new val -> do
+            callEndpoint @"lock" (handle $ WalletKey w)
+                         LockArgs{ lockArgsSecret = new
+                                 , lockArgsValue = Ada.lovelaceValueOf val}
+        Guess w old new val -> do
+            callEndpoint @"guess" (handle $ WalletKey w)
+                GuessArgs{ guessArgsOldSecret = old
+                         , guessArgsNewSecret = new
+                         , guessArgsValueTakenOut = Ada.lovelaceValueOf val}
+        GiveToken w' -> do
+            let w = fromJust (s ^. contractState . hasToken)
+            payToWallet w w' gameTokenVal
+            return ()
+
+Every call to an end-point must be associated with one of the contract
+handles defined in our ``handleSpec``; the ``handle`` argument to
+perform_ lets us find the contract handle associated with each
+HandleKey_.
+            
+For the most part, it is good practice to keep the perform_ function
+simple: a direct relationship between actions in a test case and calls
+to contract endpoints makes interpreting test failures much easier.
+
+Helping shrinking work better by choosing test case actions well
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In definition of perform_ above, the ``GiveToken`` action is a little
+surprising: when we call the emulator, we have to specify not only the
+wallet to give the token *to*, but also the wallet to take the token
+*from*. So why did we choose to define a ``GiveToken w`` action to
+include in test cases, rather than an action ``PassToken w w'``, which
+would correspond more directly to the code in perform_?
+
+The answer is that using ``GiveToken`` actions instead helps
+QuickCheck to shrink failing tests more effectively. QuickCheck
+shrinks test cases by attempting to remove actions from
+them--essentially replacing an action by a no-op. But consider a
+sequence such as
+
+.. code-block:: text
+
+   PassToken w1 w2
+   PassToken w2 w3
+
+which transfers the game token in two steps from wallet 1 to
+wallet 3. Deleting either one of these steps means the game token will
+end up in the wrong place, probably causing the next steps in the test
+to behave very differently. But given the sequence
+
+.. code-block:: text
+
+   GiveToken w2
+   GiveToken w3
+
+the first ``GiveToken`` can be deleted without affecting the behaviour
+of the second at all. Thus, by making token-passing steps independent
+of each other, we make it easier for QuickCheck to shrink a failing
+test without drastic changes to its behaviour.
+
+
+
 
 Introduction to testing and stuff.
 
@@ -405,6 +598,8 @@ Linking to the haddock docs: `arbitraryAction`_
 .. _arbitraryAction: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:arbitraryAction
 .. _nextState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:nextState
 .. _initialState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:initialState
+.. _precondition: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:precondition
+.. _perform: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:perform
 .. _Spec: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#g:3
 .. _`($=)`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:`($=)`
 .. _`($~)`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:`($~)`
@@ -414,6 +609,8 @@ Linking to the haddock docs: `arbitraryAction`_
 .. _withdraw: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:withdraw
 .. _transfer: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:transfer
 .. _viewContractState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:viewContractState
+.. _Action: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:Action
+.. _HandleKey: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:HandleKey
 
 Questions to resolve
 --------------------

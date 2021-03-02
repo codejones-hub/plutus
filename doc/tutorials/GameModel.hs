@@ -53,17 +53,17 @@ import           Plutus.Trace.Emulator                                     as Tr
 import           Wallet.Emulator                                           (Wallet)
 import           Wallet.Emulator.Folds                                     (postMapM)
 
--- START_IMPORT_FOR_PERFORM
-import           Control.Lens                                              hiding (elements)
-import           Data.Maybe
+-- START_IMPORTEMULATOR
 import           Plutus.Trace.Emulator                                     as Trace
--- END_IMPORT_FOR_PERFORM
+-- END_IMPORTEMULATOR
 
--- START_NEXTSTATEIMPORTS
+-- START_ADAIMPORTS
 import qualified Ledger.Ada                                                as Ada
-import qualified Ledger.Typed.Scripts                                      as Scripts
 import           Ledger.Value
--- END_NEXTSTATEIMPORTS
+-- END_ADAIMPORTS
+-- START_SCRIPTSIMPORT
+import qualified Ledger.Typed.Scripts                                      as Scripts
+-- END_SCRIPTSIMPORT
 
 -- * QuickCheck model
 
