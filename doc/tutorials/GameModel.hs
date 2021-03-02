@@ -47,12 +47,23 @@ import           Language.Plutus.Contract.Test.StateModel                  (stat
 import qualified Language.Plutus.Contract.Test.StateModel                  as StateModel
 import           Language.PlutusTx.Coordination.Contracts.GameStateMachine as G
 import           Language.PlutusTx.Lattice
-import qualified Ledger.Ada                                                as Ada
 import qualified Ledger.Typed.Scripts                                      as Scripts
 import           Ledger.Value                                              (Value, isZero)
 import           Plutus.Trace.Emulator                                     as Trace
 import           Wallet.Emulator                                           (Wallet)
 import           Wallet.Emulator.Folds                                     (postMapM)
+
+-- START_IMPORT_FOR_PERFORM
+import           Control.Lens                                              hiding (elements)
+import           Data.Maybe
+import           Plutus.Trace.Emulator                                     as Trace
+-- END_IMPORT_FOR_PERFORM
+
+-- START_NEXTSTATEIMPORTS
+import qualified Ledger.Ada                                                as Ada
+import qualified Ledger.Typed.Scripts                                      as Scripts
+import           Ledger.Value
+-- END_NEXTSTATEIMPORTS
 
 -- * QuickCheck model
 
@@ -98,6 +109,36 @@ instance ContractModel GameModel where
         [ GiveToken <$> genWallet                                        ]
 -- END_ARBITRARY
 
+-- START_NEXTSTATE
+    initialState = GameModel
+        { _gameValue     = 0
+        , _hasToken      = Nothing
+        , _currentSecret = ""
+        }
+
+    nextState (Lock w secret val) = do
+        hasToken      $= Just w
+        currentSecret $= secret
+        gameValue     $= val
+        forge gameTokenVal
+        deposit  w gameTokenVal
+        withdraw w $ Ada.lovelaceValueOf val
+
+    nextState (Guess w old new val) = do
+        correctGuess <- (old ==)    <$> viewContractState currentSecret
+        holdsToken   <- (Just w ==) <$> viewContractState hasToken
+        enough       <- (>= val)    <$> viewContractState gameValue
+        when (correctGuess && holdsToken && enough) $ do
+            currentSecret $= new
+            gameValue     $~ subtract val
+            deposit w $ Ada.lovelaceValueOf val
+
+    nextState (GiveToken w) = do
+        w0 <- fromJust <$> viewContractState hasToken
+        transfer w0 w gameTokenVal
+        hasToken $= Just w
+-- END_NEXTSTATE
+
 -- START_GENERATORS
 genWallet :: Gen Wallet
 genWallet = elements wallets
@@ -118,3 +159,13 @@ prop_Game script = propRunScript_ handleSpec script
 handleSpec :: [HandleSpec GameModel]
 handleSpec = [ HandleSpec (WalletKey w) w G.contract | w <- wallets ]
 -- END_HANDLE_SPEC
+
+
+
+-- START_GAMETOKEN
+gameTokenVal :: Value
+gameTokenVal =
+    let sym = Scripts.monetaryPolicyHash G.scriptInstance
+    in G.token sym "guess"
+-- END_GAMETOKEN
+

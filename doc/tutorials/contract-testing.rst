@@ -131,14 +131,13 @@ test several contracts together with one contract model.
 
 Of course, trying to test this property will not yet succeed:
 
-::
-   
-  | > quickCheck prop_Game
-  | \*\*\* Failed! (after 1 test and 1 shrink):
-  | Exception:
-  |   GSM.hs:65:10-32: No instance nor default method for class operation arbitraryAction
-
-  
+.. code-block:: text
+                
+  > quickCheck prop_Game
+  *** Failed! (after 1 test and 1 shrink):
+  Exception:
+    GSM.hs:65:10-32: No instance nor default method for class operation arbitraryAction
+                 
 The contract modelling library cannot generate test cases, unless *we*
 specify how to generate ``Action``, which we will do next.
     
@@ -175,39 +174,171 @@ ContractModel_ class:
 With this method defined, we can start to generate test cases. Using
 ``sample`` we can see what scripts look like:
 
-::
-  | > sample (arbitrary :: Gen (Script GameModel))
-  | Script
-  |  [Var 1 := Lock (Wallet {getWallet = 2}) "hunter2" 5,
-  |   Var 2 := Guess (Wallet {getWallet = 3}) "*******" "hello" 6,
-  |   Var 3 := Guess (Wallet {getWallet = 1}) "secret" "*******" 10,
-  |   Var 4 := Guess (Wallet {getWallet = 3}) "*******" "*******" 6,
-  |   Var 5 := GiveToken (Wallet {getWallet = 3}),
-  |   Var 6 := Guess (Wallet {getWallet = 2}) "hunter2" "hunter2" 15]
+.. code-block:: text
 
-and we can even run 'tests', although they don't do much yet:
+  > sample (arbitrary :: Gen (Script GameModel))
+  Script
+    [Var 1 := Lock (Wallet {getWallet = 2}) "hunter2" 5,
+     Var 2 := Guess (Wallet {getWallet = 3}) "*******" "hello" 6,
+     Var 3 := Guess (Wallet {getWallet = 1}) "secret" "*******" 10,
+     Var 4 := Guess (Wallet {getWallet = 3}) "*******" "*******" 6,
+     Var 5 := GiveToken (Wallet {getWallet = 3}),
+     Var 6 := Guess (Wallet {getWallet = 2}) "hunter2" "hunter2" 15]
+  .
+  .
 
-::
+(The ``Var 1``-to-``Var 6`` here are 'variables' bound to the result of each call--in this case, nothing interesting). *Will the variables be useful at any point in the future? If not, they just look a distraction, and maybe we should remove them.*
+
+
+We can even run 'tests' now, although they don't do much yet:
+
+.. code-block:: text
+                
   > quickCheck prop_Game
   +++ OK, passed 100 tests:
   84% contains Lock
   80% contains GiveToken
   79% contains Guess
-
+  
   Actions (2263 in total):
   33.94% Lock
   33.89% Guess
   32.17% GiveToken
 
-    
+Notice that the output contains two tables. The first one just tells
+us that 84 of the 100 generated test sequences contained a ``Lock``,
+80 contained a ``GiveToken`` and so on. **Maybe we should remove the first table. It's rarely interesting.** The second is more
+interesting: it tells us the distribution of generated Actions,
+aggregated across all the tests. We can see that each action was
+generated around one third of the time, which is to be expected since
+our generator does not weight them at all. Keep an eye on this table
+as we extend our generation; if any ``Action`` disappears altogether,
+or is generated very rarely, then this indicates a problem in our
+tests.
+
+Modelling expectations
+----------------------
+
+The ultimate purpose of our tests is to check that funds are
+transferred correctly by each operation--for example, that after a
+guess, the guesser receives the requested ADA only if the guess was
+correct. An important part of a ContractModel_ defines how funds
+are expected to move. However, it's clear that in order to define how
+we expect funds to move after a ``Guess``, we need to know more than
+just where all the ADA are. We need to know:
+
+- what the current secret password is, so we can decide whether or
+  not the guess is correct.
+
+- whether or not the guesser currently holds the game token, and so is
+  entitled to make a guess.
+
+- how much ADA is currently locked in the contract, so we can
+  determine whether the guesser is requesting funds that actually
+  exist.
+
+We store such information in the *contract state*, the type parameter
+of the ContractModel_ class. So, let's complete the definition of a
+``GameModel``:
+
+.. code-block:: haskell
+
+   data GameModel = GameModel
+    { _gameValue     :: Integer
+    , _hasToken      :: Maybe Wallet
+    , _currentSecret :: String }
+   deriving (Show)
+
+   makeLenses 'GameModel
+
+
+Initially the game token does not exist, so we record its current
+owner as a ``Maybe Wallet``, so that we can represent the initial
+situation before its creation.
+
+Now we can define the initial state of the model at the start of each
+test case, initialState_, and the way we expect each operation to change the state:
+
+.. literalinclude:: GameModel.hs
+   :start-after:  START_NEXTSTATE
+   :end-before:   END_NEXTSTATE
+
+These are both operations of the ContractModel_ class; the
+nextState_ function is defined in the Spec_ monad, and can
+
+- inspect the contract state using viewContractState_
+
+- update the contract state using `($=)`_ and `($~)`_
+
+- create new tokens using forge_
+
+- add and remove tokens from wallets using deposit_, withdraw_, and
+  transfer_
+
+At the end of each test, the ContractModel_ framework checks that
+every wallet contains the tokens that the model says it should.
+
+This code refers to the game token, ``gameTokenVal``, and of course we
+have to define this. A suitable definition is
+
+.. literalinclude:: GameModel.hs
+   :start-after:  START_GAMETOKEN
+   :end-before:   END_GAMETOKEN
+
+*** Can you explain this code, Ulf? ***
+
+We need to make the following imports also:
+
+.. literalinclude:: GameModel.hs
+   :start-after: START_NEXTSTATEIMPORTS
+   :end-before:  END_NEXTSTATEIMPORTS
+
+We can exercise the nextState_ function already by generating and
+'running' tests, even though we have not yet connected these tests to
+the real contract. Doing so immediately reveals a problem:
+
+.. code-block:: text
+                
+  > quickCheck prop_Game
+  *** Failed! (after 1 test):
+  Exception:
+    Maybe.fromJust: Nothing
+    CallStack (from HasCallStack):
+      error, called at libraries/base/Data/Maybe.hs:148:21 in base:Data.Maybe
+      fromJust, called at GSM0.hs:122:15 in main:GSM0
+  Script
+   [Var 1 := GiveToken (Wallet {getWallet = 2})]
+
+Looking at the last two lines, we see the generated test script, and
+the problem is evident: we generated a test *that only gives the game
+token* to wallet 2, but this makes no sense because the game token has
+not yet been forged--so the ``fromJust`` in the nextState_ function
+fails. We will see how to prevent this in the next section.
+
+Performing actions
+------------------
+
+So far we are generating Actions, but we have not yet linked them to
+the contract they are supposed to test--so 'running' the tests, as we
+did above, did not invoke the contract at all. 
+ 
 Introduce the class (where to import it from). Need a model
 state. Minimal class definition to get some tests running (action
 type, generate and perform commands).
 
-Form of a script. Running tests.
+Need to introduce:
+  - performing actions
+    GiveToken needs to know where the token is
+    State needs to be introduced, initialState, nextState
+    precondition to force token to be forged first
+  - defining the token type
 
+Defining 'expected behaviour'... how funds move. Need to know:
+ - is the guess correct?
+ - does the guesser have the token?
+ - how much is in the contract right now?
 
-
+   
 
 Introduction to testing and stuff.
 
@@ -235,6 +366,17 @@ Linking to the haddock docs: `arbitraryAction`_
     This is a note.
 
 .. _arbitraryAction: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:arbitraryAction
+.. _nextState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:nextState
+.. _initialState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:initialState
+.. _Spec: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:Spec
+.. _`($=)`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:`($=)`
+.. _`($~)`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:`($~)`
+
+.. _forge: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:forge
+.. _deposit: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:deposit
+.. _withdraw: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:withdraw
+.. _transfer: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:transfer
+.. _viewContractState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:viewContractState
 
 Questions to resolve
 --------------------
