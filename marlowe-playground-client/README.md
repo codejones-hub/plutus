@@ -48,7 +48,7 @@ buildNodeModules {
     packageJson = ./package.json;
     packageLockJson = ./package-lock.json;
     githubSourceHashMap = {
-      shmish111.nearley-webpack-loader."939360f9d1bafa9019b6ff8739495c6c9101c4a1" = "1brx669dgsryakf7my00m25xdv7a02snbwzhzgc9ylmys4p8c10x";
+      input-output-hk.nearley-webpack-loader."939360f9d1bafa9019b6ff8739495c6c9101c4a1" = "1brx669dgsryakf7my00m25xdv7a02snbwzhzgc9ylmys4p8c10x";
     };
 }
 ```
