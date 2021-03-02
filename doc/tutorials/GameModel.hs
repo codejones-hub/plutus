@@ -68,16 +68,15 @@ import           Ledger.Value
 -- * QuickCheck model
 
 -- START_MODELSTATE
--- START_MODEL_TYPE
 data GameModel = GameModel
--- END_MODEL_TYPE
     { _gameValue     :: Integer
     , _hasToken      :: Maybe Wallet
     , _currentSecret :: String }
     deriving (Show)
--- END_MODELSTATE
 
 makeLenses 'GameModel
+-- END_MODELSTATE
+
 
 -- START_DEFINE_WALLETS
 w1, w2, w3 :: Wallet
@@ -109,12 +108,13 @@ instance ContractModel GameModel where
         [ GiveToken <$> genWallet                                        ]
 -- END_ARBITRARY
 
--- START_NEXTSTATE
+-- START_INITSTATEDEFS
     initialState = GameModel
         { _gameValue     = 0
         , _hasToken      = Nothing
         , _currentSecret = ""
         }
+-- END_INITSTATEDEFS
 
     nextState (Lock w secret val) = do
         hasToken      $= Just w
@@ -137,7 +137,6 @@ instance ContractModel GameModel where
         w0 <- fromJust <$> viewContractState hasToken
         transfer w0 w gameTokenVal
         hasToken $= Just w
--- END_NEXTSTATE
 
 -- START_GENERATORS
 genWallet :: Gen Wallet

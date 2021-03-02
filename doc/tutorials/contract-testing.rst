@@ -71,9 +71,9 @@ contract modelling library
 
 and define the model type:
 
-.. literalinclude:: GameModel.hs
-    :start-after: START_MODEL_TYPE
-    :end-before: END_MODEL_TYPE
+.. code-block:: haskell
+                
+   data GameModel = GameModel
 
 This definition is incomplete: we shall fill in further details as we proceed.
 
@@ -158,9 +158,10 @@ and suitable values of ADA, since these appear as action parameters.
     :end-before: END_GENERATORS
 
 We choose wallets from the three available, and we choose passwords
-from a small set, so that relatively many random guesses will be
+from a small set, so that random guesses will often be
 correct. We choose ADA amounts to be non-negative integers, because
 negative amounts would be error cases that we choose not to test.
+
 *** Is this really a good idea? Will a player who accidentally tries
 to claim a negative sum actually lose money? ***
 
@@ -237,48 +238,84 @@ just where all the ADA are. We need to know:
   determine whether the guesser is requesting funds that actually
   exist.
 
-We store such information in the *contract state*, the type parameter
-of the ContractModel_ class. So, let's complete the definition of a
-``GameModel``:
+These all depend on the previous steps in the test case. To keep track
+of such information, we store it in a *contract state*, which is the
+type parameter of the ContractModel_ class. So, let's complete the
+definition of a ``GameModel``:
 
-.. code-block:: haskell
-
-   data GameModel = GameModel
-    { _gameValue     :: Integer
-    , _hasToken      :: Maybe Wallet
-    , _currentSecret :: String }
-   deriving (Show)
-
-   makeLenses 'GameModel
-
+.. literalinclude:: GameModel.hs
+   :start-after:  START_MODELSTATE
+   :end-before:   END_MODELSTATE
 
 Initially the game token does not exist, so we record its current
 owner as a ``Maybe Wallet``, so that we can represent the initial
 situation before its creation.
 
 Now we can define the initial state of the model at the start of each
-test case, initialState_, and the way we expect each operation to change the state:
+test case, initialState_, and a nextState_ function to model the way
+we expect each operation to change the state. These are both methods
+in the ContractModel_ class.
+
+The initial state just records that the game token does not exist yet,
+and assigns default values to the other fields.
 
 .. literalinclude:: GameModel.hs
-   :start-after:  START_NEXTSTATE
-   :end-before:   END_NEXTSTATE
+   :start-after:  START_INITSTATEDEFS
+   :end-before:   END_INITSTATEDEFS
 
-These are both operations of the ContractModel_ class; the
-nextState_ function is defined in the Spec_ monad, and can
+The nextState_ function is defined in the Spec_ monad
 
-- inspect the contract state using viewContractState_
+.. code-block:: haskell
 
-- update the contract state using `($=)`_ and `($~)`_
+   nextState :: Action state -> Spec state ()
 
-- create new tokens using forge_
+and defines the expected effect of each operation.
 
-- add and remove tokens from wallets using deposit_, withdraw_, and
-  transfer_
+Creating the contract initializes the model state (using `($=)`_
+and generated ``Lens`` operations), forges the game token (using
+forge_), deposits it in the creator's wallet, and withdraws the ADA
+locked in the contract (using deposit_ and withdraw_):
+
+.. code-block:: haskell
+
+    nextState (Lock w secret val) = do
+        hasToken      $= Just w
+        currentSecret $= secret
+        gameValue     $= val
+        forge gameTokenVal
+        deposit  w gameTokenVal
+        withdraw w $ Ada.lovelaceValueOf val
+
+When making a guess, we need to check parts of the contract state
+(which we read using viewContractState_), and then we update the
+stored password, game value, and wallet contents appropriately. (Here
+`($~)`_ applies a function to modify a field of the contract state).
+
+
+.. code-block:: haskell
+                
+    nextState (Guess w old new val) = do
+        correctGuess <- (old ==)    <$> viewContractState currentSecret
+        holdsToken   <- (Just w ==) <$> viewContractState hasToken
+        enough       <- (>= val)    <$> viewContractState gameValue
+        when (correctGuess && holdsToken && enough) $ do
+            currentSecret $= new
+            gameValue     $~ subtract val
+            deposit w $ Ada.lovelaceValueOf val
+
+ - ``GiveToken`` just transfers the game token from one wallet to another using transfer_.
+
+.. code-block:: haskell
+
+    nextState (GiveToken w) = do
+        w0 <- fromJust <$> viewContractState hasToken
+        transfer w0 w gameTokenVal
+        hasToken $= Just w
 
 At the end of each test, the ContractModel_ framework checks that
 every wallet contains the tokens that the model says it should.
 
-This code refers to the game token, ``gameTokenVal``, and of course we
+The code above refers to the game token, ``gameTokenVal``, and of course we
 have to define this. A suitable definition is
 
 .. literalinclude:: GameModel.hs
@@ -368,7 +405,7 @@ Linking to the haddock docs: `arbitraryAction`_
 .. _arbitraryAction: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:arbitraryAction
 .. _nextState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:nextState
 .. _initialState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:initialState
-.. _Spec: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:Spec
+.. _Spec: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#g:3
 .. _`($=)`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:`($=)`
 .. _`($~)`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:`($~)`
 
