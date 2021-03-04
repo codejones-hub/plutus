@@ -104,7 +104,7 @@ import           Control.Lens
 import           Control.Monad.Cont
 import           Control.Monad.Freer                                 as Eff
 import           Control.Monad.Freer.State
-import           Control.Monad.Writer
+import qualified Control.Monad.State                                 as State
 import qualified Data.Aeson                                          as JSON
 import           Data.Foldable
 import           Data.Map                                            (Map)
@@ -129,8 +129,8 @@ import           Plutus.Trace.Emulator                               as Trace (C
                                                                                activateContractWallet)
 
 import           Test.QuickCheck                                     hiding ((.&&.))
-import qualified Test.QuickCheck                                     as QC
-import           Test.QuickCheck.Monadic                             as QC (monadic, run)
+import           Test.QuickCheck.Monadic                             as QC (PropertyM, monadic)
+import qualified Test.QuickCheck.Monadic                             as QC
 
 data IMap (key :: i -> j -> *) (val :: i -> j -> *) where
     IMNil  :: IMap key val
@@ -470,13 +470,13 @@ instance Monoid (EmulatorAction state) where
     mempty  = EmulatorAction pure
     mappend = (<>)
 
-type ContractMonad state = Writer (EmulatorAction state)
+type ContractMonad state = State.State (EmulatorAction state)
 
 runEmulator :: (Handles state -> EmulatorTrace ()) -> ContractMonad state ()
-runEmulator a = tell (EmulatorAction $ \ h -> h <$ a h)
+runEmulator a = State.modify (<> EmulatorAction (\ h -> h <$ a h))
 
 getHandles :: EmulatorTrace (Handles state) -> ContractMonad state ()
-getHandles a = tell (EmulatorAction $ \ _ -> a)
+getHandles a = State.modify (<> EmulatorAction (\ _ -> a))
 
 instance ContractModel state => Show (StateModel.Action (ModelState state) a) where
     showsPrec p (ContractAction a) = showsPrec p a
@@ -485,7 +485,8 @@ deriving instance ContractModel state => Eq (StateModel.Action (ModelState state
 
 instance ContractModel state => StateModel (ModelState state) where
 
-    data Action (ModelState state) a = ContractAction (Action state)
+    data Action (ModelState state) a where
+        ContractAction :: Action state -> StateModel.Action (ModelState state) ()
 
     type ActionMonad (ModelState state) = ContractMonad state
 
@@ -506,7 +507,7 @@ instance ContractModel state => StateModel (ModelState state) where
     precondition s (ContractAction cmd) = s ^. currentSlot < s ^. lastSlotL - 10 -- No commands if < 10 slots left
                                           && precondition s cmd
 
-    perform s (ContractAction cmd) _env = error "unused" <$ runEmulator (\ h -> perform (handle h) s cmd)
+    perform s (ContractAction cmd) _env = () <$ runEmulator (\ h -> perform (handle h) s cmd)
 
     postcondition _s _cmd _env _res = True
 
@@ -590,7 +591,7 @@ type DL state = DL.DL (ModelState state)
 
 -- | Generate a specific action. Fails if the action's `precondition` is not satisfied.
 action :: ContractModel state => Action state -> DL state ()
-action cmd = DL.action (ContractAction @_ @() cmd)
+action cmd = DL.action (ContractAction cmd)
 
 -- | Generate a random action using `arbitraryAction`. The generated action is guaranteed to satisfy
 --   its `precondition`. Fails with `DL.Stuck` if no action satisfying the precondition can be found
@@ -732,18 +733,18 @@ instance GetModelState (DL state) where
 -- actions using `arbitraryAction`, or you can use `forAllDL` to generate a `Script` from a `DL`
 -- scenario.
 
-runTr :: CheckOptions -> TracePredicate -> ContractMonad state Property -> Property
-runTr opts predicate trace =
-  flip runCont (const prop) $
-    checkPredicateInner opts predicate (void $ runEmulatorAction tr IMNil)
-                        debugOutput assertResult
-  where
-    (prop, tr) = runWriter trace
-    debugOutput :: String -> Cont Property ()
-    debugOutput out = cont $ \ k -> whenFail (putStrLn out) $ k ()
+finalChecks :: CheckOptions -> TracePredicate -> PropertyM (ContractMonad state) a -> PropertyM (ContractMonad state) a
+finalChecks opts predicate prop = do
+    x  <- prop
+    tr <- QC.run State.get
+    x <$ checkPredicateInner opts predicate (void $ runEmulatorAction tr IMNil)
+                             debugOutput assertResult
+    where
+        debugOutput :: Monad m => String -> PropertyM m ()
+        debugOutput = QC.monitor . whenFail . putStrLn
 
-    assertResult :: Bool -> Cont Property ()
-    assertResult ok = cont $ \ k -> ok QC..&&. k ()
+        assertResult :: Monad m => Bool -> PropertyM m ()
+        assertResult = QC.assert
 
 activateWallets :: forall state. ContractModel state => [HandleSpec state] -> EmulatorTrace (Handles state)
 activateWallets [] = return IMNil
@@ -817,7 +818,7 @@ propRunScriptWithOptions ::
     -> Script state                          -- ^ The script to run
     -> Property
 propRunScriptWithOptions opts handleSpecs predicate script =
-    monadic (runTr opts finalPredicate) $ do
+    monadic (flip State.evalState mempty) $ finalChecks opts finalPredicate $ do
         QC.run $ getHandles $ activateWallets handleSpecs
         let initState = StateModel.initialState { _lastSlot = opts ^. maxSlot }
         void $ runScriptInState initState script
