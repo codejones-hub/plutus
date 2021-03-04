@@ -23,6 +23,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeApplications           #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE UndecidableInstances       #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 module Language.Plutus.Contract.Test.ContractModel
@@ -107,6 +108,7 @@ import           Control.Monad.Freer.State
 import qualified Control.Monad.State                                 as State
 import qualified Data.Aeson                                          as JSON
 import           Data.Foldable
+import           Data.List
 import           Data.Map                                            (Map)
 import qualified Data.Map                                            as Map
 import           Data.Row                                            (Row)
@@ -195,8 +197,7 @@ data ModelState state = ModelState
         , _contractState :: state
         }
 
--- | A `Script` is essentially a list of `Action`s.
-type Script s = StateModel.Script (ModelState s)
+dummyModelState s = ModelState 0 0 Map.empty mempty s
 
 instance Show state => Show (ModelState state) where
     show = show . _contractState   -- for now
@@ -513,6 +514,93 @@ instance ContractModel state => StateModel (ModelState state) where
 
     monitoring (s0, s1) (ContractAction cmd) _env _res = monitoring (s0, s1) cmd
 
+-- We present a simplified view of test scripts, and DL scripts, so
+-- that users do not need to see the variables bound to results.
+
+-- | A `Script` is a list of `Action`s.
+data Script s = Script [Action s]
+
+instance ContractModel state => Show (Script state) where
+  showsPrec d (Script as)
+    | d>10      = ("("++).showsPrec 0 (Script as).(")"++)
+    | null as   = ("Script []"++)
+    | otherwise = (("Script \n [")++) .
+                  foldr (.) (showsPrec 0 (last as) . ("]"++))
+                    [showsPrec 0 a . (",\n  "++) | a <- init as]
+
+instance ContractModel s => Arbitrary (Script s) where
+  arbitrary = fromStateModelScript <$> arbitrary
+  shrink = map fromStateModelScript . shrink . toStateModelScript
+
+toStateModelScript (Script s) =
+  StateModel.Script [ Var i := ContractAction act | (i,act) <- zip [1..] s ]
+
+fromStateModelScript :: StateModel.Script (ModelState s) -> Script s
+fromStateModelScript (StateModel.Script s) =
+  Script [act | Var i := ContractAction act <- s]
+
+data DynLogicTest s =
+    BadPrecondition [TestStep s] [Action s] s
+  | Looping         [TestStep s]
+  | Stuck           [TestStep s] s
+  | DLScript        [TestStep s]
+
+instance ContractModel s => Show (DynLogicTest s) where
+    show (BadPrecondition as bads s) =
+        unlines $ ["BadPrecondition"] ++
+                  bracket (map show as) ++
+                  ["  " ++ show (nub bads)] ++
+                  ["  " ++ showsPrec 11 s ""]
+    show (Looping as) =
+        unlines $ ["Looping"] ++ bracket (map show as)
+    show (Stuck as s) =
+        unlines $ ["Stuck"] ++ bracket (map show as) ++ ["  " ++ showsPrec 11 s ""]
+    show (DLScript as) =
+        unlines $ ["DLScript"] ++ bracket (map show as)
+
+bracket :: [String] -> [String]
+bracket []  = ["  []"]
+bracket [s] = ["  [" ++ s ++ "]"]
+bracket (first:rest) = ["  ["++first++", "] ++
+                       map (("   "++).(++", ")) (init rest) ++
+                       ["   " ++ last rest ++ "]"]
+
+data TestStep s = Do (Action s)
+                | forall a. (Eq a, Show a, Typeable a) => Witness a
+
+instance ContractModel s => Show (TestStep s) where
+  show (Do act)    = "Do $ "++show act
+  show (Witness a) = "Witness ("++show a++" :: "++show (typeOf a)++")"
+
+toDLTest (BadPrecondition steps acts s) =
+  DL.BadPrecondition (toDLTestSteps steps) (map (Some . ContractAction) acts) (dummyModelState s)
+toDLTest (Looping steps) =
+  DL.Looping (toDLTestSteps steps)
+toDLTest (Stuck steps s) =
+  DL.Stuck (toDLTestSteps steps) (dummyModelState s)
+toDLTest (DLScript steps) =
+  DL.DLScript (toDLTestSteps steps)
+
+toDLTestSteps steps = map toDLTestStep steps
+
+toDLTestStep (Do act)    = DL.Do $ StateModel.Var 0 StateModel.:= ContractAction act
+toDLTestStep (Witness a) = DL.Witness a
+
+fromDLTest (DL.BadPrecondition steps acts s) =
+  BadPrecondition (fromDLTestSteps steps) [act | Some (ContractAction act) <- acts] (_contractState s)
+fromDLTest (DL.Looping steps) =
+  Looping (fromDLTestSteps steps)
+fromDLTest (DL.Stuck steps s) =
+  Stuck (fromDLTestSteps steps) (_contractState s)
+fromDLTest (DL.DLScript steps) =
+  DLScript (fromDLTestSteps steps)
+
+fromDLTestSteps steps = map fromDLTestStep steps
+
+fromDLTestStep :: DL.TestStep (ModelState state) -> TestStep state
+fromDLTestStep (DL.Do (_ := ContractAction act)) = Do act
+fromDLTestStep (DL.Witness a)                    = Witness a
+
 -- $dynamicLogic
 --
 -- Test scenarios are described in the `DL` monad (based on dynamic logic) which lets you freely mix
@@ -703,7 +791,7 @@ assertModel = DL.assertModel
 --   quickly. Once this property passes a large number of tests, you can run the full property
 --   checking that the model agrees with reality.
 forAllDL :: (ContractModel state, Testable p) => DL state () -> (Script state -> p) -> Property
-forAllDL = DL.forAllDL
+forAllDL dl prop = DL.forAllMappedDL toDLTest fromDLTest fromStateModelScript dl prop
 
 instance ContractModel s => DL.DynLogicModel (ModelState s) where
     restricted (ContractAction act) = restricted act
@@ -817,7 +905,7 @@ propRunScriptWithOptions ::
     -> (ModelState state -> TracePredicate)  -- ^ Predicate to check at the end
     -> Script state                          -- ^ The script to run
     -> Property
-propRunScriptWithOptions opts handleSpecs predicate script =
+propRunScriptWithOptions opts handleSpecs predicate script' =
     monadic (flip State.evalState mempty) $ finalChecks opts finalPredicate $ do
         QC.run $ getHandles $ activateWallets handleSpecs
         let initState = StateModel.initialState { _lastSlot = opts ^. maxSlot }
@@ -825,6 +913,7 @@ propRunScriptWithOptions opts handleSpecs predicate script =
     where
         finalState     = stateAfter script
         finalPredicate = predicate finalState .&&. checkBalances finalState
+        script         = toStateModelScript script'
 
 checkBalances :: ModelState state -> TracePredicate
 checkBalances s = Map.foldrWithKey (\ w val p -> walletFundsChange w val .&&. p) (pure True) (s ^. balances)

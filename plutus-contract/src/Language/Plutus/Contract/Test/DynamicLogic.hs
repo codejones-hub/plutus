@@ -13,7 +13,7 @@ module Language.Plutus.Contract.Test.DynamicLogic
     , DynLogicModel(..), DynLogicTest(..), TestStep(..)
     , ignore, passTest, afterAny, after, (|||), forAllQ, weight, toStop
     , done, errorDL, monitorDL, always
-    , forAllScripts, withDLScript
+    , forAllScripts, withDLScript, forAllMappedScripts
     , propPruningGeneratedScriptIsNoop
     ) where
 
@@ -86,7 +86,7 @@ always p s   = Stopping (p s) ||| Weight 0.1 (p s) ||| AfterAny (always p)
 
 data DynLogicTest s = BadPrecondition [TestStep s] [Any (Action s)] s
                     | Looping [TestStep s]
-                    | Stuck [TestStep s] s
+                    | Stuck   [TestStep s] s
                     | DLScript [TestStep s]
 
 data TestStep s = Do (Step s)
@@ -139,6 +139,13 @@ forAllScripts :: (DynLogicModel s, Testable a) =>
 forAllScripts d k =
     forAllShrink (sized $ generateDLTest d) (shrinkDLTest d) $
         withDLScript d k
+
+forAllMappedScripts ::
+  (DynLogicModel s, Testable a, Show rep) =>
+    (rep -> DynLogicTest s) -> (DynLogicTest s -> rep) -> DynLogic s -> (Script s -> a) -> Property
+forAllMappedScripts to from d k =
+    forAllShrink (sized $ (from<$>) . generateDLTest d) ((from<$>) . shrinkDLTest d . to) $
+        withDLScript d k . to
 
 withDLScript :: (DynLogicModel s, Testable a) => DynLogic s -> (Script s -> a) -> DynLogicTest s -> Property
 withDLScript d k test =

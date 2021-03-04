@@ -13,6 +13,7 @@ module Language.Plutus.Contract.Test.DynamicLogic.Monad
     , monitorDL
     , forAllQ
     , forAllDL
+    , forAllMappedDL
     , withDLTest
     , DL.DynLogic
     , DL.DynLogicModel(..)
@@ -102,6 +103,13 @@ runDL s dl = unDL dl s $ \ _ _ -> DL.passTest
 forAllDL :: (DL.DynLogicModel s, Testable a) =>
             DL s () -> (Script s -> a) -> Property
 forAllDL d prop = DL.forAllScripts (runDL initialState d) prop
+
+forAllMappedDL ::
+  (DL.DynLogicModel s, Testable a, Show rep) =>
+    (rep -> DL.DynLogicTest s) -> (DL.DynLogicTest s -> rep) -> (Script s -> srep)
+      -> DL s () -> (srep -> a) -> Property
+forAllMappedDL to from fromScript d prop =
+  DL.forAllMappedScripts to from (runDL initialState d) (prop . fromScript)
 
 withDLTest :: (DL.DynLogicModel s, Testable a) => DL s () -> (Script s -> a) -> DL.DynLogicTest s -> Property
 withDLTest d prop test = DL.withDLScript (runDL initialState d) prop test
