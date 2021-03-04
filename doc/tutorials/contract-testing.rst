@@ -31,7 +31,7 @@ example here_. The game is played as follows:
    contains enough Ada, then the guesser receives the withdrawal and
    the remainder of the prize is now protected by the new password. If
    the guess is wrong, the transaction is not accepted, and nothing
-   changes. 
+   changes.
 
 As an extra wrinkle, when the first player creates the contract, a new
 token is also forged. Only the player currently holding the token is
@@ -117,7 +117,7 @@ script managing game tokens has the hash
 f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da. A little
 confusingly, the Ada token name is displayed as an empty string, as is
 the hash of the corresponding monetary policy.
-                 
+
 Introducing contract models
 ---------------------------
 
@@ -132,7 +132,7 @@ contract modelling library
 and define the model type:
 
 .. code-block:: haskell
-                
+
    data GameModel = GameModel
 
 This definition is incomplete: we shall fill in further details as we proceed.
@@ -192,20 +192,20 @@ test several contracts together with one contract model.
 Of course, trying to test this property will not yet succeed:
 
 .. code-block:: text
-                
+
   > quickCheck prop_Game
   *** Failed! (after 1 test and 1 shrink):
   Exception:
     GSM.hs:65:10-32: No instance nor default method for class operation arbitraryAction
-                 
+
 The contract modelling library cannot generate test cases, unless *we*
 specify how to generate Action_, which we will do next.
-    
-.. _ContractModel: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:ContractModel
+
+.. _ContractModel: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ContractModel
 
 .. _propRunScript_: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:propRunScript_
 
-.. _HandleSpec: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:HandleSpec
+.. _HandleSpec: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:HandleSpec
 
 Generating actions
 ------------------
@@ -256,13 +256,13 @@ With this method defined, we can start to generate test cases. Using
 We can even run 'tests' now, although they don't do much yet:
 
 .. code-block:: text
-                
+
   > quickCheck prop_Game
   +++ OK, passed 100 tests:
   84% contains Lock
   80% contains GiveToken
   79% contains Guess
-  
+
   Actions (2263 in total):
   33.94% Lock
   33.89% Guess
@@ -355,7 +355,7 @@ stored password, game value, and wallet contents appropriately. (Here
 
 
 .. code-block:: haskell
-                
+
     nextState (Guess w old new val) = do
         correctGuess <- (old ==)    <$> viewContractState currentSecret
         holdsToken   <- (Just w ==) <$> viewContractState hasToken
@@ -382,7 +382,7 @@ We can exercise the nextState_ function already by generating and
 the real contract. Doing so immediately reveals a problem:
 
 .. code-block:: text
-                
+
   > quickCheck prop_Game
   *** Failed! (after 1 test):
   Exception:
@@ -416,7 +416,7 @@ To introduce preconditions, we add a definition of the precondition_
 method to our ContractModel_ instance.
 
 .. code-block:: haskell
-                
+
    precondition :: ModelState state -> Action state -> Bool
 
 The precondition_ is parameterised on the entire model state, which
@@ -435,7 +435,7 @@ the token exists:
 Now if we try to run tests, something more interesting happens:
 
 .. code-block:: text
-                
+
   > quickCheck prop_Game
   *** Failed! Falsified (after 5 tests and 2 shrinks):
   Script
@@ -456,7 +456,7 @@ Now if we try to run tests, something more interesting happens:
 The test has failed, of course. The generated (and simplified) test case only performs one action:
 
 .. code-block:: text
-                
+
   Script
    [Var 1 := Lock (Wallet {getWallet = 2}) "hello" 0]
 
@@ -465,7 +465,7 @@ Ada. Inspecting the error message, we can see that wallet 2 ended up
 with the wrong contents:
 
 .. code-block:: text
-                
+
   Expected funds of W2 to change by Value {getValue = Map {unMap = [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
   but they changed by
   Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}}
@@ -497,11 +497,11 @@ did above, did not invoke the contract at all. To do so, we must import the emul
 .. literalinclude:: GameModel.hs
    :start-after: START_IMPORTEMULATOR
    :end-before:  END_IMPORTEMULATOR
-         
+
 Then we define the perform_ method of the ContractModel_ class:
 
 .. code-block:: haskell
-                
+
   perform :: HandleFun state
              -> ModelState state
              -> Action state
@@ -513,7 +513,7 @@ transfer the game token from one wallet to another as specified by
 ``GiveToken`` actions.
 
 .. code-block:: haskell
-                
+
     perform handle s cmd = case cmd of
         Lock w new val -> do
             callEndpoint @"lock" (handle $ WalletKey w)
@@ -533,7 +533,7 @@ Every call to an end-point must be associated with one of the contract
 handles defined in our ``handleSpec``; the ``handle`` argument to
 perform_ lets us find the contract handle associated with each
 HandleKey_.
-            
+
 For the most part, it is good practice to keep the perform_ function
 simple: a direct relationship between actions in a test case and calls
 to contract endpoints makes interpreting test failures much easier.
