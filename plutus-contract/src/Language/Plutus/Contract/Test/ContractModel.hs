@@ -197,6 +197,7 @@ data ModelState state = ModelState
         , _contractState :: state
         }
 
+dummyModelState :: state -> ModelState state
 dummyModelState s = ModelState 0 0 Map.empty mempty s
 
 instance Show state => Show (ModelState state) where
@@ -532,12 +533,14 @@ instance ContractModel s => Arbitrary (Script s) where
   arbitrary = fromStateModelScript <$> arbitrary
   shrink = map fromStateModelScript . shrink . toStateModelScript
 
+toStateModelScript :: ContractModel state =>
+                        Script state -> StateModel.Script (ModelState state)
 toStateModelScript (Script s) =
   StateModel.Script [ Var i := ContractAction act | (i,act) <- zip [1..] s ]
 
 fromStateModelScript :: StateModel.Script (ModelState s) -> Script s
 fromStateModelScript (StateModel.Script s) =
-  Script [act | Var i := ContractAction act <- s]
+  Script [act | Var _i := ContractAction act <- s]
 
 data DynLogicTest s =
     BadPrecondition [TestStep s] [Action s] s
@@ -572,6 +575,8 @@ instance ContractModel s => Show (TestStep s) where
   show (Do act)    = "Do $ "++show act
   show (Witness a) = "Witness ("++show a++" :: "++show (typeOf a)++")"
 
+toDLTest :: ContractModel state =>
+              DynLogicTest state -> DL.DynLogicTest (ModelState state)
 toDLTest (BadPrecondition steps acts s) =
   DL.BadPrecondition (toDLTestSteps steps) (map (Some . ContractAction) acts) (dummyModelState s)
 toDLTest (Looping steps) =
@@ -581,11 +586,16 @@ toDLTest (Stuck steps s) =
 toDLTest (DLScript steps) =
   DL.DLScript (toDLTestSteps steps)
 
+toDLTestSteps :: ContractModel state =>
+                   [TestStep state] -> [DL.TestStep (ModelState state)]
 toDLTestSteps steps = map toDLTestStep steps
 
+toDLTestStep :: ContractModel state =>
+                  TestStep state -> DL.TestStep (ModelState state)
 toDLTestStep (Do act)    = DL.Do $ StateModel.Var 0 StateModel.:= ContractAction act
 toDLTestStep (Witness a) = DL.Witness a
 
+fromDLTest :: DL.DynLogicTest (ModelState s) -> DynLogicTest s
 fromDLTest (DL.BadPrecondition steps acts s) =
   BadPrecondition (fromDLTestSteps steps) [act | Some (ContractAction act) <- acts] (_contractState s)
 fromDLTest (DL.Looping steps) =
@@ -595,6 +605,7 @@ fromDLTest (DL.Stuck steps s) =
 fromDLTest (DL.DLScript steps) =
   DLScript (fromDLTestSteps steps)
 
+fromDLTestSteps :: [DL.TestStep (ModelState state)] -> [TestStep state]
 fromDLTestSteps steps = map fromDLTestStep steps
 
 fromDLTestStep :: DL.TestStep (ModelState state) -> TestStep state

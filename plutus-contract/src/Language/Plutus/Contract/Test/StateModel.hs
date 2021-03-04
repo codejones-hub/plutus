@@ -169,7 +169,6 @@ runScriptInState state (Script script) = loop state [] script
       ret <- run (perform s act (lookUpVar env))
       let name = actionName act
       monitor (tabulate "Actions" [name])
-      monitor (counterexample ("Var "++show n++" := "++show act++" --> "++show ret))
       let s'   = nextState s act (Var n)
           env' = (Var n :== ret):env
       monitor (monitoring (s,s') act (lookUpVar env') ret)
