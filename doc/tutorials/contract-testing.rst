@@ -20,9 +20,8 @@ example here_. The game is played as follows:
 
 .. _here: http://no.it.isnt/
 
- - The first player creates an instance of the contract, holding a sum
-   of Ada that the player donates as a prize. The prize is protected
-   by a secret password.
+ - The first player locks a sum of Ada in the contract, which is
+   donated as a prize. The prize is protected by a secret password.
 
  - Any player can now try to guess the password, by submitting a
    'guess' transaction that attempts to withdraw some or all of the
@@ -33,7 +32,7 @@ example here_. The game is played as follows:
    the guess is wrong, the transaction is not accepted, and nothing
    changes.
 
-As an extra wrinkle, when the first player creates the contract, a new
+As an extra wrinkle, when the first player locks the prize, a new
 token is also forged. Only the player currently holding the token is
 allowed to make a guess--which gives us an opportunity to illustrate
 forging and passing around tokens.
@@ -87,14 +86,12 @@ we can define it as follows, applying a monetary policy defined in the code unde
    :start-after:  START_GAMETOKEN
    :end-before:   END_GAMETOKEN
 
-The value of the token is (with a little extra formatting):
+The value of the token is (with long hash values abbreviated):
 
 .. code-block:: text
 
   > gameTokenVal
-  Value {getValue = Map {unMap =
-    [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,
-      Map {unMap = [(guess,1)]})]}}
+  Value {getValue = Map {unMap = [(f687...,Map {unMap = [(guess,1)]})]}}
 
 We can even construct a ``Value`` containing an Ada and a game token:
 
@@ -102,10 +99,8 @@ We can even construct a ``Value`` containing an Ada and a game token:
 
   > Ada.lovelaceValueOf 1 <> gameTokenVal
   Value {getValue = Map {unMap =
-    [(,
-      Map {unMap = [(,1)]}),
-     (f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,
-      Map {unMap = [(guess,1)]})]}}
+    [(,Map {unMap = [(,1)]}),
+     (f687...,Map {unMap = [(guess,1)]})]}}
 
 If you inspect the output closely, you will see that a ``Value``
 contains maps nested within another ``Map``. The outer ``Map`` is
@@ -113,10 +108,9 @@ indexed by hashes of monetary policy scripts, so each inner ``Map``
 contains a bag of tokens managed by the same policy. Token names can
 be chosen freely, and each policy can manage any number of its own
 token types. In this case the game token is called a "guess", and the
-script managing game tokens has the hash
-f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da. A little
-confusingly, the Ada token name is displayed as an empty string, as is
-the hash of the corresponding monetary policy.
+script managing game tokens has the hash f687... A little confusingly,
+the Ada token name is displayed as an empty string, as is the hash of
+the corresponding monetary policy.
 
 Introducing contract models
 ---------------------------
@@ -147,8 +141,8 @@ class, which has an associated datatype defining the kinds of
 
 In this case we define three actions:
 
- - a ``Lock`` action to be performed by the first player to create the
-   contract, containing the player's wallet (from which the Ada will
+ - a ``Lock`` action to be performed by the first player when starting
+   the game, containing the player's wallet (from which the Ada will
    be taken), the secret password, and the prize amount.
  - a ``Guess`` action to be performed by the other players, containing
    the player's wallet (to receive the prize), the player's guess, a
@@ -165,10 +159,11 @@ sequence of Action_. We can run tests by using `propRunScript_`_:
 
 When we test this property, ``quickCheck`` will generated random
 scripts to be tested. But what is the ``handleSpec``?
-`propRunScript_`_ needs to know which contract handles it should create
-for use in this test, and the ``handleSpec`` tells it. Every handle is
-*named* by a HandleKey_, which is another datatype associated with
-the ContractModel_ class. It needs to be defined as a GADT, because it
+`propRunScript_`_ needs to know which contract instances it should
+create for use in this test, and the ``handleSpec`` tells it. Every
+contract instance runs in an emulated wallet, and is identified by a
+HandleKey_, which is another datatype associated with the
+ContractModel_ class. It needs to be defined as a GADT, because it
 also defines the types of the associated contract schema and contract
 errors:
 
@@ -176,20 +171,23 @@ errors:
     :start-after: START_HANDLE_KEY
     :end-before: END_HANDLE_KEY
 
-***I don't really understand this. Ulf, can you explain here what the
-handle key is, and why it contains a wallet? ***
-
-Once the type of ``HandleKey`` is defined, we can construct our
+Once the type of HandleKey_ is defined, we can construct our
 HandleSpec_:
 
 .. literalinclude:: GameModel.hs
     :start-after: START_HANDLE_SPEC
     :end-before: END_HANDLE_SPEC
 
-Here ``G.contract`` is the contract under test. Notice that we can
-test several contracts together with one contract model.
+This specifies that we should create one contract instance per wallet,
+of ``G.contract``, the contract under test, identified by
+``HandleKeys`` of the form ``WalletKey w``. Notice that we could test
+several different contracts together with one contract model, and we
+could run several contracts in each emulated wallet, in which case the
+``HandleKeys`` would have to distinguish them. In this case, there is
+one contract instance running in each wallet, and so the wallet itself
+is enough to uniquely identify a contract instance.
 
-Of course, trying to test this property will not yet succeed:
+Now we can run tests, although of course they will not yet succeed:
 
 .. code-block:: text
 
@@ -239,19 +237,14 @@ With this method defined, we can start to generate test cases. Using
 
   > sample (arbitrary :: Gen (Script GameModel))
   Script
-    [Var 1 := Lock (Wallet {getWallet = 2}) "hunter2" 5,
-     Var 2 := Guess (Wallet {getWallet = 3}) "*******" "hello" 6,
-     Var 3 := Guess (Wallet {getWallet = 1}) "secret" "*******" 10,
-     Var 4 := Guess (Wallet {getWallet = 3}) "*******" "*******" 6,
-     Var 5 := GiveToken (Wallet {getWallet = 3}),
-     Var 6 := Guess (Wallet {getWallet = 2}) "hunter2" "hunter2" 15]
+    [Lock (Wallet {getWallet = 2}) "hunter2" 5,
+     Guess (Wallet {getWallet = 3}) "*******" "hello" 6,
+     Guess (Wallet {getWallet = 1}) "secret" "*******" 10,
+     Guess (Wallet {getWallet = 3}) "*******" "*******" 6,
+     GiveToken (Wallet {getWallet = 3}),
+     Guess (Wallet {getWallet = 2}) "hunter2" "hunter2" 15]
   .
   .
-
-(The ``Var 1``-to-``Var 6`` here are 'variables' bound to the result of each call--in this case, nothing interesting).
-
-***Will the variables be useful at any point in the future? If not, they just look a distraction, and maybe we should remove them.***
-
 
 We can even run 'tests' now, although they don't do much yet:
 
@@ -259,25 +252,18 @@ We can even run 'tests' now, although they don't do much yet:
 
   > quickCheck prop_Game
   +++ OK, passed 100 tests:
-  84% contains Lock
-  80% contains GiveToken
-  79% contains Guess
 
   Actions (2263 in total):
   33.94% Lock
   33.89% Guess
   32.17% GiveToken
 
-Notice that the output contains two tables. The first one just tells
-us that 84 of the 100 generated test sequences contained a ``Lock``,
-80 contained a ``GiveToken`` and so on. **Maybe we should remove the first table. It's rarely interesting.** The second is more
-interesting: it tells us the distribution of generated Actions,
-aggregated across all the tests. We can see that each action was
-generated around one third of the time, which is to be expected since
-our generator does not weight them at all. Keep an eye on this table
-as we extend our generation; if any Action_ disappears altogether,
-or is generated very rarely, then this indicates a problem in our
-tests.
+The output tells us the distribution of generated Actions, aggregated
+across all the tests. We can see that each action was generated around
+one third of the time, which is to be expected since our generator
+does not weight them at all. Keep an eye on this table as we extend
+our generation; if any Action_ disappears altogether, or is generated
+very rarely, then this indicates a problem in our tests.
 
 Modelling expectations
 ----------------------
@@ -384,18 +370,18 @@ the real contract. Doing so immediately reveals a problem:
 .. code-block:: text
 
   > quickCheck prop_Game
-  *** Failed! (after 1 test):
+  *** Failed! (after 3 tests and 3 shrinks):
   Exception:
     Maybe.fromJust: Nothing
     CallStack (from HasCallStack):
       error, called at libraries/base/Data/Maybe.hs:148:21 in base:Data.Maybe
       fromJust, called at GSM0.hs:122:15 in main:GSM0
   Script
-   [Var 1 := GiveToken (Wallet {getWallet = 2})]
+   [GiveToken (Wallet {getWallet = 1})]
 
 Looking at the last two lines, we see the generated test script, and
 the problem is evident: we generated a test *that only gives the game
-token* to wallet 2, but this makes no sense because the game token has
+token* to wallet 1, but this makes no sense because the game token has
 not yet been forged--so the ``fromJust`` in the nextState_ function
 fails. We will see how to prevent this in the next section.
 
@@ -437,15 +423,15 @@ Now if we try to run tests, something more interesting happens:
 .. code-block:: text
 
   > quickCheck prop_Game
-  *** Failed! Falsified (after 5 tests and 2 shrinks):
+  *** Failed! Assertion failed (after 2 tests):
   Script
-   [Var 1 := Lock (Wallet {getWallet = 2}) "hello" 0]
-  Expected funds of W2 to change by Value {getValue = Map {unMap = [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
+   [Lock (Wallet {getWallet = 1}) "hello" 0]
+  Expected funds of W1 to change by Value {getValue = Map {unMap = [(f687...,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
   but they changed by
   Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}}
   Test failed.
   Emulator log:
-  [INFO] Slot 1: TxnValidate 4febabe136e65d5fb4683b378570e6f43f92056e489281ad2e6302a9fa127874
+  [INFO] Slot 1: TxnValidate 4feb...
   [INFO] Slot 1: 00000000-0000-4000-8000-000000000000 {Contract instance for wallet 1}:
                    Contract instance started
   [INFO] Slot 1: 00000000-0000-4000-8000-000000000001 {Contract instance for wallet 2}:
@@ -458,34 +444,30 @@ The test has failed, of course. The generated (and simplified) test case only pe
 .. code-block:: text
 
   Script
-   [Var 1 := Lock (Wallet {getWallet = 2}) "hello" 0]
+   [Lock (Wallet {getWallet = 1}) "hello" 0]
 
-Wallet 2 attempts to create a game contract guarding zero
-Ada. Inspecting the error message, we can see that wallet 2 ended up
+Wallet 1 attempts to create a game contract guarding zero
+Ada. Inspecting the error message, we can see that wallet 1 ended up
 with the wrong contents:
 
 .. code-block:: text
 
-  Expected funds of W2 to change by Value {getValue = Map {unMap = [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
+  Expected funds of W1 to change by Value {getValue = Map {unMap =
+    [(f687...,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
   but they changed by
   Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}}
 
-Our model predicted that wallet 2 would end up containing the game
+Our model predicted that wallet 1 would end up containing the game
 token, but in fact its contents were unchanged.
 
 In this test, we have actually performed actions on the emulated
 blockchain, as the emulator log shows us: one transaction has been
 validated, and we have started three contract instances (one for each
 wallet in the test). But we have *not* created a game token for wallet
-2, because thus far we have not defined how actions in a test should
+1, because thus far we have not defined how actions in a test should
 be performed--so the ``Lock`` action in the test case behaves as a
-no-op, which of course does not deposit a game token in wallet 2. It
+no-op, which of course does not deposit a game token in wallet 1. It
 is time to link actions in a test to the emulator.
-
-*** In what sense have we created three contract instances? That is
-what the emulator output says, but surely there is only one contract
-instance, with three handles to it? Why do we need a separate handle
-for each wallet, anyway? I am missing something here. ***
    
 Performing actions
 ------------------
@@ -631,8 +613,8 @@ the tests or the contract to resolve the inconsistencies revealed. Testing ``pro
     > quickCheck prop_Game
     *** Failed! Falsified (after 6 tests and 3 shrinks):
     Script
-     [Var 1 := Lock (Wallet {getWallet = 1}) "hunter2" 0]
-    Expected funds of W1 to change by Value {getValue = Map {unMap = [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
+     [Lock (Wallet {getWallet = 1}) "hunter2" 0]
+    Expected funds of W1 to change by Value {getValue = Map {unMap = [(f687...,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
     but they changed by
     Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}}
     Test failed.
@@ -641,10 +623,11 @@ the tests or the contract to resolve the inconsistencies revealed. Testing ``pro
 
 In this test, wallet 1 attempts to lock zero Ada, and our model predicts
 that wallet 1 should receive a game token--but this did not
-happen. To understand why, we need to study the emulator log. Here are the relevant parts (with some ellipses, for long hashes in particular):
+happen. To understand why, we need to study the emulator log. Here are the relevant parts:
 
  .. code-block:: text
 
+    ...
     [INFO] Slot 1: 00000000-0000-4000-8000-000000000000 {Contract instance for wallet 1}:
                      Receive endpoint call: Object (fromList [("tag",String "lock"),...
     [INFO] Slot 1: W1: Balancing an unbalanced transaction:
@@ -675,9 +658,9 @@ Here we see the endpoint call to ``lock`` being received during slot
 pays zero Ada to the contract script. The transaction is balanced,
 submitted, and validated by the emulator at slot 2. Then another
 transaction, ``1eba...``, is created, which forges the game
-token. This transaction is in turn balanced and submitted without
-error--but although no errors are reported, *this transaction is not
-validated*.
+token. This transaction is in turn balanced (resulting in a new hash,
+``2d66...``), and submitted without error--but although no errors are
+reported, *this transaction is not validated*.
 
 *** I just noticed that the transaction being submitted in slot 2 is NOT the one that was previously balanced! What is going on? Did balancing it change its hash or something? ***
 
