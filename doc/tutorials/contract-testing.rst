@@ -21,14 +21,14 @@ example here_. The game is played as follows:
 .. _here: http://no.it.isnt/
 
  - The first player creates an instance of the contract, holding a sum
-   of ADA that the player donates as a prize. The prize is protected
+   of Ada that the player donates as a prize. The prize is protected
    by a secret password.
 
  - Any player can now try to guess the password, by submitting a
    'guess' transaction that attempts to withdraw some or all of the
    prize, along with a guess at the password, and a new password to
    replace the old one. If the guess is correct, and the contract
-   contains enough ADA, then the guesser receives the withdrawal and
+   contains enough Ada, then the guesser receives the withdrawal and
    the remainder of the prize is now protected by the new password. If
    the guess is wrong, the transaction is not accepted, and nothing
    changes. 
@@ -60,15 +60,15 @@ Values and tokens
 -----------------
 
 Wallets contain 'values', which are mixtures of different quantities
-of one or more types of token. The most common token is, of course, the ADA;
-we can import functions manipulating ADA, and the ``Value`` type
+of one or more types of token. The most common token is, of course, the Ada;
+we can import functions manipulating Ada, and the ``Value`` type
 itself, as follows:
 
 .. literalinclude:: GameModel.hs
    :start-after: START_ADAIMPORTS
    :end-before:  END_ADAIMPORTS
 
-With these imports, we can construct values in the ADA currency:
+With these imports, we can construct values in the Ada currency:
 
 .. code-block:: text
 
@@ -96,7 +96,7 @@ The value of the token is (with a little extra formatting):
     [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,
       Map {unMap = [(guess,1)]})]}}
 
-We can even construct a ``Value`` containing an ADA and a game token:
+We can even construct a ``Value`` containing an Ada and a game token:
 
 .. code-block:: text
 
@@ -115,7 +115,7 @@ be chosen freely, and each policy can manage any number of its own
 token types. In this case the game token is called a "guess", and the
 script managing game tokens has the hash
 f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da. A little
-confusingly, the ADA token name is displayed as an empty string, as is
+confusingly, the Ada token name is displayed as an empty string, as is
 the hash of the corresponding monetary policy.
                  
 Introducing contract models
@@ -148,7 +148,7 @@ class, which has an associated datatype defining the kinds of
 In this case we define three actions:
 
  - a ``Lock`` action to be performed by the first player to create the
-   contract, containing the player's wallet (from which the ADA will
+   contract, containing the player's wallet (from which the Ada will
    be taken), the secret password, and the prize amount.
  - a ``Guess`` action to be performed by the other players, containing
    the player's wallet (to receive the prize), the player's guess, a
@@ -211,7 +211,7 @@ Generating actions
 ------------------
 
 To generate actions, we need to be able to generate wallets, guesses,
-and suitable values of ADA, since these appear as action parameters.
+and suitable values of Ada, since these appear as action parameters.
 
 .. literalinclude:: GameModel.hs
     :start-after: START_GENERATORS
@@ -219,7 +219,7 @@ and suitable values of ADA, since these appear as action parameters.
 
 We choose wallets from the three available, and we choose passwords
 from a small set, so that random guesses will often be
-correct. We choose ADA amounts to be non-negative integers, because
+correct. We choose Ada amounts to be non-negative integers, because
 negative amounts would be error cases that we choose not to test.
 
 *** Is this really a good idea? Will a player who accidentally tries
@@ -248,7 +248,9 @@ With this method defined, we can start to generate test cases. Using
   .
   .
 
-(The ``Var 1``-to-``Var 6`` here are 'variables' bound to the result of each call--in this case, nothing interesting). *Will the variables be useful at any point in the future? If not, they just look a distraction, and maybe we should remove them.*
+(The ``Var 1``-to-``Var 6`` here are 'variables' bound to the result of each call--in this case, nothing interesting).
+
+***Will the variables be useful at any point in the future? If not, they just look a distraction, and maybe we should remove them.***
 
 
 We can even run 'tests' now, although they don't do much yet:
@@ -282,11 +284,11 @@ Modelling expectations
 
 The ultimate purpose of our tests is to check that funds are
 transferred correctly by each operation--for example, that after a
-guess, the guesser receives the requested ADA only if the guess was
+guess, the guesser receives the requested Ada only if the guess was
 correct. An important part of a ContractModel_ defines how funds
 are expected to move. However, it's clear that in order to define how
 we expect funds to move after a ``Guess``, we need to know more than
-just where all the ADA are. We need to know:
+just where all the Ada are. We need to know:
 
 - what the current secret password is, so we can decide whether or
   not the guess is correct.
@@ -294,7 +296,7 @@ just where all the ADA are. We need to know:
 - whether or not the guesser currently holds the game token, and so is
   entitled to make a guess.
 
-- how much ADA is currently locked in the contract, so we can
+- how much Ada is currently locked in the contract, so we can
   determine whether the guesser is requesting funds that actually
   exist.
 
@@ -333,7 +335,7 @@ and defines the expected effect of each operation.
 
 Creating the contract initializes the model state (using `($=)`_
 and generated ``Lens`` operations), forges the game token (using
-forge_), deposits it in the creator's wallet, and withdraws the ADA
+forge_), deposits it in the creator's wallet, and withdraws the Ada
 locked in the contract (using deposit_ and withdraw_):
 
 .. code-block:: haskell
@@ -357,13 +359,13 @@ stored password, game value, and wallet contents appropriately. (Here
     nextState (Guess w old new val) = do
         correctGuess <- (old ==)    <$> viewContractState currentSecret
         holdsToken   <- (Just w ==) <$> viewContractState hasToken
-        enough       <- (>= val)    <$> viewContractState gameValue
-        when (correctGuess && holdsToken && enough) $ do
+        enoughAda    <- (val <=)    <$> viewContractState gameValue
+        when (correctGuess && holdsToken && enoughAda) $ do
             currentSecret $= new
             gameValue     $~ subtract val
             deposit w $ Ada.lovelaceValueOf val
 
- - ``GiveToken`` just transfers the game token from one wallet to another using transfer_.
+``GiveToken`` just transfers the game token from one wallet to another using transfer_.
 
 .. code-block:: haskell
 
@@ -459,7 +461,7 @@ The test has failed, of course. The generated (and simplified) test case only pe
    [Var 1 := Lock (Wallet {getWallet = 2}) "hello" 0]
 
 Wallet 2 attempts to create a game contract guarding zero
-ADA. Inspecting the error message, we can see that wallet 2 ended up
+Ada. Inspecting the error message, we can see that wallet 2 ended up
 with the wrong contents:
 
 .. code-block:: text
@@ -479,6 +481,11 @@ wallet in the test). But we have *not* created a game token for wallet
 be performed--so the ``Lock`` action in the test case behaves as a
 no-op, which of course does not deposit a game token in wallet 2. It
 is time to link actions in a test to the emulator.
+
+*** In what sense have we created three contract instances? That is
+what the emulator output says, but surely there is only one contract
+instance, with three handles to it? Why do we need a separate handle
+for each wallet, anyway? I am missing something here. ***
    
 Performing actions
 ------------------
@@ -534,7 +541,7 @@ to contract endpoints makes interpreting test failures much easier.
 Helping shrinking work better by choosing test case actions well
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In definition of perform_ above, the ``GiveToken`` action is a little
+In the definition of perform_ above, the ``GiveToken`` action is a little
 surprising: when we call the emulator, we have to specify not only the
 wallet to give the token *to*, but also the wallet to take the token
 *from*. So why did we choose to define a ``GiveToken w`` action to
@@ -555,7 +562,8 @@ sequence such as
 which transfers the game token in two steps from wallet 1 to
 wallet 3. Deleting either one of these steps means the game token will
 end up in the wrong place, probably causing the next steps in the test
-to behave very differently. But given the sequence
+to behave very differently (and thus, preventing this shrinking
+step). But given the sequence
 
 .. code-block:: text
 
@@ -566,6 +574,226 @@ the first ``GiveToken`` can be deleted without affecting the behaviour
 of the second at all. Thus, by making token-passing steps independent
 of each other, we make it easier for QuickCheck to shrink a failing
 test without drastic changes to its behaviour.
+
+Shrinking Actions
+-----------------
+
+Before starting to run tests seriously, it is useful to make sure that
+any failing tests will shrink well to small examples. By default, the
+contract modelling library tries to shrink tests by removing actions,
+but it cannot know how to shrink the actions themselves. We can
+specify this shrinking by defining the shrinkAction_ operation in the
+ContractModel_ class:
+
+.. code-block:: haskell
+
+  shrinkAction :: ModelState state -> Action state -> [Action state]
+
+This function returns a list of 'simpler' actions that should be tried
+as replacements for the given Action_, when QuickCheck is simplifying
+a failed test. In this case we define a shrinking function for wallets:
+
+.. code-block:: haskell
+
+   shrinkWallet :: Wallet -> [Wallet]
+   shrinkWallet w = [w' | w' <- wallets, w' < w]
+
+and shrink actions by shrinking the wallet and Ada parameters.
+
+.. code-block:: haskell
+
+    shrinkAction _s (Lock w secret val) =
+        [Lock w' secret val | w' <- shrinkWallet w] ++
+        [Lock w secret val' | val' <- shrink val]
+    shrinkAction _s (GiveToken w) =
+        [GiveToken w' | w' <- shrinkWallet w]
+    shrinkAction _s (Guess w old new val) =
+        [Guess w' old new val | w' <- shrinkWallet w] ++
+        [Guess w old new val' | val' <- shrink val]
+
+We choose to shrink an action either by shrinking a wallet parameter,
+or by shrinking the amount of Ada. We choose not to shrink
+password/guess parameters, because they are not really
+significant--one password is as good as another in a failed test.
+
+
+
+  
+Debugging the model
+-------------------
+
+At this point, the contract model is complete, and tests are
+runnable. However, they do not pass, and so we need to adapt either
+the tests or the contract to resolve the inconsistencies revealed. Testing ``prop_Game`` now results in:
+
+ .. code-block:: text
+
+    > quickCheck prop_Game
+    *** Failed! Falsified (after 6 tests and 3 shrinks):
+    Script
+     [Var 1 := Lock (Wallet {getWallet = 1}) "hunter2" 0]
+    Expected funds of W1 to change by Value {getValue = Map {unMap = [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
+    but they changed by
+    Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}}
+    Test failed.
+    Emulator log:
+    ... 49 lines of emulator log messages ...
+
+In this test, wallet 1 attempts to lock zero Ada, and our model predicts
+that wallet 1 should receive a game token--but this did not
+happen. To understand why, we need to study the emulator log. Here are the relevant parts (with some ellipses, for long hashes in particular):
+
+ .. code-block:: text
+
+    [INFO] Slot 1: 00000000-0000-4000-8000-000000000000 {Contract instance for wallet 1}:
+                     Receive endpoint call: Object (fromList [("tag",String "lock"),...
+    [INFO] Slot 1: W1: Balancing an unbalanced transaction:
+                         Tx:
+                           Tx 2542...:
+                             {inputs:
+                             outputs:
+                               - Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}} addressed to
+                                 ScriptAddress: d1e1...
+    ...
+    [INFO] Slot 1: W1: TxSubmit: 2542...
+    [INFO] Slot 2: TxnValidate 2542...
+    [INFO] Slot 2: W1: Balancing an unbalanced transaction:
+                         Tx:
+                           Tx 1eba...:
+                             {inputs:
+                                - 2542...!0
+                                  Redeemer: <>
+                             outputs:
+                               - Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}} addressed to
+                                 ScriptAddress: d1e1...
+                             forge: Value {getValue = Map {unMap = [(f687...,Map {unMap = [(guess,1)]})]}}
+    ...
+    [INFO] Slot 2: W1: TxSubmit: 2d66...
+
+Here we see the endpoint call to ``lock`` being received during slot
+1, resulting in an unbalanced transaction with ID ``2542...``, which
+pays zero Ada to the contract script. The transaction is balanced,
+submitted, and validated by the emulator at slot 2. Then another
+transaction, ``1eba...``, is created, which forges the game
+token. This transaction is in turn balanced and submitted without
+error--but although no errors are reported, *this transaction is not
+validated*.
+
+*** I just noticed that the transaction being submitted in slot 2 is NOT the one that was previously balanced! What is going on? Did balancing it change its hash or something? ***
+
+Since the transaction is submitted in slot 2, we would expect it to be
+validated in slot 3. In fact, the problem here is just that the test
+stopped too early, before the blockchain had validated this second
+transaction. The solution is to delay one slot after each action, to
+give the blockchain time to complete its validations:
+
+  .. code-block:: haskell
+                  
+    delay :: Int -> EmulatorTrace ()
+    delay n = void $ waitNSlots (fromIntegral n)
+
+We add a call to ``delay`` in each branch of perform_:
+
+  .. code-block:: haskell
+
+    perform handle s cmd = case cmd of
+        Lock w new val -> do
+            callEndpoint @"lock" (handle $ WalletKey w)
+                         LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
+            delay 1
+        Guess w old new val -> do
+            callEndpoint @"guess" (handle $ WalletKey w)
+                GuessArgs{ guessArgsOldSecret = old
+                         , guessArgsNewSecret = new
+                         , guessArgsValueTakenOut = Ada.lovelaceValueOf val}
+            delay 1
+        GiveToken w' -> do
+            let w = fromJust (s ^. contractState . hasToken)
+            payToWallet w w' gameTokenVal
+            delay 1
+
+We need to add corresponding calls to wait_ in the definition of
+nextState_ also, so that our contract model remains in step with the
+emulator.
+
+*** I would really like to suggest rerunning the failed test at this
+point, to check that this problem has been fixed. But copying and
+pasting the test case is not working... first of all, we have to
+import several modules into ghci to bring the constructors into
+scope. Secondly, there is a type error involving the Action type from
+StateModel, and the Action type from ContractModel. It's caused by
+the := constructor, which is expecting a StateModel Action, but being
+given a ContractModel Action. We'd better fix this.
+***
+
+*** Ulf's version of the code delays two slots after a lock. But why? How can one motivate that via debugging? If we just wait one step, then we get a totally bizarre error by doing a Lock followed by a GiveToken... which loses the token. Waiting two slots after a Lock seems to prevent that. But why? ***
+
+*** Trying to debug nextState, I tried to display states using monitoring (monitoring counterexample). That isn't generating any output! Why not? ***
+
+With these changes, tests fail for a different reason:
+
+  .. code-block:: text
+
+    > quickCheck prop_Game
+    *** Failed! Falsified (after 5 tests and 2 shrinks):
+    Script
+     [Var 1 := Lock (Wallet {getWallet = 1}) "hunter2" 0,
+      Var 2 := Lock (Wallet {getWallet = 1}) "hello" 0]
+    Expected funds of W1 to change by Value {getValue = Map {unMap = [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,Map {unMap = [(guess,2)]}),(,Map {unMap = [(,0)]})]}}
+    but they changed by
+    Value {getValue = Map {unMap = [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
+    Test failed.
+    Emulator log:
+    ... 73 lines of emulator log messages ...
+
+Looking at the failing test case,
+
+  .. code-block:: text
+
+    Script
+     [Var 1 := Lock (Wallet {getWallet = 1}) "hunter2" 0,
+      Var 2 := Lock (Wallet {getWallet = 1}) "hello" 0]
+
+we can see that it does something unexpected: wallet 1 tries to lock
+*twice*. Our model predicts that in this case *two* game tokens should
+be forged, and wallet 1 should possess both.  But the error message
+tells us that wallet 1 received only one game token, not two.
+
+The emulator log output can be rather overwhelming, but we can eliminate the 'INFO' messages by running the test script with appropriate options. If we define
+
+  .. code-block:: haskell
+     
+
+    import           Control.Monad.Freer.Log
+    
+    propGame' :: LogLevel -> Script GameModel -> Property
+    propGame' l s = propRunScriptWithOptions
+                        (set minLogLevel l defaultCheckOptions)
+                        handleSpec
+                        (\ _ -> pure True)
+                        s
+
+then we can re-run the test and see more succinct output:
+
+  .. code-block:: text
+
+    > quickCheck $ propGame' Warning
+    *** Failed! Falsified (after 7 tests and 4 shrinks):
+    Script
+     [Var 3 := Lock (Wallet {getWallet = 1}) "hello" 0,
+      Var 4 := Lock (Wallet {getWallet = 1}) "*******" 0]
+    Expected funds of W1 to change by Value {getValue = Map {unMap = [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,Map {unMap = [(guess,2)]}),(,Map {unMap = [(,0)]})]}}
+    but they changed by
+    Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]}),(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,Map {unMap = [(guess,1)]})]}}
+    Test failed.
+    Emulator log:
+    [WARNING] Slot 4: 00000000-0000-4000-8000-000000000000 {Contract instance for wallet 1}:
+                        Contract instance stopped with error: GameSMError (ChooserError "Found 2 outputs, expected 1")
+    
+Now we see the problem: an error in the game implementation that
+stopped the second contract call, because two outputs had been
+created.
+
 
 
 
@@ -596,6 +824,7 @@ Linking to the haddock docs: `arbitraryAction`_
     This is a note.
 
 .. _arbitraryAction: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:arbitraryAction
+.. _shrinkAction: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:shrinkAction
 .. _nextState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:nextState
 .. _initialState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:initialState
 .. _precondition: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:precondition
@@ -609,9 +838,12 @@ Linking to the haddock docs: `arbitraryAction`_
 .. _withdraw: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:withdraw
 .. _transfer: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:transfer
 .. _viewContractState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:viewContractState
+.. _wait: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:wait
 .. _Action: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:Action
 .. _HandleKey: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:HandleKey
 
 Questions to resolve
 --------------------
-What happens if we try to withdraw 0 ADA? What happens when the last ADA is withdrawn? Is it possible to delete the contract?
+What happens if we try to withdraw 0 Ada? What happens when the last Ada is withdrawn? Is it possible to delete the contract?
+
+    Script [Var 1 := Lock (Wallet {getWallet = 1}) "hunter2" 0]
