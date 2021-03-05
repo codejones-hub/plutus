@@ -112,5 +112,5 @@ forAllMappedDL to from fromScript d prop =
   DL.forAllMappedScripts to from (runDL initialState d) (prop . fromScript)
 
 withDLTest :: (DL.DynLogicModel s, Testable a) => DL s () -> (Script s -> a) -> DL.DynLogicTest s -> Property
-withDLTest d prop test = DL.withDLScript (runDL initialState d) prop test
+withDLTest d prop test = DL.withDLScriptPrefix (runDL initialState d) prop test
 
