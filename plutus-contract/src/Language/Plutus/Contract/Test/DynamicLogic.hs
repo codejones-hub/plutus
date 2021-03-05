@@ -13,7 +13,7 @@ module Language.Plutus.Contract.Test.DynamicLogic
     , DynLogicModel(..), DynLogicTest(..), TestStep(..)
     , ignore, passTest, afterAny, after, (|||), forAllQ, weight, toStop
     , done, errorDL, monitorDL, always
-    , forAllScripts, withDLScript, forAllMappedScripts
+    , forAllScripts, withDLScript, withDLScriptPrefix, forAllMappedScripts
     , propPruningGeneratedScriptIsNoop
     ) where
 
@@ -150,6 +150,12 @@ forAllMappedScripts to from d k =
 withDLScript :: (DynLogicModel s, Testable a) => DynLogic s -> (Script s -> a) -> DynLogicTest s -> Property
 withDLScript d k test =
     validDLTest d test .&&. (applyMonitoring d test . property $ k (scriptFromDL test))
+
+withDLScriptPrefix :: (DynLogicModel s, Testable a) => DynLogic s -> (Script s -> a) -> DynLogicTest s -> Property
+withDLScriptPrefix d k test =
+    validDLTest d test' .&&. (applyMonitoring d test' . property $ k (scriptFromDL test'))
+    where
+        test' = unfailDLTest d test
 
 generateDLTest :: DynLogicModel s => DynLogic s -> Int -> Gen (DynLogicTest s)
 generateDLTest d size = generate d 0 (initialStateFor d) []
@@ -390,6 +396,17 @@ makeTestFromPruned d test = make d initialState test
             Stuck as s               -> Stuck (step:as) s
             DLScript as              -> DLScript (step:as)
             Looping{}                -> error "makeTestFromPruned: Looping"
+
+-- | If failed, return the prefix up to the failure. Also prunes the test in case the model has
+--   changed.
+unfailDLTest :: DynLogicModel s => DynLogic s -> DynLogicTest s -> DynLogicTest s
+unfailDLTest d test = makeTestFromPruned d $ pruneDLTest d as
+    where
+        as = case test of
+                BadPrecondition as _ _ -> as
+                Stuck as _             -> as
+                DLScript as            -> as
+                Looping as             -> as
 
 stuck :: DynLogicModel s => DynLogic s -> s -> Bool
 stuck EmptySpec    _ = True

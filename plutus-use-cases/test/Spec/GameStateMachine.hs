@@ -68,8 +68,8 @@ instance ContractModel GameModel where
 
     -- The commands available to a test case
     data Action GameModel = Lock      Wallet String Integer
-                           | Guess     Wallet String String Integer
-                           | GiveToken Wallet
+                          | Guess     Wallet String String Integer
+                          | GiveToken Wallet
         deriving (Eq, Show)
 
     initialState = GameModel
@@ -210,13 +210,13 @@ unitTestFail = do
 noLockedFunds :: DL GameModel ()
 noLockedFunds = do
     anyActions_
-    w <- forAllQ $ elementsQ wallets
+    w      <- forAllQ $ elementsQ wallets
     secret <- viewContractState currentSecret
     val    <- viewContractState gameValue
     when (val > 0) $ do
         monitor $ label "Unlocking funds"
         action $ GiveToken w
-        action $ Guess w "" secret val
+        action $ Guess w secret "" val
     assertModel "Locked funds should be zero" $ isZero . lockedValue
 
 -- | Check that we can always get the money out of the guessing game (by guessing correctly).
