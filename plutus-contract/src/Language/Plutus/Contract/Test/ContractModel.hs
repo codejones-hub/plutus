@@ -135,7 +135,8 @@ import           Language.PlutusTx.Monoid                            (inv)
 import           Ledger.Slot
 import           Ledger.Value                                        (Value)
 import           Plutus.Trace.Emulator                               as Trace (ContractHandle, EmulatorTrace,
-                                                                               activateContractWallet)
+                                                                               activateContractWallet,
+                                                                               walletInstanceTag)
 
 import           Test.QuickCheck                                     hiding ((.&&.))
 import           Test.QuickCheck.Monadic                             as QC (PropertyM, monadic)
@@ -906,8 +907,8 @@ propRunScript ::
 propRunScript = propRunScriptWithOptions defaultCheckOptions
 
 -- | Run a `Script` in the emulator and check that the model and the emulator agree on the final
---   wallet balances, and that the given `TracePredicate` holds at the end. The predicate has access
---   to the final model state.
+--   wallet balances, that no off-chain contract instance crashed, and that the given
+--   `TracePredicate` holds at the end. The predicate has access to the final model state.
 --
 --   The `HandleSpec` argument lists the contract instances that should be created for the wallets
 --   involved in the test. Before the script is run, contracts are activated using
@@ -949,8 +950,17 @@ propRunScriptWithOptions opts handleSpecs predicate script' =
     where
         finalState     = stateAfter script
         finalPredicate = predicate finalState .&&. checkBalances finalState
+                                              .&&. checkNoCrashes handleSpecs
         script         = toStateModelScript script'
 
 checkBalances :: ModelState state -> TracePredicate
 checkBalances s = Map.foldrWithKey (\ w val p -> walletFundsChange w val .&&. p) (pure True) (s ^. balances)
+
+checkNoCrashes :: [HandleSpec state] -> TracePredicate
+checkNoCrashes = foldr (\ (HandleSpec _ w c) -> (assertOutcome c (walletInstanceTag w) notError "Contract instance stopped with error" .&&.))
+                       (pure True)
+    where
+        notError Failed{}  = False
+        notError Done{}    = True
+        notError NotDone{} = True
 
