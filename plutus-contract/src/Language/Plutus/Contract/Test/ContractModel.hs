@@ -86,7 +86,7 @@ module Language.Plutus.Contract.Test.ContractModel
     -- * Properties
     --
     -- $runningProperties
-    , Script
+    , Script(..)
     -- ** Wallet contract handles
     --
     -- $walletHandles
@@ -99,6 +99,13 @@ module Language.Plutus.Contract.Test.ContractModel
     , propRunScriptWithOptions
     -- ** DL properties
     , forAllDL
+    -- ** Test cases
+    --
+    -- $testCases
+    , DynLogicTest(..)
+    , TestStep(..)
+    , ActOrError(..)
+    , withDLTest
     ) where
 
 import           Control.Lens
@@ -518,8 +525,12 @@ instance ContractModel state => StateModel (ModelState state) where
 -- We present a simplified view of test scripts, and DL scripts, so
 -- that users do not need to see the variables bound to results.
 
+-- $testCases
+--
+--
+
 -- | A `Script` is a list of `Action`s.
-data Script s = Script [Action s]
+newtype Script s = Script [Action s]
 
 instance ContractModel state => Show (Script state) where
   showsPrec d (Script as)
@@ -622,6 +633,9 @@ fromDLTestSteps steps = map fromDLTestStep steps
 fromDLTestStep :: DL.TestStep (ModelState state) -> TestStep state
 fromDLTestStep (DL.Do (_ := ContractAction act)) = Do act
 fromDLTestStep (DL.Witness a)                    = Witness a
+
+withDLTest :: (ContractModel state, Testable prop) => DL state () -> (Script state -> prop) -> DynLogicTest state -> Property
+withDLTest dl prop test = DL.withDLTest dl (prop . fromStateModelScript) (toDLTest test)
 
 -- $dynamicLogic
 --
@@ -836,7 +850,7 @@ instance GetModelState (DL state) where
 -- Once you have a `ContractModel` and some `DL` scenarios you need to turn these into QuickCheck
 -- properties that can be run by `quickCheck`. The functions `propRunScript_`, `propRunScript`, and
 -- `propRunScriptWithOptions` take a sequence of actions (a `Script`), runs it through the
--- blockchain emulator ("Plutus.Trace.Emulator") and checks that the model and the emulator agrees
+-- blockchain emulator ("Plutus.Trace.Emulator") and checks that the model and the emulator agree
 -- on who owns what tokens at the end.
 --
 -- To generate a `Script` you can use the `Arbitrary` instance, which generates a random sequence of
