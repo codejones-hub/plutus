@@ -654,21 +654,25 @@ happen. To understand why, we need to study the emulator log. Here are the relev
     [INFO] Slot 2: W1: TxSubmit: 2d66...
 
 Here we see the endpoint call to ``lock`` being received during slot
-1, resulting in an unbalanced transaction with ID ``2542...``, which
-pays zero Ada to the contract script. The transaction is balanced,
-submitted, and validated by the emulator at slot 2. Then another
-transaction, ``1eba...``, is created, which forges the game
-token. This transaction is in turn balanced (resulting in a new hash,
-``2d66...``), and submitted without error--but although no errors are
-reported, *this transaction is not validated*.
-
-*** I just noticed that the transaction being submitted in slot 2 is NOT the one that was previously balanced! What is going on? Did balancing it change its hash or something? ***
+1, resulting in a transaction with ID ``2542...``, which pays zero Ada
+to the contract script. The transaction is balanced (which has no
+effect in this case), submitted, and validated by the emulator at
+slot 2. Then another transaction, ``1eba...``, is created, which
+forges the game token. This transaction is in turn balanced (resulting
+in a new hash, ``2d66...``), and submitted without error--but although
+no errors are reported, *this transaction is not validated*.
 
 Since the transaction is submitted in slot 2, we would expect it to be
 validated in slot 3. In fact, the problem here is just that the test
 stopped too early, before the blockchain had validated this second
-transaction. The solution is to delay one slot after each action, to
-give the blockchain time to complete its validations:
+transaction. The solution is to delay two slots after a ``Lock``, to
+give the blockchain time to complete its validations. Why two slots?
+Because the ``Lock`` contract endpoint submits two transactions to the
+blockchain. Likewise, we delay one slot after each of the other
+actions. (If the delays we insert are too short, we will discover this
+later via failed tests).
+
+We can cause the emulator to delay a number of slots like this:
 
   .. code-block:: haskell
                   
@@ -683,7 +687,7 @@ We add a call to ``delay`` in each branch of perform_:
         Lock w new val -> do
             callEndpoint @"lock" (handle $ WalletKey w)
                          LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
-            delay 1
+            delay 2
         Guess w old new val -> do
             callEndpoint @"guess" (handle $ WalletKey w)
                 GuessArgs{ guessArgsOldSecret = old
@@ -698,6 +702,8 @@ We add a call to ``delay`` in each branch of perform_:
 We need to add corresponding calls to wait_ in the definition of
 nextState_ also, so that our contract model remains in step with the
 emulator.
+
+
 
 *** I would really like to suggest rerunning the failed test at this
 point, to check that this problem has been fixed. But copying and
