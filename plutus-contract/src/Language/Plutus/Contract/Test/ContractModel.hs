@@ -543,10 +543,15 @@ fromStateModelScript (StateModel.Script s) =
   Script [act | Var _i := ContractAction act <- s]
 
 data DynLogicTest s =
-    BadPrecondition [TestStep s] [Action s] s
+    BadPrecondition [TestStep s] [ActOrError s] s
   | Looping         [TestStep s]
   | Stuck           [TestStep s] s
   | DLScript        [TestStep s]
+
+data ActOrError s = Act (Action s) | Err String
+
+deriving instance ContractModel s => Show (ActOrError s)
+deriving instance ContractModel s => Eq (ActOrError s)
 
 instance ContractModel s => Show (DynLogicTest s) where
     show (BadPrecondition as bads s) =
@@ -578,7 +583,10 @@ instance ContractModel s => Show (TestStep s) where
 toDLTest :: ContractModel state =>
               DynLogicTest state -> DL.DynLogicTest (ModelState state)
 toDLTest (BadPrecondition steps acts s) =
-  DL.BadPrecondition (toDLTestSteps steps) (map (Some . ContractAction) acts) (dummyModelState s)
+  DL.BadPrecondition (toDLTestSteps steps) (map conv acts) (dummyModelState s)
+    where
+        conv (Act a) = Some (ContractAction a)
+        conv (Err e) = Error e
 toDLTest (Looping steps) =
   DL.Looping (toDLTestSteps steps)
 toDLTest (Stuck steps s) =
@@ -595,9 +603,12 @@ toDLTestStep :: ContractModel state =>
 toDLTestStep (Do act)    = DL.Do $ StateModel.Var 0 StateModel.:= ContractAction act
 toDLTestStep (Witness a) = DL.Witness a
 
-fromDLTest :: DL.DynLogicTest (ModelState s) -> DynLogicTest s
+fromDLTest :: forall s. DL.DynLogicTest (ModelState s) -> DynLogicTest s
 fromDLTest (DL.BadPrecondition steps acts s) =
-  BadPrecondition (fromDLTestSteps steps) [act | Some (ContractAction act) <- acts] (_contractState s)
+  BadPrecondition (fromDLTestSteps steps) (map conv acts) (_contractState s)
+  where conv :: Any (StateModel.Action (ModelState s)) -> ActOrError s
+        conv (Some (ContractAction act)) = Act act
+        conv (Error e)                   = Err e
 fromDLTest (DL.Looping steps) =
   Looping (fromDLTestSteps steps)
 fromDLTest (DL.Stuck steps s) =
