@@ -158,6 +158,23 @@ instance (Quantifiable a, Quantifiable b, Quantifiable c) => Quantifiable (a, b,
         where to (a, (b, c)) = (a, b, c)
               from (a, b, c) = (a, (b, c))
 
+instance (Quantifiable a, Quantifiable b, Quantifiable c, Quantifiable d) => Quantifiable (a, b, c, d) where
+    type Quantifies (a, b, c, d) =
+           (Quantifies a, Quantifies b, Quantifies c, Quantifies d)
+    quantify (a, b, c, d) =
+      mapQ (to, from) (quantify a `pairQ` (quantify b `pairQ` (quantify c `pairQ` quantify d)))
+        where to (a, (b, (c, d))) = (a, b, c, d)
+              from (a, b, c, d) = (a, (b, (c, d)))
+
+instance (Quantifiable a, Quantifiable b, Quantifiable c, Quantifiable d, Quantifiable e) =>
+           Quantifiable (a, b, c, d, e) where
+    type Quantifies (a, b, c, d, e) =
+           (Quantifies a, Quantifies b, Quantifies c, Quantifies d, Quantifies e)
+    quantify (a, b, c, d, e) =
+      mapQ (to, from) (quantify a `pairQ` (quantify b `pairQ` (quantify c `pairQ` (quantify d `pairQ` quantify e))))
+        where to (a, (b, (c, (d, e)))) = (a, b, c, d, e)
+              from (a, b, c, d, e) = (a, (b, (c, (d, e))))
+
 instance Quantifiable a => Quantifiable [a] where
     type Quantifies [a] = [Quantifies a]
     quantify [] = Quantification (Just $ return []) null (const [])
