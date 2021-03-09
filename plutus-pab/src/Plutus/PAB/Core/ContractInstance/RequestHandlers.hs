@@ -1,12 +1,13 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE DeriveAnyClass      #-}
-{-# LANGUAGE DerivingStrategies  #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE MonoLocalBinds      #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE AllowAmbiguousTypes  #-}
+{-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE DeriveAnyClass       #-}
+{-# LANGUAGE DerivingStrategies   #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE LambdaCase           #-}
+{-# LANGUAGE MonoLocalBinds       #-}
+{-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE TypeApplications     #-}
+{-# LANGUAGE UndecidableInstances #-}
 -- | Request handlers for contract instance runners.
 module Plutus.PAB.Core.ContractInstance.RequestHandlers(
     ContractInstanceMsg(..)
@@ -43,6 +44,7 @@ import           Language.Plutus.Contract.Trace.RequestHandler (RequestHandler (
 import qualified Language.Plutus.Contract.Trace.RequestHandler as RequestHandler
 import           Ledger.Tx                                     (Tx, txId)
 import           Plutus.PAB.Command                            (saveBalancedTx, saveBalancedTxResult)
+import qualified Plutus.PAB.Effects.Contract                   as Contract
 import           Plutus.PAB.Effects.EventLog                   (EventLogEffect, runCommand)
 import           Plutus.PAB.Events                             (ChainEvent)
 import           Plutus.PAB.Events.Contract                    (ContractInstanceId (..), ContractPABRequest (..),
@@ -167,6 +169,7 @@ newtype MaxIterations = MaxIterations Int
 defaultMaxIterations :: MaxIterations
 defaultMaxIterations = MaxIterations 20
 
+-- | Log messages about the
 data ContractInstanceMsg t =
     ProcessFirstInboxMessage ContractInstanceId (Response ContractResponse)
     | SendingContractStateMessages ContractInstanceId IterationID [Request ContractPABRequest]
@@ -177,10 +180,10 @@ data ContractInstanceMsg t =
     | InvokingContractUpdate
     | ObtainedNewState
     | UpdatedContract ContractInstanceId IterationID
-    | LookingUpContract t
-    | InitialisingContract t ContractInstanceId
-    | InitialContractResponse (PartiallyDecodedResponse ContractPABRequest)
-    | ActivatedContractInstance ContractInstanceId
+    | LookingUpContract (Contract.ContractDef t)
+    | InitialisingContract (Contract.ContractDef t) ContractInstanceId
+    | InitialContractResponse (Contract.State t)
+    | ActivatedContractInstance (Contract.ContractDef t) ContractInstanceId
     | RunRequestHandler ContractInstanceId Int -- number of requests
     | RunRequestHandlerDidNotHandleAnyEvents
     | StoringSignedTx Tx
@@ -191,10 +194,13 @@ data ContractInstanceMsg t =
     | BalancingTx TxBalanceMsg
     | MaxIterationsExceeded ContractInstanceId MaxIterations
     | NotificationFailed NotificationError
-    deriving stock (Eq, Show, Generic)
-    deriving anyclass (ToJSON, FromJSON)
+    deriving stock (Generic)
 
-instance ToJSON v => ToObject (ContractInstanceMsg v) where
+deriving stock instance (Eq (Contract.State t), Eq (Contract.ContractDef t)) => Eq (ContractInstanceMsg t)
+deriving anyclass instance (ToJSON (Contract.State t), ToJSON (Contract.ContractDef t)) => ToJSON (ContractInstanceMsg t)
+deriving anyclass instance (FromJSON (Contract.State t), FromJSON (Contract.ContractDef t)) => FromJSON (ContractInstanceMsg t)
+
+instance (ToJSON (Contract.State t), ToJSON (Contract.ContractDef t)) => ToObject (ContractInstanceMsg t) where
     toObject v = \case
         ProcessFirstInboxMessage instanceID response ->
             mkObjectStr "Processing first contract inbox message" $
@@ -227,7 +233,7 @@ instance ToJSON v => ToObject (ContractInstanceMsg v) where
                 case v of
                     MaximalVerbosity -> Left (Tagged @"response" rsp)
                     _                -> Right ()
-        ActivatedContractInstance instanceID ->
+        ActivatedContractInstance _ instanceID ->
             mkObjectStr "activated contract instance" instanceID
         RunRequestHandler instanceID n ->
             mkObjectStr "running request handler" (instanceID, Tagged @"num_requests" n)
@@ -264,7 +270,7 @@ instance ToJSON v => ToObject (ContractInstanceMsg v) where
         NotificationFailed _ ->
             mkObjectStr "notification failed" ()
 
-instance Pretty t => Pretty (ContractInstanceMsg t) where
+instance (Pretty (Contract.State t), Pretty (Contract.ContractDef t)) => Pretty (ContractInstanceMsg t) where
     pretty = \case
         ProcessFirstInboxMessage instanceID response ->
             "processFirstInboxMessage for" <+> pretty instanceID <> ". The first message is:" <+> pretty response
@@ -280,7 +286,7 @@ instance Pretty t => Pretty (ContractInstanceMsg t) where
         LookingUpContract c -> "Looking up contract" <+> pretty c
         InitialisingContract c instanceID -> "Initialising contract" <+> pretty c <+> "with ID" <+> pretty instanceID
         InitialContractResponse rsp -> "Initial contract response:" <+> pretty rsp
-        ActivatedContractInstance instanceID -> "Activated instance" <+> pretty instanceID
+        ActivatedContractInstance _ instanceID -> "Activated instance" <+> pretty instanceID
         RunRequestHandler instanceID numRequests -> "Running request handler for" <+> pretty instanceID <+> "with" <+> pretty numRequests <+> "requests."
         RunRequestHandlerDidNotHandleAnyEvents -> "runRequestHandler: did not handle any requests"
         StoringSignedTx tx -> "Storing signed tx" <+> pretty (txId tx)
