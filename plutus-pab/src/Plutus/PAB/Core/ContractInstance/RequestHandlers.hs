@@ -91,8 +91,7 @@ processUtxoAtRequests =
 
 processWriteTxRequests ::
     forall t effs.
-    ( Member (EventLogEffect (ChainEvent t)) effs
-    , Member ChainIndexEffect effs
+    ( Member ChainIndexEffect effs
     , Member WalletEffect effs
     , Member (LogObserve (LogMessage Text.Text)) effs
     , Member (LogMsg RequestHandlerLogMsg) effs
@@ -101,18 +100,8 @@ processWriteTxRequests ::
     )
     => RequestHandler effs ContractPABRequest ContractResponse
 processWriteTxRequests =
-    let store result = case result of
-            Left err -> pure (Left err)
-            Right signedTx -> do
-                logInfo @(ContractInstanceMsg t) $ StoringSignedTx signedTx
-                void $ runCommand (saveBalancedTx @t) WalletEventSource signedTx
-                void $ runCommand (saveBalancedTxResult @t) NodeEventSource signedTx
-                pure (Right signedTx)
-    in
-
     maybeToHandler (extract Events.Contract._WriteTxRequest)
     >>> RequestHandler.handlePendingTransactions
-    >>> RequestHandler store
     >>^ WriteTxResponse . either WriteTxFailed WriteTxSuccess
 
 processNextTxAtRequests ::
@@ -197,6 +186,7 @@ data ContractInstanceMsg t =
     deriving stock (Generic)
 
 deriving stock instance (Eq (Contract.State t), Eq (Contract.ContractDef t)) => Eq (ContractInstanceMsg t)
+deriving stock instance (Show (Contract.State t), Show (Contract.ContractDef t)) => Show (ContractInstanceMsg t)
 deriving anyclass instance (ToJSON (Contract.State t), ToJSON (Contract.ContractDef t)) => ToJSON (ContractInstanceMsg t)
 deriving anyclass instance (FromJSON (Contract.State t), FromJSON (Contract.ContractDef t)) => FromJSON (ContractInstanceMsg t)
 
