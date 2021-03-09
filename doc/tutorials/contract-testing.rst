@@ -39,7 +39,7 @@ forging and passing around tokens.
 
 
 Emulated wallets
-----------------
+^^^^^^^^^^^^^^^^
 
 To test contracts, we need emulated wallets. These and many other
 useful definitions for testing can be imported via
@@ -56,7 +56,7 @@ tutorial, we'll settle for three:
     :end-before:  END_DEFINE_WALLETS
 
 Values and tokens
------------------
+^^^^^^^^^^^^^^^^^
 
 Wallets contain 'values', which are mixtures of different quantities
 of one or more types of token. The most common token is, of course, the Ada;
@@ -151,7 +151,7 @@ In this case we define three actions:
    can make a guess.
 
 A generated test is called a ``Script``, and is (essentially) a
-sequence of Action_. We can run tests by using `propRunScript_`_:
+sequence of 'Action'_. We can run tests by using `propRunScript_`_:
 
 .. literalinclude:: GameModel.hs
     :start-after: START_GAME_PROPERTY
@@ -197,7 +197,7 @@ Now we can run tests, although of course they will not yet succeed:
     GSM.hs:65:10-32: No instance nor default method for class operation arbitraryAction
 
 The contract modelling library cannot generate test cases, unless *we*
-specify how to generate Action_, which we will do next.
+specify how to generate 'Action'_, which we will do next.
 
 .. _ContractModel: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ContractModel
 
@@ -206,7 +206,7 @@ specify how to generate Action_, which we will do next.
 .. _HandleSpec: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:HandleSpec
 
 Generating actions
-------------------
+^^^^^^^^^^^^^^^^^^
 
 To generate actions, we need to be able to generate wallets, guesses,
 and suitable values of Ada, since these appear as action parameters.
@@ -221,9 +221,11 @@ correct. We choose Ada amounts to be non-negative integers, because
 negative amounts would be error cases that we choose not to test.
 
 *** Is this really a good idea? Will a player who accidentally tries
-to claim a negative sum actually lose money? ***
+to claim a negative sum actually lose money? Actually, yes, I tested
+this. Guesses with negative amounts are accepted, and result in the
+guesser losing money.***
 
-Now we can define a generator for Action_, as a method of the
+Now we can define a generator for 'Action'_, as a method of the
 ContractModel_ class:
 
 .. literalinclude:: GameModel.hs
@@ -262,11 +264,11 @@ The output tells us the distribution of generated Actions, aggregated
 across all the tests. We can see that each action was generated around
 one third of the time, which is to be expected since our generator
 does not weight them at all. Keep an eye on this table as we extend
-our generation; if any Action_ disappears altogether, or is generated
+our generation; if any 'Action'_ disappears altogether, or is generated
 very rarely, then this indicates a problem in our tests.
 
 Modelling expectations
-----------------------
+^^^^^^^^^^^^^^^^^^^^^^
 
 The ultimate purpose of our tests is to check that funds are
 transferred correctly by each operation--for example, that after a
@@ -386,7 +388,7 @@ not yet been forged--so the ``fromJust`` in the nextState_ function
 fails. We will see how to prevent this in the next section.
 
 Restricting test cases with preconditions
------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As we just saw, not every sequence of actions makes sense as a test
 case; we need a way to *restrict* test cases to be 'sensible'. Note
@@ -470,7 +472,7 @@ no-op, which of course does not deposit a game token in wallet 1. It
 is time to link actions in a test to the emulator.
    
 Performing actions
-------------------
+^^^^^^^^^^^^^^^^^^
 
 So far we are generating Actions, but we have not yet linked them to
 the contract they are supposed to test--so 'running' the tests, as we
@@ -521,7 +523,7 @@ simple: a direct relationship between actions in a test case and calls
 to contract endpoints makes interpreting test failures much easier.
 
 Helping shrinking work better by choosing test case actions well
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 In the definition of perform_ above, the ``GiveToken`` action is a little
 surprising: when we call the emulator, we have to specify not only the
@@ -558,7 +560,7 @@ of each other, we make it easier for QuickCheck to shrink a failing
 test without drastic changes to its behaviour.
 
 Shrinking Actions
------------------
+^^^^^^^^^^^^^^^^^
 
 Before starting to run tests seriously, it is useful to make sure that
 any failing tests will shrink well to small examples. By default, the
@@ -572,7 +574,7 @@ ContractModel_ class:
   shrinkAction :: ModelState state -> Action state -> [Action state]
 
 This function returns a list of 'simpler' actions that should be tried
-as replacements for the given Action_, when QuickCheck is simplifying
+as replacements for the given 'Action'_, when QuickCheck is simplifying
 a failed test. In this case we define a shrinking function for wallets:
 
 .. code-block:: haskell
@@ -1164,8 +1166,8 @@ monitoring_ method in the ContractModel_ class:
   monitoring :: (ModelState state, ModelState state)
                   -> Action state -> Property -> Property
 
-This function is called for every Action_ in a ``Script``, and given the
-ModelState_ before and after the Action_. Its result is a function
+This function is called for every 'Action'_ in a ``Script``, and given the
+ModelState_ before and after the 'Action'_. Its result is a function
 that is applied to the property being tested, so it can use any of the
 QuickCheck functions for analysing test case distribution, or adding
 output to counterexamples.
@@ -1204,6 +1206,425 @@ distribution). Since correct guesses are probably at least as
 interesting to test as incorrect ones, a sensible next step would be
 to modify the guess generator to guess correctly more often--perhaps
 half the time. We leave this as an exercise for the reader.
+
+Goal-directed testing with dynamic logic
+----------------------------------------
+
+The tests we have developed so far test that *'nothing bad ever
+happens'*-the funds in a test always end up where the model says they
+should. To put it another way, funds are never stolen. But this does
+not really cover everything we want to test: we also want to know that
+*'something good eventually happens'*, or at least, *'something good
+is always possible'*. Concretely, this will often mean testing that
+the funds in a contract can always be recovered--they cannot end up
+locked in a contract for ever. And indeed, in the case of the game
+contract, we would like to check that no matter what has happened
+previously, the Ada locked by the contract can always be recovered by
+guessing correctly.
+
+Here we are really identifying some desirable 'goal states', those in
+which all the Ada have been recovered from the contract, and we want
+to test that a goal state is always reachable. Obviously, a random
+test is quite unlikely to end in a goal state, and it is also hard to
+see how QuickCheck can determine automatically how to reach a goal
+state. So we test this kind of property by allowing the tester to
+*specify a strategy* for reaching a goal state; QuickCheck then tests
+that this strategy always works.
+
+Unit testing using the dynamic logic monad
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+We write this kind of test using 'dynamic logic' wrapped in a monad,
+which just means that we write test case generators that can mix
+random actions, specified actions, and assertions. These generators
+are little programs in the DL_ monad, such as this one:
+
+ .. code-block:: haskell
+
+  unitTest :: DL GameModel ()
+  unitTest = do
+      action $ Lock w1 "hello" 10
+      action $ GiveToken w2
+      action $ Guess w2 "hello" "new secret" 3
+
+This DL_ fragment simply specifies a unit test in terms of the
+underlying ContractModel_ we have already seen, using action_ to
+include specific ``Actions`` in the test. To run such a test, we
+must specify a QuickCheck property such as
+
+  .. code-block:: haskell
+
+   prop_DL dl = forAllDL dl prop_Game
+
+which generates a test script using the ``dl`` provided, and runs it
+using the same underlying property as before. The execution is checked
+against the model as before, so *we do not need to add any further
+assertions* to this unit test. This gives us a very convenient way to
+add some unit tests for a contract specified by a ContractModel_. We
+can run this test as follows:
+
+ .. code-block:: text
+
+  > quickCheck . withMaxSuccess 1 $ prop_DL unitTest
+  +++ OK, passed 1 test.
+  
+  Actions (3 in total):
+  33% GiveToken
+  33% Guess
+  33% Lock
+
+Quantifiers in dynamic logic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+As well as writing unit tests in the DL_ monad, we can add random
+generation. For example, if we wanted to generalize the unit test
+above a little, to lock a random amount of Ada in the contract, then
+we could instead write:
+
+ .. code-block:: haskell
+
+  unitTest :: DL GameModel ()
+  unitTest = do
+      val <- forAllQ $ chooseQ (1, 20)
+      action $ Lock w1 "hello" val
+      action $ GiveToken w2
+      action $ Guess w2 "hello" "new secret" 3
+
+Here forAllQ_ lets us generate a random value using chooseQ_:
+
+ .. code-block:: haskell
+
+  chooseQ ::
+    (Arbitrary a, Random a, Ord a) => (a, a) -> Quantification a
+                 
+forAllQ_ takes a Quantification_, which resembles a QuickCheck
+generator, but with a more limited API to support its use in dynamic
+logic.
+
+When this is tested, random values in the range 1-20 are locked... and
+a test fails:
+
+ .. code-block:: text
+
+  > quickCheck $ prop_DL unitTest
+  *** Failed! Falsified (after 3 tests):
+  BadPrecondition
+    [Witness (1 :: Integer),
+     Do $ Lock (Wallet 1) "hello" 1,
+     Do $ GiveToken (Wallet 2)]
+    [Act (Guess (Wallet 2) "hello" "new secret" 3)]
+    (GameModel {_gameValue = 1, _hasToken = Just (Wallet 2), _currentSecret = "hello"})
+
+Dynamic logic test cases are a little more complex than the simple
+scripts we have seen so far, and they give us a little more
+information. Every such test contains a list of Action_, tagged
+``Do``, and *witnesses*, tagged ``Witness``. The witnesses record the
+results of random choices made by forAllQ_: in this case, the Ada
+value to be locked was chosen to be 1. Then the test proceeds by
+locking the Ada and giving the game token to wallet 2, but the third
+action we specified--making the guess--cannot be run, because its
+precondition is ``False``. This is what the ``BadPrecondition`` tells
+us, and the action that could not be performed appears as
+
+ .. code-block:: text
+
+   [Act (Guess (Wallet 2) "hello" "new secret" 3)]
+
+The last component is the model state at that point: we can see that
+the ``gameValue`` is only 1 Ada, so of course we cannot withdraw 3.
+
+Repeating a dynamic logic test
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Once again, we can copy-and-paste the failed testcase into our source
+code:
+
+ .. code-block:: haskell
+
+  badUnitTest =
+    BadPrecondition
+      [Witness (1 :: Integer),
+       Do $ Lock (Wallet 1) "hello" 1,
+       Do $ GiveToken (Wallet 2)]
+      [Act (Guess (Wallet 2) "hello" "new secret" 3)]
+      (GameModel {_gameValue = 1, _hasToken = Just (Wallet 2), _currentSecret = "hello"})
+
+We can rerun the test using withDLTest_, supplying the original DL_
+``unitTest`` from which the test case was generated, as well as the
+underlying property:
+
+ .. code-block:: text
+
+  > quickCheck $ withDLTest unitTest prop_Game badUnitTest
+  *** Failed! Falsified (after 1 test):
+
+(No test case is displayed because nothing was generate in this
+test--the test case ``badUnitTest`` was supplied).
+
+If we now correct ``unitTest``, for example by changing the range of
+``val`` from 1-20 to 3-20, then the saved bad test case passes:
+
+ .. code-block:: text
+
+  > quickCheck $ withDLTest unitTest prop_Game badUnitTest
+  +++ OK, passed 100 tests.
+
+as do freshly generated random tests:
+
+ .. code-block:: text
+
+  > quickCheck $ forAllDL unitTest prop_Game
+  +++ OK, passed 100 tests.
+  
+  Actions (300 in total):
+  33.3% GiveToken
+  33.3% Guess
+  33.3% Lock
+
+In this case the saved test 'passes' because it no longer matches the
+modified DL_ test, so it is not a counterexample to the property we
+are testing.
+
+Something good is always possible
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+We saw above how to generate random *parameters* to actions in dynamic
+logic tests; what gives them their power is that we can also include
+random *actions*.
+
+Suppose we want to test that no Ada remain locked in the game contract
+for ever. We can specify this with a DL_ test that requires that *no
+Ada remain locked in the contract after any sequence of actions*. We
+can include a random sequence of actions in a DL_ test using
+`anyActions_`_, and we can make assertions about the ModelState_ using
+assertModel_. Thus we can define
+
+ .. code-block:: haskell
+
+  noLockedFunds :: DL GameModel ()
+  noLockedFunds = do
+      anyActions_
+      assertModel "Locked funds should be zero" $ isZero . lockedValue
+
+to assert that, after any sequence of actions, no funds should remain
+locked (lockedValue_ extracts the total value locked in contracts from
+the ModelState_).
+
+Of course, this test fails:
+
+ .. code-block:: text
+
+  > quickCheck $ forAllDL noLockedFunds prop_Game
+  *** Failed! Falsified (after 1 test and 2 shrinks):
+  BadPrecondition
+    [Do $ Lock (Wallet 1) "*******" 1]
+    [Err "Locked funds should be zero"]
+    (GameModel {_gameValue = 1, _hasToken = Just (Wallet 1), _currentSecret = "*******"})
+
+If all we do is lock one Ada, then obviously the locked funds are not
+zero. The failed assertion is reported as a ``BadPrecondition``.
+
+The property we wrote above is wrong: what we really intended to say
+was that *after a correct guess that requests all the funds*, then no
+locked funds remain. Let us write a property that says that any wallet
+can recover the funds by making such a guess. To program our strategy,
+we will need to read the secret password, and the value remaining in
+the contract, from the contract model:
+
+ .. code-block:: haskell
+
+  noLockedFunds :: DL GameModel ()
+  noLockedFunds = do
+      anyActions_
+      w <- forAllQ $ elementsQ wallets
+      secret <- viewContractState currentSecret
+      val    <- viewContractState gameValue
+      action $ Guess w "" secret val
+      assertModel "Locked funds should be zero" $ isZero . lockedValue
+
+This property also fails!
+
+ .. code-block:: text
+
+  > quickCheck $ forAllDL noLockedFunds prop_Game
+  *** Failed! Falsified (after 1 test and 2 shrinks):
+  BadPrecondition
+    [Witness (Wallet 1 :: Wallet)]
+    [Act (Guess (Wallet 1) "" "" 0)]
+    (GameModel {_gameValue = 0, _hasToken = Nothing, _currentSecret = ""})
+
+Here QuickCheck has chosen the arbitrary sequence of actions to be
+*empty*, so the contract has not even been locked--and of course, in
+that case, a ``Guess`` is not possible. To pass the test, our strategy
+must work in *every* situation. However, if the contract has not been
+locked, then there are no locked funds, so the assertion in this
+property would pass without our doing anything at all. Perhaps we
+should only make a ``Guess`` if there are actually funds to be
+recovered:
+
+ .. code-block:: haskell
+
+  noLockedFunds :: DL GameModel ()
+  noLockedFunds = do
+      anyActions_
+      w <- forAllQ $ elementsQ wallets
+      secret <- viewContractState currentSecret
+      val    <- viewContractState gameValue
+      when (val > 0) $ do
+          action $ Guess w "" secret val
+      assertModel "Locked funds should be zero" $ isZero . lockedValue
+
+This is better, but testing the property still fails:
+
+ .. code-block:: text
+
+  > quickCheck $ forAllDL noLockedFunds prop_Game
+  *** Failed! Falsified (after 1 test and 1 shrink):
+  BadPrecondition
+    [Do $ Lock (Wallet 1) "*******" 1,
+     Witness (Wallet 2 :: Wallet)]
+    [Act (Guess (Wallet 2) "" "*******" 1)]
+    (GameModel {_gameValue = 1, _hasToken = Just (Wallet 1), _currentSecret = "*******"})
+
+In this case we locked 1 Ada in the contract, chose wallet 2 to
+recover the funds, and then tried to make a correct guess--but the
+precondition for ``Guess`` still failed. And this is no surprise: the
+wallet does not hold the game token. As part of our strategy for
+recovering the funds, we need to give the game token to the wallet
+that will make the guess.
+
+ .. code-block:: haskell
+
+  noLockedFunds :: DL GameModel ()
+  noLockedFunds = do
+      anyActions_
+      w <- forAllQ $ elementsQ wallets
+      secret <- viewContractState currentSecret
+      val    <- viewContractState gameValue
+      when (val > 0) $ do
+          action $ GiveToken w
+          action $ Guess w "" secret val
+      assertModel "Locked funds should be zero" $ isZero . lockedValue
+
+Now we expect the tests to pass:
+
+ .. code-block:: text
+
+  > quickCheck $ forAllDL noLockedFunds prop_Game
+  *** Failed! Falsified (after 1 test):
+  BadPrecondition
+    [Do $ Lock (Wallet 1) "hello" 5,
+     Witness (Wallet 3 :: Wallet),
+     Do $ GiveToken (Wallet 3),
+     Do $ Guess (Wallet 3) "" "hello" 5]
+    [Err "Locked funds should be zero"]
+    (GameModel {_gameValue = 5, _hasToken = Just (Wallet 3), _currentSecret = "hello"})
+
+They do not! We can see from the last line that, in the final state,
+our model indeed says that there are still 5 Ada locked in the
+contract. This is the effect of the nextState_ function in our model,
+so let us inspect the relevant part of its code:
+
+ .. code-block:: haskell
+
+    nextState (Guess w old new val) = do
+        correctGuess <- (old ==)    <$> viewContractState currentSecret
+        ...
+
+
+Comparing carefully with the failed test, we see that our strategy is
+supplying the empty string as the old password (the guess), and the
+correct password as the new one--so the guess is wrong, and the Ada
+was not recovered. Passing the arguments in the correct order does,
+indeed, make the tests pass.
+
+For this simple contract, recovering the locked funds is easy--but as
+we have seen, writing a property that says that it is always possible
+forces us to be precise about our strategy, and reveals anything we
+might have overlooked.
+
+Monitoring and tuning dynamic logic tests
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The dynamic logic test we have developed only uses our recovery
+strategy if locked funds remain after a random sequence of
+actions. How often does that happen? Given that tests contain many
+more guesses than lock actions, there is a risk that the contract is
+usually holding no funds before we even consider using our
+strategy. To find out, we can monitor_ the contract model during our
+tests. As in the monitoring_ method of the ContractModel_ class, we
+can use any of the QuickCheck operations for analyzing test cases, but
+instead of applying the monitoring_ at every action in a test case, we
+can monitor_ at selected points.
+
+In this case, we choose to label test cases that actually invoke our
+fund recovery strategy:
+
+ .. code-block:: haskell
+
+  noLockedFunds :: DL GameModel ()
+  noLockedFunds = do
+      anyActions_
+      w <- forAllQ $ elementsQ wallets
+      secret <- viewContractState currentSecret
+      val    <- viewContractState gameValue
+      when (val > 0) $ do
+          monitor $ label "Unlocking funds"
+          action $ GiveToken w
+          action $ Guess w secret "" val
+      assertModel "Locked funds should be zero" $ isZero . lockedValue
+
+With the addition of the monitor_ line, QuickCheck tells us what
+proportion of our tests actually leave funds to recover:
+
+ .. code-block:: text
+
+  > quickCheck $ forAllDL noLockedFunds prop_Game
+  +++ OK, passed 100 tests (31% Unlocking funds).
+  
+  Actions (5112 in total):
+  49.24% GiveToken
+  48.81% Guess
+   1.96% Lock
+
+We can see that around 30% of generated tests leave some Ada in the
+contract for our strategy to recover. This is a bit low, but it is
+easy to address: we can simply use the dynamic logic to specify the
+initial ``Lock`` action *explicitly*, and generate larger amounts for
+the initial funds locked in the game (lines 3-5 below):
+
+ .. code-block:: haskell
+
+  noLockedFunds :: DL GameModel ()
+  noLockedFunds = do
+      (w0,funds,pass) <-
+        forAllQ (elementsQ wallets, chooseQ (1,10000), elementsQ guesses)
+      action $ Lock w0 pass funds
+      anyActions_
+      w <- forAllQ $ elementsQ wallets
+      secret <- viewContractState currentSecret
+      val    <- viewContractState gameValue
+      when (val > 0) $ do
+          monitor $ label "Unlocking funds"
+          action $ GiveToken w
+          action $ Guess w secret "" val
+      assertModel "Locked funds should be zero" $ isZero . lockedValue
+
+With this addition, a much higher proportion of tests actually
+exercise our recovery strategy:
+
+ .. code-block:: text
+                 
+  > quickCheck $ forAllDL noLockedFunds prop_Game
+  +++ OK, passed 100 tests (74% Unlocking funds).
+  
+  Actions (5198 in total):
+  49.75% GiveToken
+  48.33% Guess
+   1.92% Lock
+
+
+
                   
 Notes on rst
 ------------------------
@@ -1244,10 +1665,20 @@ Linking to the haddock docs: `arbitraryAction`_
 .. _withdraw: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:withdraw
 .. _transfer: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:transfer
 .. _viewContractState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:viewContractState
+.. _lockedValue: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:lockedValue
 .. _wait: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:wait
-.. _Action: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:Action
+.. '_Action': ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:Action
 .. _HandleKey: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:HandleKey
 .. _ModelState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ModelState
+.. _DL: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:DL
+.. _action: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:action
+.. _`anyActions_`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:anyActions_
+.. _forAllQ: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:forAllQ
+.. _assertModel: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:assertModel
+.. _monitor: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:monitor
+.. _withDLTest: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:withDLTest
+.. _Quantification: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:Quantification
+.. _chooseQ: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:chooseQ
 
 
 
