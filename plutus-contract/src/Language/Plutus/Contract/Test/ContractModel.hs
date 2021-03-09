@@ -742,8 +742,8 @@ anyActions_ = DL.anyActions_
 --   target length has been reached.
 --
 --   Instead, once the target number of actions have been reached, generation goes into the
---   /stopping/ phase. In this phase branches starting with an `anyAction` or `DL.forAllQ` are
---   avoided if possible. Conversely, before the stopping phase, branches starting with `stopping`
+--   /stopping/ phase. In this phase branches starting with `stopping` are preferred, if possible.
+--   Conversely, before the stopping phase, branches starting with `stopping`
 --   are avoided unless there are no other possible choices.
 --
 --   For example, here is the definition of `anyActions_`:
@@ -769,8 +769,15 @@ anyActions_ = DL.anyActions_
 stopping :: DL state ()
 stopping = DL.stopping
 
--- | By default, `Control.Applicative.Alternative` choice (`Control.Applicative.<|>`) picks the two
---   branches with equal probability. To change this you can use `weight`, which multiplies the
+-- | By default, `Control.Applicative.Alternative` choice (`Control.Applicative.<|>`) picks among
+--   the next actions with equal probability. So, for instance, this code chooses between the actions
+--   @a@, @b@ and @c@, with a probability @1/3@ of choosing each:
+--
+-- @
+-- unbiasedChoice a b c = `action` a `Control.Applicative.<|>` `action` b `Control.Applicative.<|>` `action` c
+-- @
+--
+--   To change this you can use `weight`, which multiplies the
 --   relative probability of picking a branch by the given number.
 --
 --   For instance, the following scenario picks the action @a@ with probability @2/3@ and the action
