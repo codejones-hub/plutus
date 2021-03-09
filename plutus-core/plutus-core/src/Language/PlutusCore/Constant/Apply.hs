@@ -61,6 +61,6 @@ applyTypeSchemed name = go where
             -- Apply the function to the coerced argument and proceed recursively.
             case schB of
                 (TypeSchemeResult _) -> do
-                    spendBudget (exBudgetBuiltin name) exF'
+--                    spendBudget (exBudgetBuiltin name) exF'
                     go schB (f x) exF' args'
                 _ -> go schB (f x) exF' args'
