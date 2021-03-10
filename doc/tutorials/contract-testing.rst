@@ -80,7 +80,7 @@ We will also need a game token. After importing the ``Scripts`` module
    :start-after: START_SCRIPTSIMPORT
    :end-before:  END_SCRIPTSIMPORT
 
-we can define it as follows, applying a monetary policy defined in the code under test:
+we can define it as follows, applying a monetary policy defined in the code under test (imported as module ``G``):
 
 .. literalinclude:: GameModel.hs
    :start-after:  START_GAMETOKEN
@@ -151,7 +151,7 @@ In this case we define three actions:
    can make a guess.
 
 A generated test is called a ``Script``, and is (essentially) a
-sequence of 'Action'_. We can run tests by using `propRunScript_`_:
+sequence of `Action`_. We can run tests by using `propRunScript_`_:
 
 .. literalinclude:: GameModel.hs
     :start-after: START_GAME_PROPERTY
@@ -220,12 +220,7 @@ from a small set, so that random guesses will often be
 correct. We choose Ada amounts to be non-negative integers, because
 negative amounts would be error cases that we choose not to test.
 
-*** Is this really a good idea? Will a player who accidentally tries
-to claim a negative sum actually lose money? Actually, yes, I tested
-this. Guesses with negative amounts are accepted, and result in the
-guesser losing money.***
-
-Now we can define a generator for 'Action'_, as a method of the
+Now we can define a generator for `Action`_, as a method of the
 ContractModel_ class:
 
 .. literalinclude:: GameModel.hs
@@ -462,14 +457,14 @@ with the wrong contents:
 Our model predicted that wallet 1 would end up containing the game
 token, but in fact its contents were unchanged.
 
-In this test, we have actually performed actions on the emulated
-blockchain, as the emulator log shows us: one transaction has been
-validated, and we have started three contract instances (one for each
-wallet in the test). But we have *not* created a game token for wallet
-1, because thus far we have not defined how actions in a test should
-be performed--so the ``Lock`` action in the test case behaves as a
-no-op, which of course does not deposit a game token in wallet 1. It
-is time to link actions in a test to the emulator.
+In this test, we have actually performed actions in the emulator, as
+the log shows us: one transaction has been validated, and we have
+started three contract instances (one for each wallet in the
+test). But we have *not* created a game token for wallet 1, because
+thus far we have not defined how actions in a test should be
+performed--so the ``Lock`` action in the test case behaves as a no-op,
+which of course does not deposit a game token in wallet 1. It is time
+to link actions in a test to the emulator.
    
 Performing actions
 ^^^^^^^^^^^^^^^^^^
@@ -574,7 +569,7 @@ ContractModel_ class:
   shrinkAction :: ModelState state -> Action state -> [Action state]
 
 This function returns a list of 'simpler' actions that should be tried
-as replacements for the given 'Action'_, when QuickCheck is simplifying
+as replacements for the given `Action`_, when QuickCheck is simplifying
 a failed test. In this case we define a shrinking function for wallets:
 
 .. code-block:: haskell
@@ -595,10 +590,9 @@ and shrink actions by shrinking the wallet and Ada parameters.
         [Guess w' old new val | w' <- shrinkWallet w] ++
         [Guess w old new val' | val' <- shrink val]
 
-We choose to shrink an action either by shrinking a wallet parameter,
-or by shrinking the amount of Ada. We choose not to shrink
-password/guess parameters, because they are not really
-significant--one password is as good as another in a failed test.
+We choose not to shrink password/guess parameters, because they are
+not really significant--one password is as good as another in a failed
+test.
 
 
 
@@ -737,7 +731,7 @@ Rerunning a failed test
 The best way to save and rerun a QuickCheck test case is to
 copy-and-paste it from the QuickCheck output into your code. Since
 ``prop_Game`` is just a function that takes the generated test as an
-argument, then we can rerun a test just by passing it to the
+argument, then we can rerun a test by passing it to the
 property. In this case let us define
 
   .. code-block:: haskell
@@ -747,7 +741,7 @@ property. In this case let us define
        Script
          [Lock (Wallet 1) "hunter2" 0]
 
-Note that ``testLock`` is itself a ``Property``, so we can test it using
+``testLock`` is itself a ``Property``, so we can test it using
 ``quickCheck``. Testing it *before* adding the delays in the last section
 generates the same output as before.  Testing it *after* the delays
 are added results in
@@ -762,39 +756,33 @@ are added results in
 
 The test passes, and the problem is fixed.
 
-Of course, since there is no random generation in this test, then
-there is no real need to test it 100 times. This can be avoided by
-adding ``withMaxSuccess`` to the definition:
+ .. note::
 
- .. code-block:: haskell
-                  
-  testLock :: Property
-  testLock = withMaxSuccess 1 . prop_Game $
-      Script
-       [Lock (Wallet 1) "hunter2" 0]
-
-which causes ``quickCheck`` to run the test once only.
-
- .. code-block:: text
-
-  > quickCheck testLock
-  +++ OK, passed 1 test.
+  Since there is no random generation in this test,
+  there is no real need to test it 100 times. This can be avoided by
+  adding ``withMaxSuccess`` to the definition:
   
-  Actions (1 in total):
-  100% Lock
+   .. code-block:: haskell
+                    
+    testLock :: Property
+    testLock = withMaxSuccess 1 . prop_Game $
+        Script
+         [Lock (Wallet 1) "hunter2" 0]
 
-Note that **we save the failing test case**, not the random seed used
-to generate it. This is the only way to be sure that we repeat the
-*same* test that just failed. Usually, a failed test that QuickCheck
-reports is the result of random generation *and shrinking*, not random
-generation alone. Reusing the same random seed would usually
-regenerate a much larger test, which might well fail for a *different*
-reason, leading QuickCheck to report a *different* shrunk failing
-test. It is then impossible to know for sure whether or not the change just
-made to the code fixed the problem it was intended to fix (it might
-just have changed the way failed tests shrink). By rerunning *exactly
-the same test case* we can be sure that our change did fix that
-problem, at least.
+ .. note::
+    
+  We save the **failing test case**, not the random seed used
+  to generate it. This is the only way to be sure that we repeat the
+  *same* test that just failed. Usually, a failed test that QuickCheck
+  reports is the result of both random generation *and shrinking*, not random
+  generation alone. Reusing the same random seed would usually
+  regenerate a much larger test, which might well fail for a different
+  reason, leading QuickCheck to report a different shrunk failing
+  test. It is then impossible to know for sure whether or not the change just
+  made to the code fixed the problem it was intended to fix--it might
+  just have changed the way failed tests shrink. By rerunning exactly
+  the same test case we can be sure that our change did fix that
+  problem, at least.
 
 Controlling the log-level
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -877,14 +865,15 @@ Refining preconditions
 
 We just learned that a second ``Lock`` call puts the contract into a
 broken state. But this is not how the game was intended to be used, so
-the response might be that "you shouldn't do that". And indeed, there
-could be other problems in the code that are masked by the double-lock
-bug. Since a test case with two ``Lock`` calls is easy to generate,
-then QuickCheck is likely to report this problem in every subsequent
-run--unless we prevent it from doing so.
+the developer might reasonably respond "you shouldn't do that". There
+could also be other problems in the code that we cannot presently
+find, because they are masked by the double-lock bug. Since a test
+case with two ``Lock`` calls is easy to generate, then QuickCheck is
+likely to report this particular problem in almost every subsequent
+run--unless we explicitly prevent it from doing so.
 
-We can easily prevent this by *strengthening the precondition* of
-``Lock``, so that it can only be performed once per test case. We can
+We can easily avoid this by *strengthening the precondition* of
+``Lock``, so that it can only be performed once per test case. We
 do so by checking whether any wallet holds the game token:
 
   .. code-block:: haskell
@@ -939,11 +928,12 @@ wallet contains 'insufficient funds'. Reading the last line closely,
 we see that although the wallet contained 100 million Ada, it *lacked*
 the game token, and so making a guess was not allowed.
 
-***Is this a bug in the contract? One might say it ought to check that
-it has the token, and not submit the transaction if it does
-not. Otherwise, we ought to be able to run tests in which contracts
-make guesses without holding the token. Which means in turn that
-crashing the off-chain contract should not cause a test to fail.***
+Arguably, the off-chain code should not have tried to submit the guess
+transaction without holding the game token, and the contract instance
+should not have crashed. Or we might take the view that no harm is
+done, since the transaction is rejected anyway. But the crashing
+contract does cause tests to fail, which--as before--is likely to
+prevent us discovering other problems.
 
 We can strengthen the precondition of ``Guess`` to prevent this from
 happening.
@@ -986,7 +976,7 @@ log output to understand why:
 In this case, we lock one Ada, and then wallet 2 makes two guesses,
 both with the correct password. The first guess tries to withdraw more
 Ada than are available, which our model predicts should be a
-no-op--recall we defined
+no-op. Recall we defined:
 
  .. code-block:: haskell
 
@@ -1043,13 +1033,14 @@ Now the tests pass:
 It is good practice to run *far more* than 100 tests, once tests are
 passing.
 
-In this section we discovered several ways to crash the off-line
+In this section we discovered ways to crash the off-line
 contract instances, or leave them hanging. We debugged the problems by
 strengthening preconditions--but of course, the problems are still
 there. We have just avoided provoking them with our tests, which
-enabled us to continue testing and find more problems. But of course,
-the next step should be to fix the contract, so that these
-preconditions are no longer necessary.
+enabled us to continue testing and find more problems. But unless
+these problems are corrected, enabling our preconditions to be
+weakened again, then all we know from our tests is that the contract
+behaves correctly *provided callers obey the preconditions*.
 
 Measuring and tuning distributions
 ----------------------------------
@@ -1060,15 +1051,15 @@ distribution of types of action. Looking at the output above, we can
 see that the vast majority of actions were ``GiveToken`` actions; only
 9% were guesses, and fewer than 4% were ``Lock`` actions.
 
-That there were relatively few ``Lock`` actions is not a surprise: our
-precondition guarantees that there can be at most one ``Lock`` per
-test case, so of course the other actions are much more
-common. However, we almost certainly *don't* want to test
+It is not a surprise that there were relatively few ``Lock`` actions:
+our precondition guarantees that there can be at most one ``Lock`` per
+test case, and this is intentional, so of course the other actions are
+much more common. However, we almost certainly *don't* want to test
 ``GiveToken`` almost ten times as often as ``Guess``. What is going
 on?
 
 The problem is this: after a ``Lock`` as the first action of a test
-case, *every attempt to generate a ``GiveToken`` action will succeed*;
+case, *every attempt to generate a* ``GiveToken`` *action will succeed*;
 that is, the precondition of the generated action will be
 ``True``. But for ``Guess`` actions, many randomly generated actions
 will not satisfy the precondition we ended up with, either because the
@@ -1116,7 +1107,7 @@ successful guesses in the first place, and omit the precondition?
 The answer is **no**: it would not. By writing the generator
 carefully, we can ensure that the *generated* ``Guess`` actions are
 valid, but as soon as a test fails, and QuickCheck begins to shrink
-it, then the precondition becomes essential. Without the precondition,
+it, then the precondition becomes essential. Without it,
 QuickCheck might remove a ``GiveToken`` action that makes a subsequent
 ``Guess`` valid, and then report that the resulting test (not
 surprisingly) failed. It is only preconditions that ensure that
@@ -1125,13 +1116,13 @@ surprisingly) failed. It is only preconditions that ensure that
 Thus, the action generator cannot *ensure* that actions in test cases
 are valid; it can only skew the *distribution* of actions towards
 valid ones. This means there is no need for the action generator to
-*guarantee* that the actions it generates are valid; they will in any
-case have to pass the precondition to be included in a test case. In
-fact, it is a little dangerous to define a generator so that *only*
-actions satisfying the precondition are generated, because we might
-later choose to weaken the precondition. If we do so, and forget to
-change the generator too, then we might end up with less thorough
-testing than we expect. Rather than generate guesses as we did above,
+guarantee that the actions it generates are valid; they will in any
+case have to pass the precondition before they are included in a test
+case. In fact, it is a little dangerous to define a generator so that
+*only* actions satisfying the precondition are generated, because we
+might later choose to weaken the precondition. If we do so, and forget
+to change the generator too, then we might end up with less thorough
+testing than we expect. So rather than generate guesses as we did above,
 it would be better to define
 
  .. code-block:: haskell
@@ -1147,7 +1138,7 @@ it would be better to define
             tok = s ^. contractState . hasToken
             val = s ^. contractState . gameValue
 
-thus generating valid guesses *most* of the time, with the occasional
+which generates valid guesses *most* of the time, with the occasional
 possibly-invalid one. This approach results in test cases with a
 reasonable balance between guessing and passing the game token, while
 ensuring that if the preconditions are later changed, then we can
@@ -1166,14 +1157,14 @@ monitoring_ method in the ContractModel_ class:
   monitoring :: (ModelState state, ModelState state)
                   -> Action state -> Property -> Property
 
-This function is called for every 'Action'_ in a ``Script``, and given the
-ModelState_ before and after the 'Action'_. Its result is a function
+This function is called for every `Action`_ in a ``Script``, and given the
+ModelState_ before and after the `Action`_. Its result is a function
 that is applied to the property being tested, so it can use any of the
-QuickCheck functions for analysing test case distribution, or adding
+QuickCheck functions for analysing test case distribution or adding
 output to counterexamples.
 
-In this case, let us create a table showing the proportion of guesses
-which were right or wrong. We define monitoring_ as
+To create a table showing the proportion of guesses
+which were right or wrong, we can define monitoring_ as
 
   .. code-block:: haskell
                   
@@ -1183,7 +1174,7 @@ which were right or wrong. We define monitoring_ as
       where secret = s ^. contractState . currentSecret
     monitoring _ _ = id
 
-resulting in output such as this:
+This generates output such as this:
 
  .. code-block:: text
 
@@ -1201,17 +1192,23 @@ resulting in output such as this:
 
 Around 25% of guesses were correct in this test run, which is not
 surprising since we chose guesses uniformly from a list of four
-possibilities (but remember that preconditions could affect this
-distribution). Since correct guesses are probably at least as
+possibilities (and the precondition_ for guesses does not depend on
+the choice). Since correct guesses are probably at least as
 interesting to test as incorrect ones, a sensible next step would be
 to modify the guess generator to guess correctly more often--perhaps
 half the time. We leave this as an exercise for the reader.
+
+It is always good practice to make measurements of the distribution of
+test cases like this, and then improve test case generation to that
+the distribution looks reasonable. Otherwise there is a risk of
+developing a false sense of security, engendered by running many
+thousands of trivial tests.
 
 Goal-directed testing with dynamic logic
 ----------------------------------------
 
 The tests we have developed so far test that *'nothing bad ever
-happens'*-the funds in a test always end up where the model says they
+happens'*-the funds in a test always end up where the model says that they
 should. To put it another way, funds are never stolen. But this does
 not really cover everything we want to test: we also want to know that
 *'something good eventually happens'*, or at least, *'something good
@@ -1220,19 +1217,20 @@ the funds in a contract can always be recovered--they cannot end up
 locked in a contract for ever. And indeed, in the case of the game
 contract, we would like to check that no matter what has happened
 previously, the Ada locked by the contract can always be recovered by
-guessing correctly.
+a player who knows the password.
 
-Here we are really identifying some desirable 'goal states', those in
-which all the Ada have been recovered from the contract, and we want
-to test that a goal state is always reachable. Obviously, a random
-test is quite unlikely to end in a goal state, and it is also hard to
-see how QuickCheck can determine automatically how to reach a goal
-state. So we test this kind of property by allowing the tester to
-*specify a strategy* for reaching a goal state; QuickCheck then tests
-that this strategy always works.
+Here we are really identifying desirable 'goal states', namely those
+in which all the Ada have been recovered from the contract, and aiming
+to test that a goal state is always reachable. Obviously, random tests
+are quite unlikely to end in a goal state, so no particular conclusion
+can be drawn from one that does not. It is also hard to see how
+QuickCheck might determine automatically whether a goal state is
+reachable or not. So we test this kind of property by allowing the
+tester to *specify a strategy* for reaching a goal state; QuickCheck
+then tests that this strategy always works.
 
-Unit testing using the dynamic logic monad
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Introducing the dynamic logic monad
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 We write this kind of test using 'dynamic logic' wrapped in a monad,
 which just means that we write test case generators that can mix
@@ -1258,10 +1256,11 @@ must specify a QuickCheck property such as
 
 which generates a test script using the ``dl`` provided, and runs it
 using the same underlying property as before. The execution is checked
-against the model as before, so *we do not need to add any further
-assertions* to this unit test. This gives us a very convenient way to
-add some unit tests for a contract specified by a ContractModel_. We
-can run this test as follows:
+against the model, so *we do not need to add any further assertions*
+to this unit test. This gives us a very convenient way to define unit
+tests for a contract specified by a ContractModel_.
+
+We can run this test as follows:
 
  .. code-block:: text
 
@@ -1278,7 +1277,7 @@ Quantifiers in dynamic logic
 
 As well as writing unit tests in the DL_ monad, we can add random
 generation. For example, if we wanted to generalize the unit test
-above a little, to lock a random amount of Ada in the contract, then
+above a little to lock a random amount of Ada in the contract, then
 we could instead write:
 
  .. code-block:: haskell
@@ -1320,7 +1319,7 @@ scripts we have seen so far, and they give us a little more
 information. Every such test contains a list of Action_, tagged
 ``Do``, and *witnesses*, tagged ``Witness``. The witnesses record the
 results of random choices made by forAllQ_: in this case, the Ada
-value to be locked was chosen to be 1. Then the test proceeds by
+value to be locked was chosen to be 1. The test proceeds by
 locking the Ada and giving the game token to wallet 2, but the third
 action we specified--making the guess--cannot be run, because its
 precondition is ``False``. This is what the ``BadPrecondition`` tells
@@ -1332,6 +1331,16 @@ us, and the action that could not be performed appears as
 
 The last component is the model state at that point: we can see that
 the ``gameValue`` is only 1 Ada, so of course we cannot withdraw 3.
+
+ .. note::
+
+    We saw earlier that when tests are *generated* from a
+    ContractModel_, then QuickCheck only generates actions whose
+    precondition_ is satisfied. When we specify an action explicitly
+    like this, then there is no guarantee that its precondition will
+    hold, and so a 'bad precondition' error becomes a possibility. The
+    problem here is really that this generalized unit test is
+    inconsistent with our model.
 
 Repeating a dynamic logic test
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1358,8 +1367,8 @@ underlying property:
   > quickCheck $ withDLTest unitTest prop_Game badUnitTest
   *** Failed! Falsified (after 1 test):
 
-(No test case is displayed because nothing was generate in this
-test--the test case ``badUnitTest`` was supplied).
+(No test case is displayed by QuickCheck because nothing was generated
+in this case--the test case ``badUnitTest`` was supplied explicitly).
 
 If we now correct ``unitTest``, for example by changing the range of
 ``val`` from 1-20 to 3-20, then the saved bad test case passes:
@@ -1389,11 +1398,11 @@ Something good is always possible
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 We saw above how to generate random *parameters* to actions in dynamic
-logic tests; what gives them their power is that we can also include
+logic tests; what gives them their real power is that we can also include
 random *actions*.
 
 Suppose we want to test that no Ada remain locked in the game contract
-for ever. We can specify this with a DL_ test that requires that *no
+for ever. We could try to specify this with a DL_ test that requires that *no
 Ada remain locked in the contract after any sequence of actions*. We
 can include a random sequence of actions in a DL_ test using
 `anyActions_`_, and we can make assertions about the ModelState_ using
@@ -1422,7 +1431,8 @@ Of course, this test fails:
     (GameModel {_gameValue = 1, _hasToken = Just (Wallet 1), _currentSecret = "*******"})
 
 If all we do is lock one Ada, then obviously the locked funds are not
-zero. The failed assertion is reported as a ``BadPrecondition``.
+zero. The failed assertion is reported as a ``BadPrecondition`` (for
+the assertion).
 
 The property we wrote above is wrong: what we really intended to say
 was that *after a correct guess that requests all the funds*, then no
@@ -1442,7 +1452,9 @@ the contract, from the contract model:
       action $ Guess w "" secret val
       assertModel "Locked funds should be zero" $ isZero . lockedValue
 
-This property also fails!
+After a random sequence of actions, we choose a random wallet and
+construct a correct guess that recovers all the locked Ada to this
+wallet. But this property also fails!
 
  .. code-block:: text
 
@@ -1489,9 +1501,9 @@ This is better, but testing the property still fails:
 In this case we locked 1 Ada in the contract, chose wallet 2 to
 recover the funds, and then tried to make a correct guess--but the
 precondition for ``Guess`` still failed. And this is no surprise: the
-wallet does not hold the game token. As part of our strategy for
-recovering the funds, we need to give the game token to the wallet
-that will make the guess.
+wallet does not hold the game token. This test case shows that, as
+part of our strategy for recovering the funds, we also need to give
+the game token to the wallet that will make the guess.
 
  .. code-block:: haskell
 
@@ -1535,8 +1547,8 @@ so let us inspect the relevant part of its code:
 Comparing carefully with the failed test, we see that our strategy is
 supplying the empty string as the old password (the guess), and the
 correct password as the new one--so the guess is wrong, and the Ada
-was not recovered. Passing the arguments in the correct order does,
-indeed, make the tests pass.
+was not recovered. Swapping the two password arguments to ``Guess``
+does, at last, make the tests pass.
 
 For this simple contract, recovering the locked funds is easy--but as
 we have seen, writing a property that says that it is always possible
@@ -1547,9 +1559,9 @@ Monitoring and tuning dynamic logic tests
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The dynamic logic test we have developed only uses our recovery
-strategy if locked funds remain after a random sequence of
+strategy if there are locked funds remaining after a random sequence of
 actions. How often does that happen? Given that tests contain many
-more guesses than lock actions, there is a risk that the contract is
+more guesses than ``Lock`` actions, there is a risk that the contract is
 usually holding no funds before we even consider using our
 strategy. To find out, we can monitor_ the contract model during our
 tests. As in the monitoring_ method of the ContractModel_ class, we
@@ -1588,7 +1600,8 @@ proportion of our tests actually leave funds to recover:
    1.96% Lock
 
 We can see that around 30% of generated tests leave some Ada in the
-contract for our strategy to recover. This is a bit low, but it is
+contract for our strategy to recover. This is a bit low--it means that
+two thirds of our tests do not actually test the strategy. But it is
 easy to address: we can simply use the dynamic logic to specify the
 initial ``Lock`` action *explicitly*, and generate larger amounts for
 the initial funds locked in the game (lines 3-5 below):
