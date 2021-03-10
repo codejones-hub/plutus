@@ -43,10 +43,9 @@ import           Language.Plutus.Contract.Trace.RequestHandler (RequestHandler (
                                                                 maybeToHandler)
 import qualified Language.Plutus.Contract.Trace.RequestHandler as RequestHandler
 import           Ledger.Tx                                     (Tx, txId)
-import           Plutus.PAB.Command                            (saveBalancedTx, saveBalancedTxResult)
+import           Plutus.PAB.Command                            (saveBalancedTxResult)
 import qualified Plutus.PAB.Effects.Contract                   as Contract
 import           Plutus.PAB.Effects.EventLog                   (EventLogEffect, runCommand)
-import           Plutus.PAB.Events                             (ChainEvent)
 import           Plutus.PAB.Events.Contract                    (ContractInstanceId (..), ContractPABRequest (..),
                                                                 ContractResponse (..))
 import qualified Plutus.PAB.Events.Contract                    as Events.Contract
