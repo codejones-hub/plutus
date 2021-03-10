@@ -31,10 +31,10 @@ import           Language.Plutus.Contract.Trace (EndpointError (..))
 import           Language.Plutus.Contract.Types (ContractError)
 import           Ledger                         (Block, Blockchain, Tx, TxId, txId)
 import           Ledger.Index                   as UtxoIndex
-import           Plutus.PAB.Events              (ContractInstanceId)
 import           Plutus.PAB.Instances           ()
 import           Servant.Client                 (BaseUrl, ClientError)
 import           Wallet.API                     (WalletAPIError)
+import           Wallet.Types                   (ContractInstanceId)
 
 data PABError
     = FileNotFound FilePath
