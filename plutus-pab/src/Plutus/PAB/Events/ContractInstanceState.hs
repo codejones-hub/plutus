@@ -7,6 +7,7 @@
 module Plutus.PAB.Events.ContractInstanceState(
     ContractInstanceState(..)
     , PartiallyDecodedResponse(..)
+    , hasActiveRequests
     ) where
 
 import           Control.Monad.Freer.Extras.Log     (LogMessage)

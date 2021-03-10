@@ -54,10 +54,9 @@ import           Ledger                                  (Address, Tx, TxId, TxO
                                                           txOutRefId, txOutTxOut, txOutTxTx)
 import           Ledger.Index                            (UtxoIndex (UtxoIndex))
 import           Plutus.PAB.Events                       (ChainEvent (..), NodeEvent (SubmittedTx),
-                                                          UserEvent (InstallContract), hasActiveRequests)
-import           Plutus.PAB.Events.Contract              (ContractEvent (..), ContractInstanceId,
-                                                          ContractInstanceState (..), ContractResponse (..),
-                                                          IterationID)
+                                                          UserEvent (InstallContract))
+import           Plutus.PAB.Events.Contract              (ContractInstanceId, ContractResponse (..), IterationID)
+import           Plutus.PAB.Events.ContractInstanceState (ContractInstanceState (..), hasActiveRequests)
 
 -- | The empty projection. Particularly useful for commands that have no 'state'.
 nullProjection :: Projection () event
