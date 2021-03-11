@@ -17,12 +17,9 @@ module Plutus.PAB.Monitoring.PABLogMsg(
     AppMsg(..)
     ) where
 
-import           Data.Aeson                              (FromJSON, ToJSON, Value)
-import qualified Data.Aeson.Encode.Pretty                as JSON
-import qualified Data.ByteString.Lazy.Char8              as BSL8
-import           Data.String                             (IsString (..))
+import           Data.Aeson                              (FromJSON, ToJSON)
 import           Data.Text                               (Text)
-import           Data.Text.Prettyprint.Doc               (Pretty (..), colon, hang, viaShow, vsep, (<+>))
+import           Data.Text.Prettyprint.Doc               (Pretty (..), colon, (<+>))
 import           Data.Time.Units                         (Second)
 import           GHC.Generics                            (Generic)
 
@@ -32,18 +29,16 @@ import           Cardano.ChainIndex.Types                (ChainIndexServerMsg)
 import           Cardano.Metadata.Types                  (MetadataLogMessage)
 import           Cardano.Node.Types                      (MockServerLogMsg)
 import           Cardano.Wallet.Types                    (WalletMsg)
-import           Language.Plutus.Contract.State          (ContractRequest)
 import           Ledger.Tx                               (Tx)
 import           Plutus.PAB.Core                         (CoreMsg (..))
 import           Plutus.PAB.Core.ContractInstance        (ContractInstanceMsg (..))
-import           Plutus.PAB.Effects.Contract.CLI         (ContractExe, ContractExeLogMsg)
+import           Plutus.PAB.Effects.Contract.CLI         (ContractExe, ContractExeLogMsg (..))
 import           Plutus.PAB.Effects.ContractRuntime      (ContractRuntimeMsg)
 import           Plutus.PAB.Events.Contract              (ContractInstanceId, ContractPABRequest)
 import           Plutus.PAB.Events.ContractInstanceState (PartiallyDecodedResponse)
 import           Plutus.PAB.Instances                    ()
 import           Plutus.PAB.Monitoring.MonadLoggerBridge (MonadLoggerMsg (..))
 import           Plutus.PAB.ParseStringifiedJSON         (UnStringifyJSONLog (..))
-import           Plutus.PAB.Types                        (PABError (..))
 import           Plutus.PAB.Webserver.Types              (WebSocketLogMsg)
 import           Wallet.Emulator.Wallet                  (WalletEvent (..))
 
@@ -73,7 +68,7 @@ instance Pretty AppMsg where
         ProcessAllOutboxesMsg s -> "Processing contract outboxes every" <+> pretty (fromIntegral @_ @Double s) <+> "seconds"
         PABMsg m -> pretty m
         InstalledContract t -> pretty t
-        ContractInstance t s -> pretty t <+> pretty s-- FIXME
+        ContractInstance t s -> pretty t <+> pretty s
         TxHistoryItem t -> pretty t
         ContractHistoryItem i s -> pretty i <> colon <+> pretty s
 
