@@ -31,6 +31,7 @@ import           Ledger.Ada                                        (lovelaceValu
 import           Plutus.PAB.Command                                ()
 import           Plutus.PAB.Core
 import           Plutus.PAB.Core.ContractInstance                  (ContractInstanceMsg)
+import qualified Plutus.PAB.Db.Eventful.Query                      as Query
 import           Plutus.PAB.Effects.Contract                       (ContractEffect)
 import           Plutus.PAB.Effects.ContractTest                   (TestContracts (..))
 import           Plutus.PAB.Effects.EventLog                       (EventLogEffect)
@@ -40,7 +41,6 @@ import           Plutus.PAB.Events                                 (ChainEvent, 
 import           Plutus.PAB.MockApp                                (TestState, TxCounts (..), blockchainNewestFirst,
                                                                     defaultWallet, processAllMsgBoxes, runScenario,
                                                                     txCounts, txValidated, valueAt)
-import qualified Plutus.PAB.Query                                  as Query
 import           Plutus.PAB.Types                                  (PABError (..), chainOverviewBlockchain,
                                                                     mkChainOverview)
 import           Test.QuickCheck.Instances.UUID                    ()
