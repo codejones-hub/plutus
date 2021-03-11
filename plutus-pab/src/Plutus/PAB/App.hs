@@ -21,9 +21,6 @@ import qualified Cardano.BM.Configuration.Model                 as CM
 import           Cardano.BM.Trace                               (Trace)
 import           Cardano.ChainIndex.Client                      (handleChainIndexClient)
 import qualified Cardano.ChainIndex.Types                       as ChainIndex
-import           Cardano.Metadata.Client                        (handleMetadataClient)
-import           Cardano.Metadata.Types                         (MetadataEffect)
-import qualified Cardano.Metadata.Types                         as Metadata
 import           Cardano.Node.Client                            (handleNodeClientClient)
 import           Cardano.Node.Types                             (MockServerConfig (..))
 import qualified Cardano.Wallet.Client                          as WalletClient
@@ -62,8 +59,7 @@ import           Plutus.PAB.Monitoring.MonadLoggerBridge        (TraceLoggerT (.
 import           Plutus.PAB.Monitoring.Monitoring               (handleLogMsgTrace, handleObserveTrace)
 import           Plutus.PAB.Monitoring.PABLogMsg                (PABLogMsg (..))
 import           Plutus.PAB.Types                               (Config (Config), PABError (..), chainIndexConfig,
-                                                                 dbConfig, metadataServerConfig, nodeServerConfig,
-                                                                 walletServerConfig)
+                                                                 dbConfig, nodeServerConfig, walletServerConfig)
 import           Servant.Client                                 (ClientEnv, ClientError, mkClientEnv)
 import           Wallet.Effects                                 (ChainIndexEffect, ContractRuntimeEffect,
                                                                  NodeClientEffect, WalletEffect)
@@ -71,18 +67,16 @@ import           Wallet.Effects                                 (ChainIndexEffec
 ------------------------------------------------------------
 data Env =
     Env
-        { dbConnection      :: Connection
-        , walletClientEnv   :: ClientEnv
-        , nodeClientEnv     :: ClientEnv
-        , metadataClientEnv :: ClientEnv
-        , chainIndexEnv     :: ClientEnv
+        { dbConnection    :: Connection
+        , walletClientEnv :: ClientEnv
+        , nodeClientEnv   :: ClientEnv
+        , chainIndexEnv   :: ClientEnv
         }
 
 type AppBackend m =
         '[ ContractRuntimeEffect
          , WalletEffect
          , NodeClientEffect
-         , MetadataEffect
          , UUIDEffect
          , ContractEffect ContractExe
          , ContractDefinitionStore ContractExe
@@ -116,7 +110,6 @@ runAppBackend ::
 runAppBackend instancesState trace loggingConfig config action = do
     env@Env { dbConnection
             , nodeClientEnv
-            , metadataClientEnv
             , walletClientEnv
             , chainIndexEnv
             } <- mkEnv config
@@ -131,11 +124,6 @@ runAppBackend instancesState trace loggingConfig config action = do
         handleNodeClient =
             flip handleError (throwError . NodeClientError) .
             reinterpret @_ @(Error ClientError) (handleNodeClientClient nodeClientEnv)
-        handleMetadata ::
-               Eff (MetadataEffect ': _) a -> Eff _ a
-        handleMetadata =
-            flip handleError (throwError . MetadataError) .
-            reinterpret @_ @(Error Metadata.MetadataError) (handleMetadataClient metadataClientEnv)
         handleWallet ::
                Eff (WalletEffect ': _) a
             -> Eff _ a
@@ -159,7 +147,6 @@ runAppBackend instancesState trace loggingConfig config action = do
         . interpret handleContractDefinitionStore
         . interpret (mapLog SContractExeLogMsg) . reinterpret handleContractEffectContractExe
         . handleUUIDEffect
-        . handleMetadata
         . handleNodeClient
         . handleWallet
         . interpret (mapLog SContractRuntimeMsg) . interpret (mapLog SContractInstanceMsg) $ reinterpret2 (handleContractRuntime @ContractExe @m) action
@@ -169,13 +156,11 @@ type App a = Eff (AppBackend (TraceLoggerT IO)) a
 mkEnv :: forall m. (MonadUnliftIO m, MonadLogger m) => Config -> m Env
 mkEnv Config { dbConfig
              , nodeServerConfig
-             , metadataServerConfig
              , walletServerConfig
              , chainIndexConfig
              } = do
     walletClientEnv <- clientEnv (Wallet.baseUrl walletServerConfig)
     nodeClientEnv <- clientEnv (mscBaseUrl nodeServerConfig)
-    metadataClientEnv <- clientEnv (Metadata.mdBaseUrl metadataServerConfig)
     chainIndexEnv <- clientEnv (ChainIndex.ciBaseUrl chainIndexConfig)
     dbConnection <- dbConnect dbConfig
     pure Env {..}
