@@ -16,9 +16,11 @@ An overview of the guessing game
 --------------------------------
 
 The source code of the guessing game contract is provided as an
-example here_. The game is played as follows:
+example here_, and the `final test code is here <GameModel.hs>`_.
 
-.. _here: http://no.it.isnt/
+The game is played as follows:
+
+.. _here: https://github.com/input-output-hk/plutus/blob/master/plutus-use-cases/src/Language/PlutusTx/Coordination/Contracts/GameStateMachine.hs
 
  - The first player locks a sum of Ada in the contract, which is
    donated as a prize. The prize is protected by a secret password.
@@ -44,16 +46,22 @@ Emulated wallets
 To test contracts, we need emulated wallets. These and many other
 useful definitions for testing can be imported via
 
-.. literalinclude:: GameModel.hs
-    :start-after: START_IMPORT_CONTRACT_TEST
-    :end-before: END_IMPORT_CONTRACT_TEST
+ .. code-block:: haskell
+
+                 import           Language.Plutus.Contract.Test
+
 
 Now we can create a number of wallets: in this
 tutorial, we'll settle for three:
 
-.. literalinclude:: GameModel.hs
-    :start-after: START_DEFINE_WALLETS
-    :end-before:  END_DEFINE_WALLETS
+ .. code-block:: haskell
+                 
+  w1, w2, w3 :: Wallet
+  w1 = Wallet 1
+  w2 = Wallet 2
+  w3 = Wallet 3
+  
+  wallets = [w1, w2, w3]
 
 Values and tokens
 ^^^^^^^^^^^^^^^^^
@@ -63,9 +71,10 @@ of one or more types of token. The most common token is, of course, the Ada;
 we can import functions manipulating Ada, and the ``Value`` type
 itself, as follows:
 
-.. literalinclude:: GameModel.hs
-   :start-after: START_ADAIMPORTS
-   :end-before:  END_ADAIMPORTS
+ .. code-block:: haskell
+                 
+  import qualified Ledger.Ada                                                as Ada
+  import           Ledger.Value
 
 With these imports, we can construct values in the Ada currency:
 
@@ -76,15 +85,18 @@ With these imports, we can construct values in the Ada currency:
 
 We will also need a game token. After importing the ``Scripts`` module
 
-.. literalinclude:: GameModel.hs
-   :start-after: START_SCRIPTSIMPORT
-   :end-before:  END_SCRIPTSIMPORT
+ .. code-block:: haskell
+                 
+  import qualified Ledger.Typed.Scripts                                      as Scripts
 
 we can define it as follows, applying a monetary policy defined in the code under test (imported as module ``G``):
 
-.. literalinclude:: GameModel.hs
-   :start-after:  START_GAMETOKEN
-   :end-before:   END_GAMETOKEN
+ .. code-block:: haskell
+                                   
+  gameTokenVal :: Value
+  gameTokenVal =
+      let sym = Scripts.monetaryPolicyHash G.scriptInstance
+      in G.token sym "guess"
 
 The value of the token is (with long hash values abbreviated):
 
@@ -119,9 +131,9 @@ We test contracts using a *model* of the contract state; the first job
 to be done is thus defining that model. To do so, we import the
 contract modelling library
 
-.. literalinclude:: GameModel.hs
-    :start-after: START_IMPORT_CONTRACT_MODEL
-    :end-before: END_IMPORT_CONTRACT_MODEL
+ .. code-block:: haskell
+                 
+  import           Language.Plutus.Contract.Test.ContractModel
 
 and define the model type:
 
@@ -135,9 +147,15 @@ The ``GameModel`` type must be an instance of the ContractModel_
 class, which has an associated datatype defining the kinds of
 *actions* that will be performed in generated tests.
 
-.. literalinclude:: GameModel.hs
-    :start-after: START_INSTANCE
-    :end-before: END_INSTANCE
+ .. code-block:: haskell
+                 
+  instance ContractModel GameModel where
+  
+      data Action GameModel = Lock      Wallet String Integer
+                            | Guess     Wallet String String Integer
+                            | GiveToken Wallet
+          deriving (Eq, Show)
+       
 
 In this case we define three actions:
 
@@ -153,9 +171,10 @@ In this case we define three actions:
 A generated test is called a ``Script``, and is (essentially) a
 sequence of `Action`_. We can run tests by using `propRunScript_`_:
 
-.. literalinclude:: GameModel.hs
-    :start-after: START_GAME_PROPERTY
-    :end-before: END_GAME_PROPERTY
+ .. code-block:: haskell
+                 
+  prop_Game :: Script GameModel -> Property
+  prop_Game script = propRunScript_ handleSpec script
 
 When we test this property, ``quickCheck`` will generated random
 scripts to be tested. But what is the ``handleSpec``?
@@ -167,16 +186,18 @@ ContractModel_ class. It needs to be defined as a GADT, because it
 also defines the types of the associated contract schema and contract
 errors:
 
-.. literalinclude:: GameModel.hs
-    :start-after: START_HANDLE_KEY
-    :end-before: END_HANDLE_KEY
+ .. code-block:: haskell
+                 
+    data HandleKey GameModel schema err where
+        WalletKey :: Wallet -> HandleKey GameModel GameStateMachineSchema GameError
 
 Once the type of HandleKey_ is defined, we can construct our
 HandleSpec_:
 
-.. literalinclude:: GameModel.hs
-    :start-after: START_HANDLE_SPEC
-    :end-before: END_HANDLE_SPEC
+ .. code-block:: haskell
+                 
+  handleSpec :: [HandleSpec GameModel]
+  handleSpec = [ HandleSpec (WalletKey w) w G.contract | w <- wallets ]
 
 This specifies that we should create one contract instance per wallet,
 of ``G.contract``, the contract under test, identified by
@@ -211,9 +232,17 @@ Generating actions
 To generate actions, we need to be able to generate wallets, guesses,
 and suitable values of Ada, since these appear as action parameters.
 
-.. literalinclude:: GameModel.hs
-    :start-after: START_GENERATORS
-    :end-before: END_GENERATORS
+ .. code-block:: haskell
+                 
+  genWallet :: Gen Wallet
+  genWallet = elements wallets
+  
+  genGuess :: Gen String
+  genGuess = elements ["hello", "secret", "hunter2", "*******"]
+  
+  genValue :: Gen Integer
+  genValue = getNonNegative <$> arbitrary
+  
 
 We choose wallets from the three available, and we choose passwords
 from a small set, so that random guesses will often be
@@ -223,9 +252,12 @@ negative amounts would be error cases that we choose not to test.
 Now we can define a generator for `Action`_, as a method of the
 ContractModel_ class:
 
-.. literalinclude:: GameModel.hs
-    :start-after: START_ARBITRARY
-    :end-before: END_ARBITRARY
+ .. code-block:: haskell
+                 
+    arbitraryAction s = oneof $
+        [ Lock      <$> genWallet <*> genGuess <*> genValue              ] ++
+        [ Guess     <$> genWallet <*> genGuess <*> genGuess <*> genValue ] ++
+        [ GiveToken <$> genWallet                                        ]
 
 With this method defined, we can start to generate test cases. Using
 ``sample`` we can see what scripts look like:
@@ -288,9 +320,16 @@ of such information, we store it in a *contract state*, which is the
 type parameter of the ContractModel_ class. So, let's complete the
 definition of a ``GameModel``:
 
-.. literalinclude:: GameModel.hs
-   :start-after:  START_MODELSTATE
-   :end-before:   END_MODELSTATE
+ .. code-block:: haskell
+                 
+  data GameModel = GameModel
+      { _gameValue     :: Integer
+      , _hasToken      :: Maybe Wallet
+      , _currentSecret :: String }
+      deriving (Show)
+  
+  makeLenses 'GameModel
+
 
 Initially the game token does not exist, so we record its current
 owner as a ``Maybe Wallet``, so that we can represent the initial
@@ -304,9 +343,13 @@ in the ContractModel_ class.
 The initial state just records that the game token does not exist yet,
 and assigns default values to the other fields.
 
-.. literalinclude:: GameModel.hs
-   :start-after:  START_INITSTATEDEFS
-   :end-before:   END_INITSTATEDEFS
+ .. code-block:: haskell
+                 
+    initialState = GameModel
+        { _gameValue     = 0
+        , _hasToken      = Nothing
+        , _currentSecret = ""
+        }
 
 The nextState_ function is defined in the Spec_ monad
 
@@ -473,9 +516,9 @@ So far we are generating Actions, but we have not yet linked them to
 the contract they are supposed to test--so 'running' the tests, as we
 did above, did not invoke the contract at all. To do so, we must import the emulator
 
-.. literalinclude:: GameModel.hs
-   :start-after: START_IMPORTEMULATOR
-   :end-before:  END_IMPORTEMULATOR
+ .. code-block:: haskell
+
+  import           Plutus.Trace.Emulator                                     as Trace
 
 Then we define the perform_ method of the ContractModel_ class:
 
@@ -1636,31 +1679,35 @@ exercise our recovery strategy:
   48.33% Guess
    1.92% Lock
 
+More dynamic logic
+^^^^^^^^^^^^^^^^^^
 
+Dynamic logic tests are much more expressive than we have seen
+hitherto. The DL_ monad is an instance of ``Alternative``, so we can
+write tests with random control flow, weight choices suitably, and so
+on. For example, anyActions_, which generates a random sequence of
+actions of expected length ``n``, is defined by
 
-                  
-Notes on rst
-------------------------
+ .. code-block:: haskell
 
-Explain the contract. Double back-ticks for fixed-width font
-``Language.PlutusTx.Coordination.Contracts.GameStateMachine``.
-Link to other sections :ref:`like this <modelling-contracts>`.
+  anyActions :: Int -> DL s ()
+  anyActions n = stopping
+             <|> weight (1 / fromIntegral n)
+             <|> (anyAction >> anyActions n)
 
-.. _modelling-contracts:
+This code makes a random choice between three alternatives, expressed
+using ``(<|>)``. The first two alternatives terminate (and return
+``()``), while the last alternative performs a random action followed
+by another random sequence of actions. The second alternative is
+weighted by ``1/n``, so the third is chosen ``n`` times as often,
+resulting in an expected length of ``n`` actions. The first
+alternative is guarded by stopping_, which means it will be chosen
+*only* if the test case is 'getting too long'; in this case
+anyActions_ will generate an empty sequence. We can exercise fine
+control over the way test cases are generated, including specifying
+strategies for bringing a long test case to a close. See the
+documentation for more details.
 
-Modelling contracts
--------------------
-
-You can include Haskell code like this:
-
-.. literalinclude:: GameModel.hs
-    :start-after: START_MODELSTATE
-    :end-before: END_MODELSTATE
-
-Linking to the haddock docs: `arbitraryAction`_
-
-.. note::
-    This is a note.
 
 .. _arbitraryAction: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:arbitraryAction
 .. _shrinkAction: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:shrinkAction
@@ -1686,17 +1733,11 @@ Linking to the haddock docs: `arbitraryAction`_
 .. _DL: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:DL
 .. _action: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:action
 .. _`anyActions_`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:anyActions_
+.. _anyActions: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:anyActions
+.. _stopping: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:stopping
 .. _forAllQ: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:forAllQ
 .. _assertModel: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:assertModel
 .. _monitor: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:monitor
 .. _withDLTest: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:withDLTest
 .. _Quantification: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:Quantification
 .. _chooseQ: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:chooseQ
-
-
-
-Questions to resolve
---------------------
-What happens if we try to withdraw 0 Ada? What happens when the last Ada is withdrawn? Is it possible to delete the contract?
-
-    Script [Var 1 := Lock (Wallet 1) "hunter2" 0]
