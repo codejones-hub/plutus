@@ -91,8 +91,8 @@
         },
         "cpu": {
             "arguments": {
-                "slope": 1.38392300254995e-4,
-                "intercept": 14.4349710134396
+                "slope": 1.23015844246171e-3,
+                "intercept": 3.31020615092835e-2
             },
             "type": "multi_sizes"
         }
@@ -137,8 +137,8 @@
         },
         "cpu": {
             "arguments": {
-                "slope": 7.79912151776048e-4,
-                "intercept": 1.46524642365655e-2
+                "slope": 7.9284761216963e-4,
+                "intercept": -3.2856429564406e-2
             },
             "type": "added_sizes"
         }
@@ -239,8 +239,8 @@
         },
         "cpu": {
             "arguments": {
-                "slope": 7.53701108791152e-4,
-                "intercept": 2.00912125113272e-2
+                "slope": 4.4162077147253e-4,
+                "intercept": -2.25091696708345e-2
             },
             "type": "added_sizes"
         }

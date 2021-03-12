@@ -27,14 +27,15 @@ import           Hedgehog.Internal.Tree
 import           Hedgehog.Range
 import           System.Directory
 import           System.FilePath
+import           System.Random
 
 type UntypedPlain f (uni :: GHC.Type -> GHC.Type) (fun :: GHC.Type) = f Name uni fun ()
 
 runTermBench :: String -> UntypedPlain UT.Term DefaultUni DefaultFun -> Benchmark
 runTermBench name term = env
-    (do
+    (do   -- FIXME: WHAT IS GOING ON HERE?
         (_result, budget) <-
-          pure $ runCekNoEmit defBuiltinsRuntime Counting term
+          pure $ runCekNoEmit defBuiltinsRuntime enormousBudget term
         pure budget
         )
     (\_ -> bench name $ nf (unsafeEvaluateCek defBuiltinsRuntime) term)
@@ -128,15 +129,31 @@ expToBenchingBytestring seed e = let x = genSample seed (bytes (Hedgehog.Range.s
 -- TODO make the e the actual ExMemory size
 expToBenchingInteger :: Integer -> (Integer, ExMemory)
 expToBenchingInteger e =
-            let
-                x = (3 :: Integer) ^ e
-            in (x, memoryUsage x)
+    let
+        x = (3 :: Integer) ^ e
+    in (x, memoryUsage x)
 
-benchTwoInt :: DefaultFun -> Benchmark
-benchTwoInt builtinName =
-    createTwoTermBuiltinBench builtinName numbers numbers
+
+-- Generate a random n-word integer
+randNwords :: Integer -> StdGen -> (Integer, StdGen)
+randNwords n gen = randomR (lb,ub) gen
+    where lb = 2^(64*(n-1))
+          ub = 2^(64*n) - 1
+
+-- Given a list [n_1, n_2, ...] create a list [m_1, m_2, ...] where m_i is an n_i-word random integer
+makeNumbers :: [Integer] -> StdGen -> ([Integer], StdGen)
+makeNumbers [] g     = ([], g)
+makeNumbers (n:ns) g =
+    let (m,g1) = randNwords n g
+        (ms,g2) = makeNumbers ns g1
+    in (m:ms,g2)
+
+benchTwoInt :: StdGen -> DefaultFun -> Benchmark
+benchTwoInt gen builtinName =
+    createTwoTermBuiltinBench builtinName inputs inputs
     where
-        numbers = expToBenchingInteger <$> expsToBench
+      (numbers,_) = makeNumbers [1..30] gen
+      inputs  = fmap (\e -> (e, memoryUsage e)) numbers
 
 -- Creates the .csv file consumed by create-cost-model. The data in said csv is
 -- time taken for all the builtin operations, as measured by criterion.
@@ -149,6 +166,7 @@ benchTwoInt builtinName =
 -- (NOT `plutus`, where `default.nix` is).  See SCP-2005.
 main :: IO ()
 main = do
+  gen <- getStdGen
   let dataDir = "cost-model" </> "data"
       csvFile = dataDir </> "benching.csv"
       backupFile = dataDir </> "benching.csv.backup"
@@ -157,14 +175,20 @@ main = do
   if csvExists then renameFile csvFile backupFile else pure ()
 
   defaultMainWith (defaultConfig { C.csvFile = Just csvFile })
-                        $  (benchTwoInt <$> twoIntNames)
+                        $  (benchTwoInt gen <$> twoIntNames)
                         <> (benchTwoByteStrings <$> [Concatenate])
                         <> (benchBytestringOperations <$> [DropByteString, TakeByteString])
                         <> (benchHashOperations <$> [SHA2, SHA3])
                         <> (benchSameTwoByteStrings <$> [EqByteString, LtByteString, GtByteString])
                         <> [benchVerifySignature]
                         <> benchComparison
+
   pure ()
-    where twoIntNames = [ AddInteger, SubtractInteger, MultiplyInteger, DivideInteger
-                        , QuotientInteger, RemainderInteger, ModInteger, LessThanInteger
-                        , LessThanEqInteger, GreaterThanInteger, GreaterThanEqInteger, EqInteger]
+    where twoIntNames = [ AddInteger, SubtractInteger
+                        , MultiplyInteger
+                        , QuotientInteger, RemainderInteger
+                        , DivideInteger, ModInteger
+                        , LessThanInteger, LessThanEqInteger
+                        , GreaterThanInteger, GreaterThanEqInteger
+                        , EqInteger
+                        ]

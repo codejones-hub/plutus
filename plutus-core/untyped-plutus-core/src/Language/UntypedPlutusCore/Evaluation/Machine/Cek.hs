@@ -48,8 +48,8 @@ import           Language.UntypedPlutusCore.Subst
 
 import           Language.PlutusCore.Constant
 import           Language.PlutusCore.Evaluation.Machine.ExBudgeting
-import           Language.PlutusCore.Evaluation.Machine.Exception
 import           Language.PlutusCore.Evaluation.Machine.ExMemory
+import           Language.PlutusCore.Evaluation.Machine.Exception
 import           Language.PlutusCore.Evaluation.Result
 import           Language.PlutusCore.Name
 import           Language.PlutusCore.Pretty
@@ -362,36 +362,36 @@ computeCek
     => Context uni fun -> CekValEnv uni fun -> TermWithMem uni fun -> CekM uni fun s (Term Name uni fun ())
 -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
 computeCek ctx env (Var _ varName) = do
---  spendBudget BVar astNodeCost
+    spendBudget BVar astNodeCost
     val <- lookupVarName varName env
     returnCek ctx val
 computeCek ctx _ (Constant ex val) = do
---  spendBudget BConst astNodeCost
+    spendBudget BConst astNodeCost
     returnCek ctx (VCon ex val)
 computeCek ctx env (LamAbs ex name body) = do
---  spendBudget BLamAbs astNodeCost
+    spendBudget BLamAbs astNodeCost
     returnCek ctx (VLamAbs ex name body env)
 computeCek ctx env (Delay ex body) = do
---  spendBudget BDelay astNodeCost
+    spendBudget BDelay astNodeCost
     returnCek ctx (VDelay ex body env)
 -- s ; ρ ▻ lam x L  ↦  s ◅ lam x (L , ρ)
 computeCek ctx env (Force _ body) = do
---  spendBudget BForce astNodeCost
+    spendBudget BForce astNodeCost
     computeCek (FrameForce : ctx) env body
 -- s ; ρ ▻ [L M]  ↦  s , [_ (M,ρ)]  ; ρ ▻ L
 computeCek ctx env (Apply _ fun arg) = do
---  spendBudget BApply astNodeCost
+    spendBudget BApply astNodeCost
     computeCek (FrameApplyArg env arg : ctx) env fun
 -- s ; ρ ▻ abs α L  ↦  s ◅ abs α (L , ρ)
 -- s ; ρ ▻ con c  ↦  s ◅ con c
 -- s ; ρ ▻ builtin bn  ↦  s ◅ builtin bn arity arity [] [] ρ
 computeCek ctx _ (Builtin ex bn) = do
---  spendBudget BBuiltin astNodeCost
+    spendBudget BBuiltin astNodeCost
     BuiltinRuntime _ arity _ _ <- asksM $ lookupBuiltin bn . cekEnvRuntime
     returnCek ctx (VBuiltin ex bn arity arity 0 [])
 -- s ; ρ ▻ error A  ↦  <> A
 computeCek _ _ (Error _) = do
---  spendBudget BError astNodeCost
+    spendBudget BError astNodeCost
     throwing_ _EvaluationFailure
 -- s ; ρ ▻ x  ↦  s ◅ ρ[ x ]
 -- | Call 'dischargeCekValue' over the received 'CekVal' and feed the resulting 'Term' to

@@ -32,7 +32,6 @@ benchData <- function(path) {
     mutate_at(c("Mean", "MeanLB", "MeanUB", "Stddev", "StddevLB", "StddevUB"), function(x) { x * 1000 * 1000 })
 }
 
-# path <- "plutus-core/cost-model/budgeting-bench/csvs/benching.csv"
 
 modelFun <- function(path) {
   data <- benchData(path)
@@ -53,11 +52,6 @@ modelFun <- function(path) {
     lm(Mean ~ I(x_mem + y_mem), filtered)
   }
 
-  eqIntegerModel <- {
-    filtered <- data %>% filter(BuiltinName == "EqInteger") %>% filter(x_mem == y_mem) %>% filter (x_mem != 0) %>% filter(x_mem < 2000) %>% filter(y_mem < 2000)
-    lm(Mean ~ I(pmin(x_mem, y_mem)), data=filtered)
-  }
-
   subtractIntegerModel <- {
     filtered <- data %>% filter(BuiltinName == "SubtractInteger") %>% filter(x_mem < 2000) %>% filter(y_mem < 2000)
     lm(Mean ~ I(x_mem + y_mem), filtered)
@@ -73,9 +67,16 @@ modelFun <- function(path) {
     # This one does seem to underestimate the cost by a factor of two
     lm(Mean ~ ifelse(x_mem > y_mem, I(x_mem * y_mem), 0) , filtered)
   }
+
   quotientIntegerModel <- divideIntegerModel
   remainderIntegerModel <- divideIntegerModel
   modIntegerModel <- divideIntegerModel
+
+  eqIntegerModel <- 0
+  eqIntegerModel <- {
+    filtered <- data %>% filter(BuiltinName == "EqInteger") %>% filter(x_mem == y_mem) %>% filter (x_mem != 0) %>% filter(x_mem < 2000) %>% filter(y_mem < 2000)
+    lm(Mean ~ I(pmin(x_mem, y_mem)), data=filtered)
+  }
 
   lessThanIntegerModel <- {
     filtered <- data %>% filter(BuiltinName == "LessThanInteger") %>% filter(x_mem == y_mem) %>% filter (x_mem != 0) %>% filter(x_mem < 2000) %>% filter(y_mem < 2000)
