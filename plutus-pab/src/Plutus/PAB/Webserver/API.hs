@@ -76,6 +76,6 @@ type NewAPI t
                         :<|> "ws" :> WebSocketPending -- status updates, incl. open endpoints, for contract instance
                         )
                     )
-            :<|> Get '[ JSON] [ContractInstanceClientState] -- list of all active contract instances
-            :<|> Get '[JSON] [ContractSignatureResponse t] -- list of available contracts
+            :<|> "instances" :> Get '[ JSON] [ContractInstanceClientState] -- list of all active contract instances
+            :<|> "definitions" :> Get '[JSON] [ContractSignatureResponse t] -- list of available contracts
         )
