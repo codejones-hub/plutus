@@ -16,31 +16,34 @@
 {-# LANGUAGE UndecidableInstances       #-}
 module Spec.Prism where -- (tests, prismTrace, prop_Prism) where
 
-import           Control.Arrow                                             (first, second)
+import           Control.Arrow                                                    (first, second)
 import           Control.Lens
 import           Control.Monad
 import           Control.Monad.Freer.Error
 import           Control.Monad.Freer.State
-import           Data.Foldable                                             (traverse_)
+import           Data.Foldable                                                    (traverse_)
 import           Data.Maybe
-import           Language.Plutus.Contract                                  (HasEndpoint)
-import           Language.Plutus.Contract.Test                             hiding (not)
-import           Language.Plutus.Contract.Test.ContractModel               as ContractModel
+import           Language.Plutus.Contract                                         (Contract, HasEndpoint)
+import           Language.Plutus.Contract.Test                                    hiding (not)
+import           Language.Plutus.Contract.Test.ContractModel                      as ContractModel
 import           Language.PlutusTx.Lattice
-import qualified Ledger.Ada                                                as Ada
-import           Ledger.Crypto                                             (pubKeyHash)
-import           Ledger.Value                                              (TokenName)
+import qualified Ledger.Ada                                                       as Ada
+import           Ledger.Crypto                                                    (pubKeyHash)
+import           Ledger.Value                                                     (TokenName)
 
-import           Test.QuickCheck                                           as QC hiding ((.&&.))
+import           Test.QuickCheck                                                  as QC hiding ((.&&.))
 import           Test.QuickCheck.Monadic
 import           Test.Tasty
 
-import           Language.PlutusTx.Coordination.Contracts.Prism            hiding (credentialManager, mirror)
-import qualified Language.PlutusTx.Coordination.Contracts.Prism.Credential as Credential
-import           Language.PlutusTx.Coordination.Contracts.Prism.STO        (STOData (..))
-import qualified Language.PlutusTx.Coordination.Contracts.Prism.STO        as STO
-import           Language.PlutusTx.Monoid                                  (inv)
-import qualified Plutus.Trace.Emulator                                     as Trace
+import           Language.PlutusTx.Coordination.Contracts.Prism                   hiding (credentialManager, mirror)
+import qualified Language.PlutusTx.Coordination.Contracts.Prism.Credential        as Credential
+import qualified Language.PlutusTx.Coordination.Contracts.Prism.CredentialManager as C
+import qualified Language.PlutusTx.Coordination.Contracts.Prism.Mirror            as C
+import           Language.PlutusTx.Coordination.Contracts.Prism.STO               (STOData (..))
+import qualified Language.PlutusTx.Coordination.Contracts.Prism.STO               as STO
+import qualified Language.PlutusTx.Coordination.Contracts.Prism.Unlock            as C
+import           Language.PlutusTx.Monoid                                         (inv)
+import qualified Plutus.Trace.Emulator                                            as Trace
 
 import           Debug.Trace
 
@@ -144,13 +147,13 @@ deriving instance Show (HandleKey PrismModel s e)
 
 instance ContractModel PrismModel where
 
-    data Action PrismModel = Setup | Delay | Issue | Revoke | Call | Present
+    data Action PrismModel = Delay | Issue | Revoke | Call | Present
         deriving (Eq, Show)
 
     data HandleKey PrismModel s e where
-        MirrorH  :: HandleKey PrismModel PrismSchema PrismError
-        UserH    :: HandleKey PrismModel PrismSchema PrismError
-        ManagerH :: HandleKey PrismModel PrismSchema PrismError
+        MirrorH  :: HandleKey PrismModel C.MirrorSchema            C.MirrorError
+        UserH    :: HandleKey PrismModel C.STOSubscriberSchema     C.UnlockError
+        ManagerH :: HandleKey PrismModel C.CredentialManagerSchema C.CredentialManagerError
 
     arbitraryAction _ = QC.elements [Delay, Revoke, Issue, Call, Present]
 
@@ -162,7 +165,6 @@ instance ContractModel PrismModel where
     nextState cmd = do
         wait waitSlots
         case cmd of
-            Setup   -> return ()
             Delay   -> wait 1
             Revoke  -> isIssued $~ doRevoke
             Issue   -> isIssued $= Issued
@@ -177,11 +179,6 @@ instance ContractModel PrismModel where
                 return ()
 
     perform handle s cmd = case cmd of
-        Setup   -> do
-            Trace.callEndpoint @"role" (handle UserH)    UnlockSTO
-            Trace.callEndpoint @"role" (handle MirrorH)  Mirror
-            Trace.callEndpoint @"role" (handle ManagerH) CredMan
-            delay 5
         Delay   -> wrap $ delay 1
         Issue   -> wrap $ Trace.callEndpoint @"issue"              (handle MirrorH) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
         Revoke  -> wrap $ Trace.callEndpoint @"revoke"             (handle MirrorH) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
@@ -200,14 +197,14 @@ delay n = void $ Trace.waitNSlots $ fromIntegral n
 
 finalPredicate :: ModelState PrismModel -> TracePredicate
 finalPredicate _ =
-    foldr (.&&.) (pure True)
-        [ assertNotDone contract (Trace.walletInstanceTag w) "Contract stopped"
-        | w <- [ issuer, user, mirror, credentialManager ] ]
+    assertNotDone @C.STOSubscriberSchema     C.subscribeSTO      (Trace.walletInstanceTag user)              "User stopped"               .&&.
+    assertNotDone @C.MirrorSchema            C.mirror            (Trace.walletInstanceTag mirror)            "Mirror stopped"             .&&.
+    assertNotDone @C.CredentialManagerSchema C.credentialManager (Trace.walletInstanceTag credentialManager) "Credential manager stopped"
 
-prop_Prism :: Property     -- vvvvv Setup roles first
-prop_Prism = forAllDL (action Setup >> anyActions_) $ propRunScript @PrismModel spec finalPredicate
+prop_Prism :: Script PrismModel -> Property
+prop_Prism = propRunScript @PrismModel spec finalPredicate
     where
-        spec = [ HandleSpec UserH    user contract
-               , HandleSpec MirrorH  mirror contract
-               , HandleSpec ManagerH credentialManager contract ]
+        spec = [ HandleSpec UserH    user              C.subscribeSTO
+               , HandleSpec MirrorH  mirror            C.mirror
+               , HandleSpec ManagerH credentialManager C.credentialManager ]
 
