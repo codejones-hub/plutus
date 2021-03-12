@@ -16,6 +16,7 @@ module Wallet.Emulator.Stream(
     , InitialChainState
     , initialChainState
     , initialDist
+    , initialState
     , defaultEmulatorConfig
     , runTraceStream
     -- * Stream manipulation

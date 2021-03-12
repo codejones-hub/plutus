@@ -41,7 +41,6 @@ module Plutus.PAB.Events.Contract(
 import           Control.Lens.TH                                   (makePrisms)
 import           Data.Aeson                                        (FromJSON, ToJSON (..), Value, object, (.:), (.=))
 import qualified Data.Aeson                                        as JSON
-import qualified Data.ByteString.Lazy.Char8                        as BS8
 import qualified Data.Text                                         as Text
 import           Data.Text.Prettyprint.Doc
 import           GHC.Generics                                      (Generic)
@@ -56,8 +55,6 @@ import qualified Language.Plutus.Contract.Effects.WatchAddress     as NextTxAt
 import qualified Language.Plutus.Contract.Effects.WriteTx          as W
 import qualified Language.Plutus.Contract.Effects.WriteTx          as WriteTx
 import           Language.Plutus.Contract.Resumable                (IterationID)
-import qualified Language.Plutus.Contract.Resumable                as Contract
-import qualified Language.Plutus.Contract.State                    as Contract
 import           Ledger                                            (TxId)
 import           Ledger.Address                                    (Address)
 import           Ledger.Constraints.OffChain                       (UnbalancedTx)
@@ -72,7 +69,6 @@ import           Language.Plutus.Contract.Effects.Instance         (OwnIdRequest
 import           Language.Plutus.Contract.Effects.OwnPubKey        (OwnPubKeyRequest)
 import           Language.Plutus.Contract.Effects.UtxoAt           (UtxoAtAddress)
 
-import           Data.Text.Extras                                  (abbreviate)
 import           Wallet.Effects                                    (AddressChangeRequest, AddressChangeResponse)
 import           Wallet.Types                                      (ContractInstanceId (..), Notification,
                                                                     NotificationError)
