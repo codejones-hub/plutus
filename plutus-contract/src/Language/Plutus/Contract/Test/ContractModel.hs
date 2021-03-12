@@ -260,8 +260,8 @@ class ( Typeable state
     data HandleKey state :: Row * -> * -> *
 
     -- | Given the current model state, provide a QuickCheck generator for a random next action.
-    --   This is used in the `Arbitrary` instance for `Script`s as well as by `DL.anyAction` and
-    --   `DL.anyActions`.
+    --   This is used in the `Arbitrary` instance for `Script`s as well as by `anyAction` and
+    --   `anyActions`.
     arbitraryAction :: ModelState state -> Gen (Action state)
 
     -- | The initial state, before any actions have been performed.
@@ -313,7 +313,7 @@ class ( Typeable state
     monitoring _ _ = id
 
     -- | In some scenarios it's useful to have actions that are never generated randomly, but only
-    --   used explicitly in `DL` script `action`s. To avoid these actions matching an `DL.anyAction`
+    --   used explicitly in `DL` script `action`s. To avoid these actions matching an `anyAction`
     --   when shrinking, they can be marked `restricted`.
     restricted :: Action state -> Bool
     restricted _ = False
@@ -641,7 +641,7 @@ withDLTest dl prop test = DL.withDLTest dl (prop . fromStateModelScript) (toDLTe
 -- $dynamicLogic
 --
 -- Test scenarios are described in the `DL` monad (based on dynamic logic) which lets you freely mix
--- random sequences of actions (`DL.anyAction`, `DL.anyActions_`, `DL.anyActions`) with specific
+-- random sequences of actions (`anyAction`, `anyActions_`, `anyActions`) with specific
 -- actions (`action`). It also supports checking properties of the model state (`DL.assert`,
 -- `assertModel`), and random generation (`DL.forAllQ`).
 --
@@ -650,10 +650,10 @@ withDLTest dl prop test = DL.withDLTest dl (prop . fromStateModelScript) (toDLTe
 -- @
 --  unitTest :: `DL` AuctionState ()
 --  unitTest = do
---      `DL.action` $ Bid w1 100
---      `DL.action` $ Bid w2 150
---      `DL.action` $ Wait endSlot
---      `DL.action` $ Collect
+--      `action` $ Bid w1 100
+--      `action` $ Bid w2 150
+--      `action` $ Wait endSlot
+--      `action` $ Collect
 -- @
 --
 --  and could easily be extended with some randomly generated values
@@ -662,10 +662,10 @@ withDLTest dl prop test = DL.withDLTest dl (prop . fromStateModelScript) (toDLTe
 --  unitTest :: `DL` AuctionState ()
 --  unitTest = do
 --      bid <- `forAllQ` $ `chooseQ` (1, 100)
---      `DL.action` $ Bid w1 bid
---      `DL.action` $ Bid w2 (bid + 50)
---      `DL.action` $ Wait endSlot
---      `DL.action` $ Collect
+--      `action` $ Bid w1 bid
+--      `action` $ Bid w2 (bid + 50)
+--      `action` $ Wait endSlot
+--      `action` $ Collect
 -- @
 --
 -- More interesting scenarios can be constructed by mixing random and fixed sequences. The following
@@ -675,7 +675,7 @@ withDLTest dl prop test = DL.withDLTest dl (prop . fromStateModelScript) (toDLTe
 -- @
 -- finishAuction :: `DL` AuctionState ()
 -- finishAuction = do
---   `DL.anyActions_`
+--   `anyActions_`
 --   `action` $ Wait endSlot
 --   `action` $ Collect
 --   `assertModel` "Funds are locked!" (`Ledger.Value.isZero` . `lockedValue`)
@@ -719,7 +719,7 @@ action :: ContractModel state => Action state -> DL state ()
 action cmd = DL.action (ContractAction cmd)
 
 -- | Generate a random action using `arbitraryAction`. The generated action is guaranteed to satisfy
---   its `precondition`. Fails with `DL.Stuck` if no action satisfying the precondition can be found
+--   its `precondition`. Fails with `Stuck` if no action satisfying the precondition can be found
 --   after 100 attempts.
 anyAction :: DL state ()
 anyAction = DL.anyAction
@@ -765,7 +765,7 @@ anyActions_ = DL.anyActions_
 --
 --   To prevent test case generation from looping, if a scenario has not terminated after generating
 --   @2 * n + 20@ actions, where @n@ is when the stopping phase kicks in, generation fails with a
---   `DL.Looping` error.
+--   `Looping` error.
 stopping :: DL state ()
 stopping = DL.stopping
 
