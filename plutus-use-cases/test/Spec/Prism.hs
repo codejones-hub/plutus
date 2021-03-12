@@ -22,6 +22,8 @@ import           Control.Monad
 import           Control.Monad.Freer.Error
 import           Control.Monad.Freer.State
 import           Data.Foldable                                                    (traverse_)
+import           Data.Map                                                         (Map)
+import qualified Data.Map                                                         as Map
 import           Data.Maybe
 import           Language.Plutus.Contract                                         (Contract, HasEndpoint)
 import           Language.Plutus.Contract.Test                                    hiding (not)
@@ -127,12 +129,21 @@ data IssueState = NoIssue | Revoked | Issued
     deriving (Eq, Ord, Show)
 
 data PrismModel = PrismModel
-    { _isIssued :: IssueState
-    , _stoState :: STOState
+    { _walletState :: Map Wallet (IssueState, STOState)
     }
     deriving (Show)
 
 makeLenses 'PrismModel
+
+_fromJust :: Lens' (Maybe a) a
+_fromJust f (Just x) = Just <$> f x
+_fromJust f Nothing  = error "_fromJust: Nothing"
+
+isIssued :: Wallet -> Lens' PrismModel IssueState
+isIssued w = walletState . at w . _fromJust . _1
+
+stoState :: Wallet -> Lens' PrismModel STOState
+stoState w = walletState . at w . _fromJust . _2
 
 doRevoke :: IssueState -> IssueState
 doRevoke NoIssue = NoIssue
@@ -142,48 +153,53 @@ doRevoke Issued  = Revoked
 waitSlots :: Integer
 waitSlots = 2
 
+users :: [Wallet]
+users = [user, Wallet 5]
+
 deriving instance Eq   (HandleKey PrismModel s e)
 deriving instance Show (HandleKey PrismModel s e)
 
 instance ContractModel PrismModel where
 
-    data Action PrismModel = Delay | Issue | Revoke | Call | Present
+    data Action PrismModel = Delay | Issue Wallet | Revoke Wallet | Call Wallet | Present Wallet
         deriving (Eq, Show)
 
     data HandleKey PrismModel s e where
         MirrorH  :: HandleKey PrismModel C.MirrorSchema            C.MirrorError
-        UserH    :: HandleKey PrismModel C.STOSubscriberSchema     C.UnlockError
+        UserH    :: Wallet -> HandleKey PrismModel C.STOSubscriberSchema     C.UnlockError
         ManagerH :: HandleKey PrismModel C.CredentialManagerSchema C.CredentialManagerError
 
-    arbitraryAction _ = QC.elements [Delay, Revoke, Issue, Call, Present]
+    arbitraryAction _ = QC.oneof [pure Delay, genUser Revoke, genUser Issue,
+                                  genUser Call, genUser Present]
+        where genUser f = f <$> QC.elements users
 
-    initialState = PrismModel { _isIssued = NoIssue, _stoState = STOReady }
+    initialState = PrismModel { _walletState = Map.fromList [(w, (NoIssue, STOReady)) | w <- users] }
 
-    precondition s Issue = (s ^. contractState . isIssued) /= Issued  -- Multiple Issue (without Revoke) breaks the contract
-    precondition _ _     = True
+    precondition s (Issue w) = (s ^. contractState . isIssued w) /= Issued  -- Multiple Issue (without Revoke) breaks the contract
+    precondition _ _         = True
 
     nextState cmd = do
         wait waitSlots
         case cmd of
-            Delay   -> wait 1
-            Revoke  -> isIssued $~ doRevoke
-            Issue   -> isIssued $= Issued
-            Call    -> stoState $~ \ case STOReady -> STOPending; sto -> sto
-            Present -> do
-                iss <- (== Issued)     <$> viewContractState isIssued
-                sto <- (== STOPending) <$> viewContractState stoState
-                stoState $= STOReady
+            Delay     -> wait 1
+            Revoke w  -> isIssued w $~ doRevoke
+            Issue w   -> isIssued w $= Issued
+            Call w    -> stoState w $~ \ case STOReady -> STOPending; sto -> sto
+            Present w -> do
+                iss <- (== Issued)     <$> viewContractState (isIssued w)
+                sto <- (== STOPending) <$> viewContractState (stoState w)
+                stoState w $= STOReady
                 when (iss && sto) $ do
-                    transfer user issuer (Ada.lovelaceValueOf numTokens)
-                    deposit user $ STO.coins stoData numTokens
+                    transfer w issuer (Ada.lovelaceValueOf numTokens)
+                    deposit w $ STO.coins stoData numTokens
                 return ()
 
     perform handle s cmd = case cmd of
-        Delay   -> wrap $ delay 1
-        Issue   -> wrap $ Trace.callEndpoint @"issue"              (handle MirrorH) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
-        Revoke  -> wrap $ Trace.callEndpoint @"revoke"             (handle MirrorH) CredentialOwnerReference{coTokenName=kyc, coOwner=user}
-        Call    -> wrap $ Trace.callEndpoint @"sto"                (handle UserH) stoSubscriber
-        Present -> wrap $ Trace.callEndpoint @"credential manager" (handle UserH) (Trace.chInstanceId $ handle ManagerH)
+        Delay     -> wrap $ delay 1
+        Issue w   -> wrap $ Trace.callEndpoint @"issue"              (handle MirrorH) CredentialOwnerReference{coTokenName=kyc, coOwner=w}
+        Revoke w  -> wrap $ Trace.callEndpoint @"revoke"             (handle MirrorH) CredentialOwnerReference{coTokenName=kyc, coOwner=w}
+        Call w    -> wrap $ Trace.callEndpoint @"sto"                (handle $ UserH w) stoSubscriber
+        Present w -> wrap $ Trace.callEndpoint @"credential manager" (handle $ UserH w) (Trace.chInstanceId $ handle ManagerH)
         where                     -- v Wait a generous amount of blocks between calls
             wrap m   = m *> delay waitSlots
 
@@ -204,7 +220,7 @@ finalPredicate _ =
 prop_Prism :: Script PrismModel -> Property
 prop_Prism = propRunScript @PrismModel spec finalPredicate
     where
-        spec = [ HandleSpec UserH    user              C.subscribeSTO
-               , HandleSpec MirrorH  mirror            C.mirror
-               , HandleSpec ManagerH credentialManager C.credentialManager ]
+        spec = [ HandleSpec (UserH w) w                 C.subscribeSTO | w <- users ] ++
+               [ HandleSpec MirrorH   mirror            C.mirror
+               , HandleSpec ManagerH  credentialManager C.credentialManager ]
 
