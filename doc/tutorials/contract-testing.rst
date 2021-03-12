@@ -600,36 +600,36 @@ to contract endpoints makes interpreting test failures much easier.
  .. note::
 
     **Helping shrinking work better by choosing test case actions well**
-    
+
     In the definition of perform_ above, the ``GiveToken`` action is a little
     surprising: when we call the emulator, we have to specify not only the
     wallet to give the token *to*, but also the wallet to take the token
     *from*. So why did we choose to define a ``GiveToken w`` action to
     include in test cases, rather than an action ``PassToken w w'``, which
     would correspond more directly to the code in perform_?
-    
+
     The answer is that using ``GiveToken`` actions instead helps
     QuickCheck to shrink failing tests more effectively. QuickCheck
     shrinks test cases by attempting to remove actions from
     them--essentially replacing an action by a no-op. But consider a
     sequence such as
-    
+
       .. code-block:: text
-      
+
          PassToken w1 w2
          PassToken w2 w3
-    
+
     which transfers the game token in two steps from wallet 1 to
     wallet 3. Deleting either one of these steps means the game token will
     end up in the wrong place, probably causing the next steps in the test
     to behave very differently (and thus, preventing this shrinking
     step). But given the sequence
-    
+
       .. code-block:: text
-      
+
          GiveToken w2
          GiveToken w3
-    
+
     the first ``GiveToken`` can be deleted without affecting the behaviour
     of the second at all. Thus, by making token-passing steps independent
     of each other, we make it easier for QuickCheck to shrink a failing
@@ -1392,7 +1392,7 @@ a test fails:
     [Witness (1 :: Integer),
      Do $ Lock (Wallet 1) "hello" 1,
      Do $ GiveToken (Wallet 2)]
-    [Act (Guess (Wallet 2) "hello" "new secret" 3)]
+    [Action (Guess (Wallet 2) "hello" "new secret" 3)]
     (GameModel {_gameValue = 1, _hasToken = Just (Wallet 2), _currentSecret = "hello"})
 
 Dynamic logic test cases are a little more complex than the simple
@@ -1408,7 +1408,7 @@ us, and the action that could not be performed appears as
 
  .. code-block:: text
 
-   [Act (Guess (Wallet 2) "hello" "new secret" 3)]
+   [Action (Guess (Wallet 2) "hello" "new secret" 3)]
 
 The last component is the model state at that point: we can see that
 the ``gameValue`` is only 1 Ada, so of course we cannot withdraw 3.
@@ -1437,7 +1437,7 @@ code:
       [Witness (1 :: Integer),
        Do $ Lock (Wallet 1) "hello" 1,
        Do $ GiveToken (Wallet 2)]
-      [Act (Guess (Wallet 2) "hello" "new secret" 3)]
+      [Action (Guess (Wallet 2) "hello" "new secret" 3)]
       (GameModel {_gameValue = 1, _hasToken = Just (Wallet 2), _currentSecret = "hello"})
 
 We can rerun the test using withDLTest_, supplying the original DL_
@@ -1509,7 +1509,7 @@ Of course, this test fails:
   *** Failed! Falsified (after 1 test and 2 shrinks):
   BadPrecondition
     [Do $ Lock (Wallet 1) "*******" 1]
-    [Err "Locked funds should be zero"]
+    [Assert "Locked funds should be zero"]
     (GameModel {_gameValue = 1, _hasToken = Just (Wallet 1), _currentSecret = "*******"})
 
 If all we do is lock one Ada, then obviously the locked funds are not
@@ -1544,7 +1544,7 @@ wallet. But this property also fails!
   *** Failed! Falsified (after 1 test and 2 shrinks):
   BadPrecondition
     [Witness (Wallet 1 :: Wallet)]
-    [Act (Guess (Wallet 1) "" "" 0)]
+    [Action (Guess (Wallet 1) "" "" 0)]
     (GameModel {_gameValue = 0, _hasToken = Nothing, _currentSecret = ""})
 
 Here QuickCheck has chosen the arbitrary sequence of actions to be
@@ -1577,7 +1577,7 @@ This is better, but testing the property still fails:
   BadPrecondition
     [Do $ Lock (Wallet 1) "*******" 1,
      Witness (Wallet 2 :: Wallet)]
-    [Act (Guess (Wallet 2) "" "*******" 1)]
+    [Action (Guess (Wallet 2) "" "*******" 1)]
     (GameModel {_gameValue = 1, _hasToken = Just (Wallet 1), _currentSecret = "*******"})
 
 In this case we locked 1 Ada in the contract, chose wallet 2 to
@@ -1611,7 +1611,7 @@ Now we expect the tests to pass:
      Witness (Wallet 3 :: Wallet),
      Do $ GiveToken (Wallet 3),
      Do $ Guess (Wallet 3) "" "hello" 5]
-    [Err "Locked funds should be zero"]
+    [Assert "Locked funds should be zero"]
     (GameModel {_gameValue = 5, _hasToken = Just (Wallet 3), _currentSecret = "hello"})
 
 They do not! We can see from the last line that, in the final state,
