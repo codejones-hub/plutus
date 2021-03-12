@@ -55,12 +55,12 @@ Now we can create a number of wallets: in this
 tutorial, we'll settle for three:
 
  .. code-block:: haskell
-                 
+
   w1, w2, w3 :: Wallet
   w1 = Wallet 1
   w2 = Wallet 2
   w3 = Wallet 3
-  
+
   wallets = [w1, w2, w3]
 
 Values and tokens
@@ -72,7 +72,7 @@ we can import functions manipulating Ada, and the ``Value`` type
 itself, as follows:
 
  .. code-block:: haskell
-                 
+
   import qualified Ledger.Ada                                                as Ada
   import           Ledger.Value
 
@@ -86,13 +86,13 @@ With these imports, we can construct values in the Ada currency:
 We will also need a game token. After importing the ``Scripts`` module
 
  .. code-block:: haskell
-                 
+
   import qualified Ledger.Typed.Scripts                                      as Scripts
 
 we can define it as follows, applying a monetary policy defined in the code under test (imported as module ``G``):
 
  .. code-block:: haskell
-                                   
+
   gameTokenVal :: Value
   gameTokenVal =
       let sym = Scripts.monetaryPolicyHash G.scriptInstance
@@ -132,7 +132,7 @@ to be done is thus defining that model. To do so, we import the
 contract modelling library
 
  .. code-block:: haskell
-                 
+
   import           Language.Plutus.Contract.Test.ContractModel
 
 and define the model type:
@@ -148,14 +148,14 @@ class, which has an associated datatype defining the kinds of
 *actions* that will be performed in generated tests.
 
  .. code-block:: haskell
-                 
+
   instance ContractModel GameModel where
-  
+
       data Action GameModel = Lock      Wallet String Integer
                             | Guess     Wallet String String Integer
                             | GiveToken Wallet
           deriving (Eq, Show)
-       
+
 
 In this case we define three actions:
 
@@ -169,10 +169,10 @@ In this case we define three actions:
    can make a guess.
 
 A generated test is called a ``Script``, and is (essentially) a
-sequence of `Action`_. We can run tests by using `propRunScript_`_:
+sequence of `Action <ActionType_>`_. We can run tests by using `propRunScript_`_:
 
  .. code-block:: haskell
-                 
+
   prop_Game :: Script GameModel -> Property
   prop_Game script = propRunScript_ handleSpec script
 
@@ -187,7 +187,7 @@ also defines the types of the associated contract schema and contract
 errors:
 
  .. code-block:: haskell
-                 
+
     data HandleKey GameModel schema err where
         WalletKey :: Wallet -> HandleKey GameModel GameStateMachineSchema GameError
 
@@ -195,7 +195,7 @@ Once the type of HandleKey_ is defined, we can construct our
 HandleSpec_:
 
  .. code-block:: haskell
-                 
+
   handleSpec :: [HandleSpec GameModel]
   handleSpec = [ HandleSpec (WalletKey w) w G.contract | w <- wallets ]
 
@@ -218,7 +218,7 @@ Now we can run tests, although of course they will not yet succeed:
     GSM.hs:65:10-32: No instance nor default method for class operation arbitraryAction
 
 The contract modelling library cannot generate test cases, unless *we*
-specify how to generate 'Action'_, which we will do next.
+specify how to generate `Action <ActionType_>`_, which we will do next.
 
 .. _ContractModel: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ContractModel
 
@@ -233,27 +233,27 @@ To generate actions, we need to be able to generate wallets, guesses,
 and suitable values of Ada, since these appear as action parameters.
 
  .. code-block:: haskell
-                 
+
   genWallet :: Gen Wallet
   genWallet = elements wallets
-  
+
   genGuess :: Gen String
   genGuess = elements ["hello", "secret", "hunter2", "*******"]
-  
+
   genValue :: Gen Integer
   genValue = getNonNegative <$> arbitrary
-  
+
 
 We choose wallets from the three available, and we choose passwords
 from a small set, so that random guesses will often be
 correct. We choose Ada amounts to be non-negative integers, because
 negative amounts would be error cases that we choose not to test.
 
-Now we can define a generator for `Action`_, as a method of the
+Now we can define a generator for `Action <ActionType_>`_, as a method of the
 ContractModel_ class:
 
  .. code-block:: haskell
-                 
+
     arbitraryAction s = oneof $
         [ Lock      <$> genWallet <*> genGuess <*> genValue              ] ++
         [ Guess     <$> genWallet <*> genGuess <*> genGuess <*> genValue ] ++
@@ -291,7 +291,7 @@ The output tells us the distribution of generated Actions, aggregated
 across all the tests. We can see that each action was generated around
 one third of the time, which is to be expected since our generator
 does not weight them at all. Keep an eye on this table as we extend
-our generation; if any 'Action'_ disappears altogether, or is generated
+our generation; if any `Action <ActionType_>`_ disappears altogether, or is generated
 very rarely, then this indicates a problem in our tests.
 
 Modelling expectations
@@ -321,13 +321,13 @@ type parameter of the ContractModel_ class. So, let's complete the
 definition of a ``GameModel``:
 
  .. code-block:: haskell
-                 
+
   data GameModel = GameModel
       { _gameValue     :: Integer
       , _hasToken      :: Maybe Wallet
       , _currentSecret :: String }
       deriving (Show)
-  
+
   makeLenses 'GameModel
 
 
@@ -344,7 +344,7 @@ The initial state just records that the game token does not exist yet,
 and assigns default values to the other fields.
 
  .. code-block:: haskell
-                 
+
     initialState = GameModel
         { _gameValue     = 0
         , _hasToken      = Nothing
@@ -508,7 +508,7 @@ thus far we have not defined how actions in a test should be
 performed--so the ``Lock`` action in the test case behaves as a no-op,
 which of course does not deposit a game token in wallet 1. It is time
 to link actions in a test to the emulator.
-   
+
 Performing actions
 ^^^^^^^^^^^^^^^^^^
 
@@ -640,7 +640,7 @@ test.
 
 
 
-  
+
 Debugging the model
 -------------------
 
@@ -721,7 +721,7 @@ later via failed tests).
 We can cause the emulator to delay a number of slots like this:
 
   .. code-block:: haskell
-                  
+
     delay :: Int -> EmulatorTrace ()
     delay n = void $ waitNSlots (fromIntegral n)
 
@@ -759,7 +759,7 @@ definition of nextState_:
            gameValue     $= val
            forge gameTokenVal
            deposit  w gameTokenVal
-           withdraw w $ Ada.lovelaceValueOf val          
+           withdraw w $ Ada.lovelaceValueOf val
            wait 2
 
        ...
@@ -791,10 +791,10 @@ generates the same output as before.  Testing it *after* the delays
 are added results in
 
  .. code-block:: text
-                 
+
   > quickCheck testLock
   +++ OK, passed 100 tests.
-  
+
   Actions (100 in total):
   100% Lock
 
@@ -805,16 +805,16 @@ The test passes, and the problem is fixed.
   Since there is no random generation in this test,
   there is no real need to test it 100 times. This can be avoided by
   adding ``withMaxSuccess`` to the definition:
-  
+
    .. code-block:: haskell
-                    
+
     testLock :: Property
     testLock = withMaxSuccess 1 . prop_Game $
         Script
          [Lock (Wallet 1) "hunter2" 0]
 
  .. note::
-    
+
   We save the **failing test case**, not the random seed used
   to generate it. This is the only way to be sure that we repeat the
   *same* test that just failed. Usually, a failed test that QuickCheck
@@ -862,10 +862,10 @@ the contract instance crashed.
 The emulator log output can be rather overwhelming, but we can eliminate the 'INFO' messages by running the test script with appropriate options. If we define
 
   .. code-block:: haskell
-     
+
 
     import           Control.Monad.Freer.Log
-    
+
     propGame' :: LogLevel -> Script GameModel -> Property
     propGame' l s = propRunScriptWithOptions
                         (set minLogLevel l defaultCheckOptions)
@@ -889,7 +889,7 @@ then we can re-run the test and see more succinct output:
     Emulator log:
     [WARNING] Slot 4: 00000000-0000-4000-8000-000000000000 {Contract instance for wallet 1}:
                         Contract instance stopped with error: GameSMError (ChooserError "Found 2 outputs, expected 1")
-    
+
 Now we see the problem: an error in the game implementation that
 stopped the second contract call, because two unspent transaction
 outputs had been created. These two outputs are the Ada amounts
@@ -921,7 +921,7 @@ We can easily avoid this by *strengthening the precondition* of
 do so by checking whether any wallet holds the game token:
 
   .. code-block:: haskell
-                  
+
     precondition s cmd = case cmd of
             Lock _ _ _    -> tok == Nothing
             Guess _ _ _ _ -> True
@@ -952,7 +952,7 @@ we see here--the faulty test case was discarded (1000 times).
 Rerunning random tests finds another 'bug':
 
  .. code-block:: text
-                 
+
   > quickCheck $ propGame' Warning
   *** Failed! Assertion failed (after 10 tests and 6 shrinks):
   Script
@@ -1068,7 +1068,7 @@ Now the tests pass:
 
   > quickCheck . withMaxSuccess 10000 $ prop_Game
   +++ OK, passed 10000 tests.
-  
+
   Actions (241234 in total):
   87.1324% GiveToken
    9.0854% Guess
@@ -1131,10 +1131,10 @@ With this change, ``Guess`` and ``GiveToken`` actions become equally
 frequent:
 
  .. code-block:: text
-                 
+
   > quickCheck . withMaxSuccess 1000 $ prop_Game
   +++ OK, passed 1000 tests.
-  
+
   Actions (23917 in total):
   48.271% GiveToken
   47.845% Guess
@@ -1211,7 +1211,7 @@ To create a table showing the proportion of guesses
 which were right or wrong, we can define monitoring_ as
 
   .. code-block:: haskell
-                  
+
     monitoring (s,_) (Guess w old new v) =
       tabulate "Guesses"
         [if old==secret then "Right" else "Wrong"]
@@ -1224,12 +1224,12 @@ This generates output such as this:
 
   > quickCheck . withMaxSuccess 1000 $ prop_Game
   +++ OK, passed 1000 tests.
-  
+
   Actions (23917 in total):
   48.271% GiveToken
   47.845% Guess
    3.884% Lock
-  
+
   Guesses (11443 in total):
   75.417% Wrong
   24.583% Right
@@ -1290,7 +1290,7 @@ are little programs in the DL_ monad, such as this one:
       action $ Guess w2 "hello" "new secret" 3
 
 This DL_ fragment simply specifies a unit test in terms of the
-underlying ContractModel_ we have already seen, using action_ to
+underlying ContractModel_ we have already seen, using `action <actionFun_>`_ to
 include specific ``Actions`` in the test. To run such a test, we
 must specify a QuickCheck property such as
 
@@ -1310,7 +1310,7 @@ We can run this test as follows:
 
   > quickCheck . withMaxSuccess 1 $ prop_DL unitTest
   +++ OK, passed 1 test.
-  
+
   Actions (3 in total):
   33% GiveToken
   33% Guess
@@ -1339,7 +1339,7 @@ Here forAllQ_ lets us generate a random value using chooseQ_:
 
   chooseQ ::
     (Arbitrary a, Random a, Ord a) => (a, a) -> Quantification a
-                 
+
 forAllQ_ takes a Quantification_, which resembles a QuickCheck
 generator, but with a more limited API to support its use in dynamic
 logic.
@@ -1429,7 +1429,7 @@ as do freshly generated random tests:
 
   > quickCheck $ forAllDL unitTest prop_Game
   +++ OK, passed 100 tests.
-  
+
   Actions (300 in total):
   33.3% GiveToken
   33.3% Guess
@@ -1638,7 +1638,7 @@ proportion of our tests actually leave funds to recover:
 
   > quickCheck $ forAllDL noLockedFunds prop_Game
   +++ OK, passed 100 tests (31% Unlocking funds).
-  
+
   Actions (5112 in total):
   49.24% GiveToken
   48.81% Guess
@@ -1672,10 +1672,10 @@ With this addition, a much higher proportion of tests actually
 exercise our recovery strategy:
 
  .. code-block:: text
-                 
+
   > quickCheck $ forAllDL noLockedFunds prop_Game
   +++ OK, passed 100 tests (74% Unlocking funds).
-  
+
   Actions (5198 in total):
   49.75% GiveToken
   48.33% Guess
@@ -1729,11 +1729,11 @@ documentation for more details.
 .. _viewContractState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:viewContractState
 .. _lockedValue: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:lockedValue
 .. _wait: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:wait
-.. '_Action': ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:Action
+.. _ActionType: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:Action
 .. _HandleKey: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:HandleKey
 .. _ModelState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ModelState
 .. _DL: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:DL
-.. _action: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:action
+.. _actionFun: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:action
 .. _`anyActions_`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:anyActions_
 .. _anyActions: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:anyActions
 .. _stopping: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:stopping
