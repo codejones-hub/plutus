@@ -1719,8 +1719,8 @@ documentation for more details.
 .. _perform: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:perform
 .. _monitoring: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:monitoring
 .. _Spec: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#g:3
-.. _`($=)`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:`($=)`
-.. _`($~)`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:`($~)`
+.. _`($=)`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:-36--61-
+.. _`($~)`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:-36--126-
 
 .. _forge: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:forge
 .. _deposit: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:deposit
