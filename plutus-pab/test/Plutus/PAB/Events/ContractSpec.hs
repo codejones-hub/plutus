@@ -22,7 +22,9 @@ import qualified Language.Plutus.Contract.Schema                 as Schema
 import           Language.PlutusTx.Coordination.Contracts.Game   (GameSchema, game)
 import           Plutus.PAB.Arbitrary                            ()
 import           Plutus.PAB.ContractCLI                          (Command (Initialise), runCliCommand)
-import           Plutus.PAB.Events.Contract                      (ContractHandlersResponse, PartiallyDecodedResponse)
+import           Plutus.PAB.Events.Contract                      (ContractHandlerRequest, ContractHandlersResponse,
+                                                                  ContractPABRequest)
+import           Plutus.PAB.Events.ContractInstanceState         (PartiallyDecodedResponse)
 import           Test.Tasty                                      (TestTree, testGroup)
 import           Test.Tasty.HUnit                                (assertFailure, testCase)
 
@@ -41,7 +43,7 @@ jsonTests =
                       { aeDescription = EndpointDescription (symbolVal (Proxy @"guess"))
                       , aeMetadata    = Nothing
                       }
-              response :: Either String ContractHandlersResponse
+              response :: Either String ContractHandlerRequest
               response = JSON.eitherDecode $ JSON.encode handlers
            in assertRight response
         , testCase "Decode contract initialisation" $ do
@@ -53,7 +55,7 @@ jsonTests =
                       result <-
                           except $ JSON.eitherDecode $ BSL.fromStrict initialisationResponse
                       pure
-                          (result :: PartiallyDecodedResponse ContractHandlersResponse)
+                          (result :: PartiallyDecodedResponse ContractHandlerRequest)
               assertRight v
         ]
 
