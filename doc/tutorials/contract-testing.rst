@@ -16,7 +16,7 @@ An overview of the guessing game
 --------------------------------
 
 The source code of the guessing game contract is provided as an
-example here_, and the `final test code is here <GameModel.hs>`_.
+example here_, and the `final test code is here <https://github.com/input-output-hk/plutus/blob/quickcheck/doc/tutorials/GameModel.hs>`_.
 
 The game is played as follows:
 
@@ -560,42 +560,43 @@ For the most part, it is good practice to keep the perform_ function
 simple: a direct relationship between actions in a test case and calls
 to contract endpoints makes interpreting test failures much easier.
 
-Helping shrinking work better by choosing test case actions well
-""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+ .. note::
 
-In the definition of perform_ above, the ``GiveToken`` action is a little
-surprising: when we call the emulator, we have to specify not only the
-wallet to give the token *to*, but also the wallet to take the token
-*from*. So why did we choose to define a ``GiveToken w`` action to
-include in test cases, rather than an action ``PassToken w w'``, which
-would correspond more directly to the code in perform_?
-
-The answer is that using ``GiveToken`` actions instead helps
-QuickCheck to shrink failing tests more effectively. QuickCheck
-shrinks test cases by attempting to remove actions from
-them--essentially replacing an action by a no-op. But consider a
-sequence such as
-
-.. code-block:: text
-
-   PassToken w1 w2
-   PassToken w2 w3
-
-which transfers the game token in two steps from wallet 1 to
-wallet 3. Deleting either one of these steps means the game token will
-end up in the wrong place, probably causing the next steps in the test
-to behave very differently (and thus, preventing this shrinking
-step). But given the sequence
-
-.. code-block:: text
-
-   GiveToken w2
-   GiveToken w3
-
-the first ``GiveToken`` can be deleted without affecting the behaviour
-of the second at all. Thus, by making token-passing steps independent
-of each other, we make it easier for QuickCheck to shrink a failing
-test without drastic changes to its behaviour.
+    **Helping shrinking work better by choosing test case actions well**
+    
+    In the definition of perform_ above, the ``GiveToken`` action is a little
+    surprising: when we call the emulator, we have to specify not only the
+    wallet to give the token *to*, but also the wallet to take the token
+    *from*. So why did we choose to define a ``GiveToken w`` action to
+    include in test cases, rather than an action ``PassToken w w'``, which
+    would correspond more directly to the code in perform_?
+    
+    The answer is that using ``GiveToken`` actions instead helps
+    QuickCheck to shrink failing tests more effectively. QuickCheck
+    shrinks test cases by attempting to remove actions from
+    them--essentially replacing an action by a no-op. But consider a
+    sequence such as
+    
+      .. code-block:: text
+      
+         PassToken w1 w2
+         PassToken w2 w3
+    
+    which transfers the game token in two steps from wallet 1 to
+    wallet 3. Deleting either one of these steps means the game token will
+    end up in the wrong place, probably causing the next steps in the test
+    to behave very differently (and thus, preventing this shrinking
+    step). But given the sequence
+    
+      .. code-block:: text
+      
+         GiveToken w2
+         GiveToken w3
+    
+    the first ``GiveToken`` can be deleted without affecting the behaviour
+    of the second at all. Thus, by making token-passing steps independent
+    of each other, we make it easier for QuickCheck to shrink a failing
+    test without drastic changes to its behaviour.
 
 Shrinking Actions
 ^^^^^^^^^^^^^^^^^
@@ -1379,11 +1380,12 @@ the ``gameValue`` is only 1 Ada, so of course we cannot withdraw 3.
 
     We saw earlier that when tests are *generated* from a
     ContractModel_, then QuickCheck only generates actions whose
-    precondition_ is satisfied. When we specify an action explicitly
-    like this, then there is no guarantee that its precondition will
-    hold, and so a 'bad precondition' error becomes a possibility. The
-    problem here is really that this generalized unit test is
-    inconsistent with our model.
+    precondition_ is satisfied. On the other hand, when we use dynamic
+    logic to specify an action explicitly like this, then there is no
+    guarantee that its precondition will hold, and so a 'bad
+    precondition' error becomes a possibility. The problem here is
+    really that this generalized unit test is inconsistent with our
+    model.
 
 Repeating a dynamic logic test
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
