@@ -49,19 +49,21 @@ modelFun <- function(path) {
 
   addIntegerModel <- {
     filtered <- data %>% filter(BuiltinName == "AddInteger") %>% filter(x_mem < 2000) %>% filter(y_mem < 2000)
-    lm(Mean ~ I(x_mem + y_mem), filtered)
+    lm(Mean ~ pmax(x_mem, y_mem), filtered)
   }
 
   subtractIntegerModel <- {
     filtered <- data %>% filter(BuiltinName == "SubtractInteger") %>% filter(x_mem < 2000) %>% filter(y_mem < 2000)
-    lm(Mean ~ I(x_mem + y_mem), filtered)
+    lm(Mean ~ pmax(x_mem , y_mem), filtered)
   }
 
   multiplyIntegerModel <- {
     filtered <- data %>% filter(BuiltinName == "MultiplyInteger") %>% filter(x_mem != 0) %>% filter(y_mem != 0) %>% filter(x_mem < 2000) %>% filter(y_mem < 2000)
-    lm(Mean ~ I(x_mem * y_mem), filtered)
+    lm(Mean ~ x_mem + y_mem, filtered)
   }
 
+  # DO WANT I(x+y) here: linear, but symmetric.
+  
   divideIntegerModel <- {
     filtered <- data %>% filter(BuiltinName == "DivideInteger") %>% filter(x_mem != 0) %>% filter(y_mem != 0) %>% filter(x_mem < 2000) %>% filter(y_mem < 2000)
     # This one does seem to underestimate the cost by a factor of two
@@ -75,35 +77,35 @@ modelFun <- function(path) {
   eqIntegerModel <- 0
   eqIntegerModel <- {
     filtered <- data %>% filter(BuiltinName == "EqInteger") %>% filter(x_mem == y_mem) %>% filter (x_mem != 0) %>% filter(x_mem < 2000) %>% filter(y_mem < 2000)
-    lm(Mean ~ I(pmin(x_mem, y_mem)), data=filtered)
+    lm(Mean ~ pmin(x_mem, y_mem), data=filtered)
   }
 
   lessThanIntegerModel <- {
     filtered <- data %>% filter(BuiltinName == "LessThanInteger") %>% filter(x_mem == y_mem) %>% filter (x_mem != 0) %>% filter(x_mem < 2000) %>% filter(y_mem < 2000)
-    lm(Mean ~ I(pmin(x_mem, y_mem)), data=filtered)
+    lm(Mean ~ pmin(x_mem, y_mem), data=filtered)
   }
   greaterThanIntegerModel <- lessThanIntegerModel
 
   lessThanEqIntegerModel <- {
     filtered <- data %>% filter(BuiltinName == "LessThanEqInteger") %>% filter(x_mem == y_mem) %>% filter (x_mem != 0) %>% filter(x_mem < 2000) %>% filter(y_mem < 2000)
-    lm(Mean ~ I(pmin(x_mem, y_mem)), data=filtered)
+    lm(Mean ~ pmin(x_mem, y_mem), data=filtered)
   }
   greaterThanEqIntegerModel <- lessThanEqIntegerModel
 
   eqByteStringModel <- {
     filtered <- data %>% filter(BuiltinName == "EqByteString") %>% filter(x_mem == y_mem)
-    lm(Mean ~ I(pmin(x_mem, y_mem)), data=filtered)
+    lm(Mean ~ pmin(x_mem, y_mem), data=filtered)
   }
 
   ltByteStringModel <- {
     filtered <- data %>% filter(BuiltinName == "LtByteString")
-    lm(Mean ~ I(pmin(x_mem, y_mem)), data=filtered)
+    lm(Mean ~ pmin(x_mem, y_mem), data=filtered)
   }
   gtByteStringModel <- ltByteStringModel
 
   concatenateModel <- {
     filtered <- data %>% filter(BuiltinName == "Concatenate") %>% filter(x_mem < 2000) %>% filter(y_mem < 2000)
-    lm(Mean ~ I(x_mem + y_mem), data=filtered)
+    lm(Mean ~ x_mem + y_mem, data=filtered)
   }
 
   takeByteStringModel <- {

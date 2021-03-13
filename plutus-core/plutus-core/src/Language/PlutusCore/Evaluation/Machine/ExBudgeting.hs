@@ -401,14 +401,14 @@ data ModelSplitConst = ModelSplitConst
         '[FieldLabelModifier (StripPrefix "ModelSplitConst", CamelToSnake)] ModelSplitConst
 
 data ModelTwoArguments =
-    ModelTwoArgumentsConstantCost Integer
-    | ModelTwoArgumentsAddedSizes ModelAddedSizes
+      ModelTwoArgumentsConstantCost    Integer
+    | ModelTwoArgumentsAddedSizes      ModelAddedSizes
     | ModelTwoArgumentsSubtractedSizes ModelSubtractedSizes
-    | ModelTwoArgumentsMultiSizes ModelMultiSizes
-    | ModelTwoArgumentsMinSize ModelMinSize
-    | ModelTwoArgumentsMaxSize ModelMaxSize
+    | ModelTwoArgumentsMultiSizes      ModelMultiSizes
+    | ModelTwoArgumentsMinSize         ModelMinSize
+    | ModelTwoArgumentsMaxSize         ModelMaxSize
     | ModelTwoArgumentsSplitConstMulti ModelSplitConst
-    | ModelTwoArgumentsLinearSize ModelLinearSize
+    | ModelTwoArgumentsLinearSize      ModelLinearSize
     deriving (Show, Eq, Generic, Lift, NFData)
     deriving (FromJSON, ToJSON) via CustomJSON
         '[SumTaggedObject "type" "arguments", ConstructorTagModifier (StripPrefix "ModelTwoArguments", CamelToSnake)] ModelTwoArguments

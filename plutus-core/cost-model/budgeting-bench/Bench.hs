@@ -31,14 +31,21 @@ import           System.Random
 
 type UntypedPlain f (uni :: GHC.Type -> GHC.Type) (fun :: GHC.Type) = f Name uni fun ()
 
+
+-- Not totally sure what's going on here.  `env` is supposed to procude data
+-- that will be supplied to the things being benchmarked.  Here we've got a term
+-- and we evaluate it to get back the budget consumed, but then we throw that away
+-- and evaluate the term again.  This may have the effect of avoiding warmup, but
+-- is that really why it's like this?  At least we're only (I think) doing the
+-- appparently redundant thing once.
 runTermBench :: String -> UntypedPlain UT.Term DefaultUni DefaultFun -> Benchmark
 runTermBench name term = env
-    (do   -- FIXME: WHAT IS GOING ON HERE?
+    (do
         (_result, budget) <-
           pure $ runCekNoEmit defBuiltinsRuntime enormousBudget term
         pure budget
         )
-    (\_ -> bench name $ nf (unsafeEvaluateCek defBuiltinsRuntime) term)
+    $ \_ -> bench name $ nf (unsafeEvaluateCek defBuiltinsRuntime) term
 
 -- Copying the bytestring here, because otherwise it'll be exactly the same, and the equality will short-circuit.
 benchSameTwoByteStrings :: DefaultFun -> Benchmark
@@ -65,6 +72,11 @@ createTwoTermBuiltinBench name as bs =
                 runTermBench (show yMem) $ erase $
                              mkIterApp () (builtin () name) [mkConstant () x,  mkConstant () y]
             ))
+
+        as
+
+-- TODO: create a similar function for comparisons, but given a list [x1,x2, ...]
+-- just do the benchmarking on (x1,x1), (x2,x2), ... since that is the worst case.
 
 benchComparison :: [Benchmark]
 benchComparison = (\n -> runTermBench ("CalibratingBench/ExMemory " <> show n) (erase $ createRecursiveTerm n)) <$> [1..20]

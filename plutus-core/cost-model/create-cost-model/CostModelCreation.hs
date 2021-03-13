@@ -128,7 +128,7 @@ instance FromNamedRecord LinearModelRaw where
 instance FromRecord LinearModelRaw
 
 findInRaw :: String -> Vector LinearModelRaw -> Either String LinearModelRaw
-findInRaw s v = maybeToEither ("Couldn't find the term " <> s) $
+findInRaw s v = maybeToEither ("Couldn't find the term " <> s <> " in " <> show v) $
   Data.Vector.find (\e -> linearModelRawTerm e == s) v
 
 unsafeReadModelFromR :: MonadR m => String -> (SomeSEXP (Region m)) -> m (Double, Double)
@@ -159,16 +159,19 @@ unsafeReadModelFromR2 formula1 formula2 rmodel = do
     Right x  -> pure x
 
 readModelAddedSizes :: MonadR m => (SomeSEXP (Region m)) -> m ModelAddedSizes
-readModelAddedSizes model = (pure . uncurry ModelAddedSizes) =<< unsafeReadModelFromR "I(x_mem + y_mem)" model
+readModelAddedSizes model = (pure . uncurry ModelAddedSizes) =<< unsafeReadModelFromR2 "x_mem" "y_mem" model
 
 readModelMinSize :: MonadR m => (SomeSEXP (Region m)) -> m ModelMinSize
-readModelMinSize model = (pure . uncurry ModelMinSize) =<< unsafeReadModelFromR "I(pmin(x_mem, y_mem))" model
+readModelMinSize model = (pure . uncurry ModelMinSize) =<< unsafeReadModelFromR "pmin(x_mem, y_mem)" model
+
+readModelMaxSize :: MonadR m => (SomeSEXP (Region m)) -> m ModelMaxSize
+readModelMaxSize model = (pure . uncurry ModelMaxSize) =<< unsafeReadModelFromR "pmax(x_mem, y_mem)" model
 
 uncurry3 :: (a -> b -> c -> d) -> ((a, b, c) -> d)
 uncurry3 f ~(a,b,c) = f a b c
 
 readModelMultiSizes :: MonadR m => (SomeSEXP (Region m)) -> m ModelMultiSizes
-readModelMultiSizes model = (pure . uncurry ModelMultiSizes) =<< unsafeReadModelFromR "I(x_mem * y_mem)" model
+readModelMultiSizes model = (pure . uncurry ModelMultiSizes) =<< unsafeReadModelFromR "x_mem * y_mem" model
 
 readModelSplitConst :: MonadR m => (SomeSEXP (Region m)) -> m ModelSplitConst
 readModelSplitConst model = (pure . uncurry ModelSplitConst) =<< unsafeReadModelFromR "ifelse(x_mem > y_mem, I(x_mem * y_mem), 0)" model
@@ -184,27 +187,27 @@ boolMemModel = ModelTwoArgumentsConstantCost 1
 
 addInteger :: MonadR m => (SomeSEXP (Region m)) -> m (CostingFun ModelTwoArguments)
 addInteger cpuModelR = do
-  cpuModel <- readModelAddedSizes cpuModelR
+  cpuModel <- readModelMaxSize cpuModelR
   -- The worst case is adding e.g. `maxBound :: Int` + `maxBound :: Int`, which increases the memory usage by one.
   -- (max x y) + 1
   let memModel = ModelTwoArgumentsMaxSize $ ModelMaxSize 1 1
-  pure $ CostingFun (ModelTwoArgumentsAddedSizes cpuModel) memModel
+  pure $ CostingFun (ModelTwoArgumentsMaxSize cpuModel) memModel
 
 subtractInteger :: MonadR m => (SomeSEXP (Region m)) -> m (CostingFun ModelTwoArguments)
 subtractInteger cpuModelR = do
-  cpuModel <- readModelAddedSizes cpuModelR
+  cpuModel <- readModelMaxSize cpuModelR
   -- The worst case is subtracting e.g. `minBound :: Int` - `maxBound :: Int`, which increases the memory usage by one.
   -- (max x y) + 1
   let memModel = ModelTwoArgumentsMaxSize $ ModelMaxSize 1 1
-  pure $ CostingFun (ModelTwoArgumentsAddedSizes cpuModel) memModel
+  pure $ CostingFun (ModelTwoArgumentsMaxSize cpuModel) memModel
 
 multiplyInteger :: MonadR m => (SomeSEXP (Region m)) -> m (CostingFun ModelTwoArguments)
 multiplyInteger cpuModelR = do
-  cpuModel <- readModelMultiSizes cpuModelR
+  cpuModel <- readModelAddedSizes cpuModelR
   -- GMP requires multiplication (mpn_mul) to have x + y space.
   -- x + y
   let memModel = ModelTwoArgumentsAddedSizes $ ModelAddedSizes 0 1
-  pure $ CostingFun (ModelTwoArgumentsMultiSizes cpuModel) memModel
+  pure $ CostingFun (ModelTwoArgumentsAddedSizes cpuModel) memModel
 
 divideInteger :: MonadR m => (SomeSEXP (Region m)) -> m (CostingFun ModelTwoArguments)
 divideInteger cpuModelR = do
