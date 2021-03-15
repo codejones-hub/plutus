@@ -14,9 +14,12 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeOperators              #-}
 
+-- | A decentralized exchange for arbitrary token pairs following the
+-- [Uniswap protocol](https://uniswap.org/whitepaper.pdf).
+--
 module Language.PlutusTx.Coordination.Contracts.Uniswap
     ( Coin (..)
-    , coin
+    , coin, coinValueOf
     , CreateParams (..)
     , SwapParams (..)
     , CloseParams (..)
@@ -53,6 +56,8 @@ uniswapTokenName, poolStateTokenName :: TokenName
 uniswapTokenName = "Uniswap"
 poolStateTokenName = "Pool State"
 
+-- | A pair consisting of a 'CurrencySymbol' and a 'TokenName'.
+-- Coins are the entities that can be swapped in the exchange.
 data Coin = Coin
     { cCurrency :: CurrencySymbol
     , cToken    :: TokenName
@@ -79,11 +84,18 @@ coinLT c d = case compareCoins c d of
     _  -> False
 
 {-# INLINABLE coin #-}
-coin :: Coin -> Integer -> Value
+-- | @'coin' c n@ denotes the value given by @n@ units of @'Coin'@ @c@.
+coin :: Coin    -- ^ The 'Coin'.
+     -> Integer -- ^ The desired number coins.
+     -> Value   -- ^ The 'Value' consisting of the given number of units of the given 'Coin'.
 coin Coin{..} = Value.singleton cCurrency cToken
 
 {-# INLINABLE coinValueOf #-}
-coinValueOf :: Value -> Coin -> Integer
+-- | Calculates how many units of the specified 'Coin' are contained in the
+-- given 'Value'.
+coinValueOf :: Value   -- ^ The 'Value' to inspect.
+            -> Coin    -- ^ The 'Coin' to look for.
+            -> Integer -- ^ The number of units of the given 'Coin' contained in the given 'Value'.
 coinValueOf v Coin{..} = valueOf v cCurrency cToken
 
 {-# INLINABLE hashCoin #-}
@@ -509,43 +521,50 @@ liquidityCurrency = scriptCurrencySymbol . liquidityPolicy
 poolStateCoin :: Uniswap -> Coin
 poolStateCoin = flip Coin poolStateTokenName . liquidityCurrency
 
+-- | Paraneters for the @create@-endpoint, which creates a new liquidity pool.
 data CreateParams = CreateParams
-    { cpUniswap :: CurrencySymbol
+    { cpUniswap :: CurrencySymbol -- ^ Currency used for the Uniswap factory token, the Uniswap liquidity pool tokens and the liquidity tokens.
     , cpCoinA   :: Coin
     , cpCoinB   :: Coin
     , cpAmountA :: Integer
     , cpAmountB :: Integer
     } deriving (Generic, ToJSON, FromJSON, ToSchema)
 
+-- | Parameters for the @swap@-endpoint, which allows swaps between the two different coins in a liquidity pool.
+-- One of the provided amounts must be positive, the other must be zero.
 data SwapParams = SwapParams
-    { spUniswap :: CurrencySymbol
-    , spCoinA   :: Coin
-    , spCoinB   :: Coin
-    , spAmountA :: Integer
-    , spAmountB :: Integer
+    { spUniswap :: CurrencySymbol -- ^ Currency used for the Uniswap factory token, the Uniswap liquidity pool tokens and the liquidity tokens.
+    , spCoinA   :: Coin           -- ^ One 'Coin' of the liquidity pair.
+    , spCoinB   :: Coin           -- ^ The other 'Coin'.
+    , spAmountA :: Integer        -- ^ The amount the first 'Coin' that should be swapped.
+    , spAmountB :: Integer        -- ^ The amount of the second 'Coin' that should be swapped.
     } deriving (Generic, ToJSON, FromJSON, ToSchema)
 
+-- | Parameters for the @close@-endpoint, which closes a liquidity pool.
 data CloseParams = CloseParams
-    { clpUniswap :: CurrencySymbol
-    , clpCoinA   :: Coin
-    , clpCoinB   :: Coin
+    { clpUniswap :: CurrencySymbol -- ^ Currency used for the Uniswap factory token, the Uniswap liquidity pool tokens and the liquidity tokens.
+    , clpCoinA   :: Coin           -- ^ One 'Coin' of the liquidity pair.
+    , clpCoinB   :: Coin           -- ^ The other 'Coin' of the liquidity pair.
     } deriving (Generic, ToJSON, FromJSON, ToSchema)
 
+-- | Parameters for the @remove@-endpoint, which removes some liquidity from a liquidity pool.
 data RemoveParams = RemoveParams
-    { rpUniswap :: CurrencySymbol
-    , rpCoinA   :: Coin
-    , rpCoinB   :: Coin
-    , rpDiff    :: Integer
+    { rpUniswap :: CurrencySymbol -- ^ Currency used for the Uniswap factory token, the Uniswap liquidity pool tokens and the liquidity tokens.
+    , rpCoinA   :: Coin           -- ^ One 'Coin' of the liquidity pair.
+    , rpCoinB   :: Coin           -- ^ The other 'Coin' of the liquidity pair.
+    , rpDiff    :: Integer        -- ^ The amount of liquidity tokens to burn in exchange for liquidity from the pool.
     } deriving (Generic, ToJSON, FromJSON, ToSchema)
 
+-- | Parameters for the @add@-endpoint, which adds liquidity to a liquidity pool in exchange for liquidity tokens.
 data AddParams = AddParams
-    { apUniswap :: CurrencySymbol
-    , apCoinA   :: Coin
-    , apCoinB   :: Coin
-    , apAmountA :: Integer
-    , apAmountB :: Integer
+    { apUniswap :: CurrencySymbol -- ^ Currency used for the Uniswap factory token, the Uniswap liquidity pool tokens and the liquidity tokens.
+    , apCoinA   :: Coin           -- ^ One 'Coin' of the liquidity pair.
+    , apCoinB   :: Coin           -- ^ The other 'Coin' of the liquidity pair.
+    , apAmountA :: Integer        -- ^ The amount of coins of the first kind to add to the pool.
+    , apAmountB :: Integer        -- ^ The amount of coins of the second kind to add to the pool.
     } deriving (Generic, ToJSON, FromJSON, ToSchema)
 
+-- | Schema for the 'endpoints'.
 type UniswapSchema =
     BlockchainActions
         .\/ Endpoint "start"  ()
@@ -844,5 +863,15 @@ findValue v = do
     go _   w []               = throwError $ pack $ "insufficient funds: need " ++ show v ++ ", have " ++ show (v <> negate w)
     go acc w ((oref, o) : xs) = go (Map.insert oref o acc) (w <> negate (txOutValue $ txOutTxOut o)) xs
 
+-- | Provides the following endpoints:
+--
+--      [@start@]: Creates a Uniswap "factory".
+--          This factory will keep track of the existing liquidity pools and enforce that there will be at most one liquidity pool
+--          for any pair of tokens at any given time.
+--      [@create@]: Create a liquidity pool for a pair of coins. The creator provides liquidity for both coins and gets liquidity tokens in return.
+--      [@swap@]: Use a liquidity pool two swap one sort of coins in the pool against the other.
+--      [@close@]: Close a liquidity pool by burning all remaining liquidity tokens in exchange for all liquidity remaining in the pool.
+--      [@remove@]: Removes some liquidity from a liquidity pool in exchange for liquidity tokens.
+--      [@add@]: Adds some liquidity to an existing liquidity pool in exchange for newly minted liquidity tokens.
 endpoints :: Contract () UniswapSchema Text ()
 endpoints = (start `select` create `select` swap `select` close `select` remove `select` add) >> endpoints
