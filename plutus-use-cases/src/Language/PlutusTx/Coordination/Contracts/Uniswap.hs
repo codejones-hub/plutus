@@ -20,12 +20,14 @@
 module Language.PlutusTx.Coordination.Contracts.Uniswap
     ( Coin (..)
     , coin, coinValueOf
+    , poolStateCoinFromUniswapCurrency, liquidityCoin
     , CreateParams (..)
     , SwapParams (..)
     , CloseParams (..)
     , RemoveParams (..)
     , AddParams (..)
     , UniswapSchema
+    , start, create, add, remove, close, swap
     , endpoints
     ) where
 
@@ -37,7 +39,6 @@ import qualified Language.PlutusTx                                 as PlutusTx
 import qualified Language.PlutusTx.Coordination.Contracts.Currency as Currency
 import           Language.PlutusTx.Prelude                         hiding (unless, Semigroup (..))
 import           Ledger                                            hiding (singleton)
-import           Ledger.AddressMap
 import           Ledger.Constraints                                as Constraints
 import           Ledger.Constraints.OnChain                        as Constraints
 import           Ledger.Constraints.TxConstraints                  as Constraints
@@ -288,7 +289,7 @@ validateCreate Uniswap{..} c lps lp@LiquidityPool{..} ctx =
     all (/= lp) lps                                                                                      &&
     Constraints.checkOwnOutputConstraint ctx (OutputConstraint (Factory $ lp : lps) $ coin usCoin 1)     &&
     (coinValueOf forged c == 1)                                                                          &&
-    (coinValueOf forged liquidityCoin == liquidity)                                                      &&
+    (coinValueOf forged liquidityCoin' == liquidity)                                                      &&
     (outA > 0)                                                                                           &&
     (outB > 0)                                                                                           &&
     Constraints.checkOwnOutputConstraint ctx (OutputConstraint (Pool lp liquidity) $
@@ -307,8 +308,8 @@ validateCreate Uniswap{..} c lps lp@LiquidityPool{..} ctx =
     forged :: Value
     forged = txInfoForge $ valCtxTxInfo ctx
 
-    liquidityCoin :: Coin
-    liquidityCoin = let Coin cs _ = c in Coin cs $ lpTicker lp
+    liquidityCoin' :: Coin
+    liquidityCoin' = let Coin cs _ = c in Coin cs $ lpTicker lp
 
 {-# INLINABLE validateCloseFactory #-}
 validateCloseFactory :: Uniswap -> Coin -> [LiquidityPool] -> ValidatorCtx -> Bool
@@ -521,6 +522,18 @@ liquidityCurrency = scriptCurrencySymbol . liquidityPolicy
 poolStateCoin :: Uniswap -> Coin
 poolStateCoin = flip Coin poolStateTokenName . liquidityCurrency
 
+-- | Gets the 'Coin' used to identity liquidity pools.
+poolStateCoinFromUniswapCurrency :: CurrencySymbol -- ^ The currency identifying the Uniswap instance.
+                                 -> Coin
+poolStateCoinFromUniswapCurrency = poolStateCoin . uniswap
+
+-- | Gets the liquidity token for a given liquidity pool.
+liquidityCoin :: CurrencySymbol -- ^ The currency identifying the Uniswap instance.
+              -> Coin           -- ^ One coin in the liquidity pair.
+              -> Coin           -- ^ The other coin in the liquidity pair.
+              -> Coin
+liquidityCoin cs coinA coinB = Coin (liquidityCurrency $ uniswap cs) $ lpTicker $ LiquidityPool coinA coinB
+
 -- | Paraneters for the @create@-endpoint, which creates a new liquidity pool.
 data CreateParams = CreateParams
     { cpUniswap :: CurrencySymbol -- ^ Currency used for the Uniswap factory token, the Uniswap liquidity pool tokens and the liquidity tokens.
@@ -574,6 +587,8 @@ type UniswapSchema =
         .\/ Endpoint "remove" RemoveParams
         .\/ Endpoint "add"    AddParams
 
+-- | Creates a Uniswap "factory". This factory will keep track of the existing liquidity pools and enforce that there will be at most one liquidity pool
+-- for any pair of tokens at any given time.
 start :: Contract () UniswapSchema Text ()
 start = do
     ()  <- endpoint @"start"
@@ -590,6 +605,7 @@ start = do
 
     logInfo @String $ printf "started Uniswap %s at address %s" (show us) (show $ uniswapAddress us)
 
+-- | Creates a liquidity pool for a pair of coins. The creator provides liquidity for both coins and gets liquidity tokens in return.
 create :: Contract () UniswapSchema Text ()
 create = do
     CreateParams{..} <- endpoint @"create"
@@ -623,6 +639,7 @@ create = do
 
     logInfo $ "created liquidity pool: " ++ show lp
 
+-- | Closes a liquidity pool by burning all remaining liquidity tokens in exchange for all liquidity remaining in the pool.
 close :: Contract () UniswapSchema Text ()
 close = do
     CloseParams{..} <- endpoint @"close"
@@ -657,6 +674,7 @@ close = do
 
     logInfo $ "closed liquidity pool: " ++ show lp
 
+-- | Removes some liquidity from a liquidity pool in exchange for liquidity tokens.
 remove :: Contract () UniswapSchema Text ()
 remove = do
     RemoveParams{..} <- endpoint @"remove"
@@ -693,6 +711,7 @@ remove = do
 
     logInfo $ "removed liquidity from pool: " ++ show lp
 
+-- | Adds some liquidity to an existing liquidity pool in exchange for newly minted liquidity tokens.
 add :: Contract () UniswapSchema Text ()
 add = do
     AddParams{..} <- endpoint @"add"
@@ -739,6 +758,7 @@ add = do
 
     logInfo $ "added liquidity to pool: " ++ show lp
 
+-- | Uses a liquidity pool two swap one sort of coins in the pool against the other.
 swap :: Contract () UniswapSchema Text ()
 swap = do
     SwapParams{..} <- endpoint @"swap"
@@ -851,6 +871,7 @@ findSwapA oldA oldB inA
 findSwapB :: Integer -> Integer -> Integer -> Integer
 findSwapB oldA oldB = findSwapA oldB oldA
 
+{-
 findValue :: Value -> Contract w UniswapSchema Text UtxoMap
 findValue v = do
     pkh   <- pubKeyHash <$> ownPubKey
@@ -862,15 +883,16 @@ findValue v = do
         | Value.leq w mempty  = return acc
     go _   w []               = throwError $ pack $ "insufficient funds: need " ++ show v ++ ", have " ++ show (v <> negate w)
     go acc w ((oref, o) : xs) = go (Map.insert oref o acc) (w <> negate (txOutValue $ txOutTxOut o)) xs
+-}
 
 -- | Provides the following endpoints:
 --
 --      [@start@]: Creates a Uniswap "factory".
 --          This factory will keep track of the existing liquidity pools and enforce that there will be at most one liquidity pool
 --          for any pair of tokens at any given time.
---      [@create@]: Create a liquidity pool for a pair of coins. The creator provides liquidity for both coins and gets liquidity tokens in return.
---      [@swap@]: Use a liquidity pool two swap one sort of coins in the pool against the other.
---      [@close@]: Close a liquidity pool by burning all remaining liquidity tokens in exchange for all liquidity remaining in the pool.
+--      [@create@]: Creates a liquidity pool for a pair of coins. The creator provides liquidity for both coins and gets liquidity tokens in return.
+--      [@swap@]: Uses a liquidity pool two swap one sort of coins in the pool against the other.
+--      [@close@]: Closes a liquidity pool by burning all remaining liquidity tokens in exchange for all liquidity remaining in the pool.
 --      [@remove@]: Removes some liquidity from a liquidity pool in exchange for liquidity tokens.
 --      [@add@]: Adds some liquidity to an existing liquidity pool in exchange for newly minted liquidity tokens.
 endpoints :: Contract () UniswapSchema Text ()
