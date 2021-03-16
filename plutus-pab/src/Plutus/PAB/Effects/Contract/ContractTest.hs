@@ -60,6 +60,19 @@ import           Playground.Schema                                 (endpointsToS
 import qualified Plutus.PAB.Effects.ContractTest.AtomicSwap        as Contracts.AtomicSwap
 import qualified Plutus.PAB.Effects.ContractTest.PayToWallet       as Contracts.PayToWallet
 
+data CompanionContractState =
+    CS
+        { ownMarloweContracts :: Map MPSHash MarloweData
+        }
+    -- chain index keeps track of datum values that are
+    -- attached to transactions
+
+findTxnsWith :: MpsHash -> Tx
+
+data MarloweContracts =
+        Companion
+        | MarloweContract MarloweData Name (Template String)
+
 data TestContracts = Game | Currency | AtomicSwap | PayToWallet | RPCClient | RPCServer
     deriving (Eq, Ord, Show, Generic)
     deriving anyclass (FromJSON, ToJSON)

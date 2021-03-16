@@ -47,18 +47,26 @@ newtype WalletInfo = WalletInfo { unWalletInfo :: Wallet }
 -- | Data needed to start a new instance of a contract.
 data ContractActivationArgs t =
     ContractActivationArgs
-        { caID     :: t -- ^ ID of the contract
+        { caID     :: MarloweContracts -- ^ ID of the contract
         , caWallet :: WalletInfo -- ^ Wallet that should be used for this instance
         }
     deriving stock (Eq, Show, Generic)
     deriving anyclass (JSON.ToJSON, JSON.FromJSON)
 
+c :: ContractActivationArgs MarloweContracts
+c = ContractActivationArgs
+        { caID = Companion
+        , caWallet = Wallet 13454598539874
+        }
+
 -- | Current state of a contract instance
 --   (to be sent to external clients)
-data ContractInstanceClientState =
+data ContractInstanceClientState t =
     ContractInstanceClientState
         { cicContract     :: ContractInstanceId
         , cicCurrentState :: PartiallyDecodedResponse ActiveEndpoint
+        , cicDefinition   :: t -- path to exec. contract
+        , cicWallet       :: WalletInfo
         }
         deriving stock (Eq, Show, Generic)
         deriving anyclass (JSON.ToJSON, JSON.FromJSON)

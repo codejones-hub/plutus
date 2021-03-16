@@ -22,3 +22,4 @@ type API
       :<|> Capture "walletId" Wallet :> "wallet-slot" :> Get '[JSON] Slot
       :<|> Capture "walletId" Wallet :> "own-outputs" :> Get '[JSON] UtxoMap
       :<|> Capture "walletId" Wallet :> "sign" :> ReqBody '[JSON] Tx :> Post '[JSON] Tx
+      :<|> Capture "walletId" Wallet :> "balance" :> Get '[JSON] Ledger.Value
