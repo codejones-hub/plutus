@@ -191,7 +191,7 @@ transferred correctly, and contracts didn't crash.
      the check at the end of each test to be customized.
 
 But what is the ``instanceSpec`` in the code above?  `propRunActions_`_
-creates the contract instances that are tested by the script, and the
+creates the contract instances that are needed by a test, and the
 ``instanceSpec`` tells it which contract instances to create. A handle
 is created for each contract instance, which is used to invoke their
 endpoints from the test. Different contracts have different endpoints,
@@ -457,7 +457,7 @@ the real contract. Doing so immediately reveals a problem:
   Actions
    [GiveToken (Wallet 1)]
 
-Looking at the last two lines, we see the generated test script, and
+Looking at the last two lines, we see the generated test sequence, and
 the problem is evident: we generated a test *that only gives the game
 token* to wallet 1, but this makes no sense because the game token has
 not yet been forged--so the ``fromJust`` in the nextState_ function
@@ -897,7 +897,9 @@ we can see that it does something unexpected: wallet 1 tries to lock
 *twice*. Our model allows this, but the error message tells us that
 the contract instance crashed.
 
-The emulator log output can be rather overwhelming, but we can eliminate the 'INFO' messages by running the test script with appropriate options. If we define
+The emulator log output can be rather overwhelming, but we can eliminate the
+'INFO' messages by running the test sequence with appropriate options. If we
+define
 
   .. code-block:: haskell
 
@@ -1336,7 +1338,7 @@ must specify a QuickCheck property such as
 
    prop_DL dl = forAllDL dl prop_Game
 
-which generates a test script using the ``dl`` provided, and runs it
+which generates uses forAllDL_ to generate a test sequence from the ``dl`` provided, and runs it
 using the same underlying property as before. The execution is checked
 against the model, so *we do not need to add any further assertions*
 to this unit test. This gives us a very convenient way to define unit
@@ -1773,6 +1775,7 @@ documentation for more details.
 .. _ContractInstanceKey: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ContractInstanceKey
 .. _ModelState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ModelState
 .. _DL: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:DL
+.. _forAllDL: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:forAllDL
 .. _actionFun: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:action
 .. _`anyActions_`: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:anyActions_
 .. _anyActions: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:anyActions
