@@ -51,22 +51,16 @@ Emulated wallets
 To test contracts, we need emulated wallets. These and many other
 useful definitions for testing can be imported via
 
- .. code-block:: haskell
-
-                 import           Language.Plutus.Contract.Test
-
+.. literalinclude:: GameModel.hs
+   :start-after: START import Contract.Test
+   :end-before: END import Contract.Test
 
 Now we can create a number of wallets: in this
 tutorial, we'll settle for three:
 
- .. code-block:: haskell
-
-  w1, w2, w3 :: Wallet
-  w1 = Wallet 1
-  w2 = Wallet 2
-  w3 = Wallet 3
-
-  wallets = [w1, w2, w3]
+.. literalinclude:: GameModel.hs
+   :start-after: START wallets
+   :end-before: END wallets
 
 Values and tokens
 ^^^^^^^^^^^^^^^^^
@@ -76,10 +70,9 @@ of one or more types of token. The most common token is, of course, the Ada;
 we can import functions manipulating Ada, and the ``Value`` type
 itself, as follows:
 
- .. code-block:: haskell
-
-  import qualified Ledger.Ada                                                as Ada
-  import           Ledger.Value
+.. literalinclude:: GameModel.hs
+   :start-after: START import Ada
+   :end-before: END import Ada
 
 With these imports, we can construct values in the Ada currency:
 
@@ -90,18 +83,15 @@ With these imports, we can construct values in the Ada currency:
 
 We will also need a game token. After importing the ``Scripts`` module
 
- .. code-block:: haskell
-
-  import qualified Ledger.Typed.Scripts                                      as Scripts
+.. literalinclude:: GameModel.hs
+   :start-after: START import Scripts
+   :end-before: END import Scripts
 
 we can define it as follows, applying a monetary policy defined in the code under test (imported as module ``G``):
 
- .. code-block:: haskell
-
-  gameTokenVal :: Value
-  gameTokenVal =
-      let sym = Scripts.monetaryPolicyHash G.scriptInstance
-      in G.token sym "guess"
+.. literalinclude:: GameModel.hs
+   :start-after: START gameTokenVal
+   :end-before: END gameTokenVal
 
 The value of the token is (with long hash values abbreviated):
 
@@ -136,9 +126,9 @@ We test contracts using a *model* of the contract state; the first job
 to be done is thus defining that model. To do so, we import the
 contract modelling library
 
- .. code-block:: haskell
-
-  import           Language.Plutus.Contract.Test.ContractModel
+.. literalinclude:: GameModel.hs
+   :start-after: START import ContractModel
+   :end-before: END import ContractModel
 
 and define the model type:
 
@@ -152,15 +142,9 @@ The ``GameModel`` type must be an instance of the ContractModel_
 class, which has an associated datatype defining the kinds of
 *actions* that will be performed in generated tests.
 
- .. code-block:: haskell
-
-  instance ContractModel GameModel where
-
-      data Action GameModel = Lock      Wallet String Integer
-                            | Guess     Wallet String String Integer
-                            | GiveToken Wallet
-          deriving (Eq, Show)
-
+.. literalinclude:: GameModel.hs
+   :start-after: START instance ContractModel and Action type
+   :end-before: END instance ContractModel and Action type
 
 In this case we define three actions:
 
@@ -176,10 +160,9 @@ In this case we define three actions:
 A generated test is called Actions_, and is, as the name suggests, essentially a
 sequence of `Action <ActionType_>`_ values. We can run tests by using `propRunActions_`_:
 
- .. code-block:: haskell
-
-  prop_Game :: Actions GameModel -> Property
-  prop_Game actions = propRunActions_ instanceSpec actions
+.. literalinclude:: GameModel.hs
+   :start-after: START prop_Game
+   :end-before: END prop_Game
 
 When we test this property, ``quickCheck`` will generate random
 action sequences to be tested, checking at the end of each test that tokens are
@@ -214,17 +197,15 @@ test, and so it suffices to define a ContractInstanceKey_ type with a single
 constructor. There is one contract instance running in each emulated wallet, so
 we simply distinguish contract instance keys by the wallet they are running in:
 
- .. code-block:: haskell
-
-    data ContractInstanceKey GameModel schema err where
-        WalletKey :: Wallet -> ContractInstanceKey GameModel G.GameStateMachineSchema G.GameError
+.. literalinclude:: GameModel.hs
+   :start-after: START ContractInstanceKey
+   :end-before: END ContractInstanceKey
 
 Once this type is defined, we can construct our ContractInstanceSpec_:
 
- .. code-block:: haskell
-
-  instanceSpec :: [ContractInstanceSpec GameModel]
-  instanceSpec = [ ContractInstanceSpec (WalletKey w) w G.contract | w <- wallets ]
+.. literalinclude:: GameModel.hs
+   :start-after: START instanceSpec
+   :end-before: END instanceSpec
 
 This specifies (reading from right to left) that we should create one
 contract instance per wallet, running ``G.contract``, the contract
@@ -257,17 +238,9 @@ Generating actions
 To generate actions, we need to be able to generate wallets, guesses,
 and suitable values of Ada, since these appear as action parameters.
 
- .. code-block:: haskell
-
-  genWallet :: Gen Wallet
-  genWallet = elements wallets
-
-  genGuess :: Gen String
-  genGuess = elements ["hello", "secret", "hunter2", "*******"]
-
-  genValue :: Gen Integer
-  genValue = getNonNegative <$> arbitrary
-
+.. literalinclude:: GameModel.hs
+   :start-after: START Generators
+   :end-before: END Generators
 
 We choose wallets from the three available, and we choose passwords
 from a small set, so that random guesses will often be
@@ -277,12 +250,9 @@ negative amounts would be error cases that we choose not to test.
 Now we can define a generator for `Action <ActionType_>`_, as a method of the
 ContractModel_ class:
 
- .. code-block:: haskell
-
-    arbitraryAction s = oneof $
-        [ Lock      <$> genWallet <*> genGuess <*> genValue              ] ++
-        [ Guess     <$> genWallet <*> genGuess <*> genGuess <*> genValue ] ++
-        [ GiveToken <$> genWallet                                        ]
+.. literalinclude:: GameModel.hs
+   :start-after: START arbitraryAction v1
+   :end-before: END arbitraryAction v1
 
 With this method defined, we can start to generate test cases. Using
 ``sample`` we can see what action sequences look like:
@@ -347,16 +317,9 @@ state is a part of the *model*, it may be quite different from the
 contract state in the implementation). In this case the contract state
 is the ``GameModel`` type, so let's complete its definition:
 
- .. code-block:: haskell
-
-  data GameModel = GameModel
-      { _gameValue     :: Integer
-      , _hasToken      :: Maybe Wallet
-      , _currentSecret :: String }
-      deriving (Show)
-
-  makeLenses 'GameModel
-
+.. literalinclude:: GameModel.hs
+   :start-after: START GameModel
+   :end-before: END GameModel
 
 Initially the game token does not exist, so we record its current
 owner as a ``Maybe Wallet``, so that we can represent the initial
@@ -371,19 +334,15 @@ in the ContractModel_ class.
 The initial state just records that the game token does not exist yet,
 and assigns default values to the other fields.
 
- .. code-block:: haskell
-
-    initialState = GameModel
-        { _gameValue     = 0
-        , _hasToken      = Nothing
-        , _currentSecret = ""
-        }
+.. literalinclude:: GameModel.hs
+   :start-after: START initialState
+   :end-before: END initialState
 
 The nextState_ function is defined in the Spec_ monad
 
-.. code-block:: haskell
-
-   nextState :: Action state -> Spec state ()
+.. literalinclude:: GameModel.hs
+   :start-after: START nextState type
+   :end-before: END nextState type
 
 and defines the expected effect of each operation.
 
@@ -393,15 +352,9 @@ forges the game token (using forge_), deposits it in the creator's
 wallet, and withdraws the Ada locked in the contract (using deposit_
 and withdraw_):
 
-.. code-block:: haskell
-
-    nextState (Lock w secret val) = do
-        hasToken      $= Just w
-        currentSecret $= secret
-        gameValue     $= val
-        forge gameTokenVal
-        deposit  w gameTokenVal
-        withdraw w $ Ada.lovelaceValueOf val
+.. literalinclude:: GameModel.hs
+   :start-after: START nextState Lock v1
+   :end-before: END nextState Lock v1
 
 A ContractModel_ actually tracks not only the contract model state (in
 our case the ``GameModel`` type), but also the quantities of tokens
@@ -417,26 +370,15 @@ When making a guess, we need to check parts of the contract state
 stored password, game value, and wallet contents appropriately. (Here
 `($~)`_ applies a function to modify a field of the contract state).
 
-
-.. code-block:: haskell
-
-    nextState (Guess w old new val) = do
-        correctGuess <- (old ==)    <$> viewContractState currentSecret
-        holdsToken   <- (Just w ==) <$> viewContractState hasToken
-        enoughAda    <- (val <=)    <$> viewContractState gameValue
-        when (correctGuess && holdsToken && enoughAda) $ do
-            currentSecret $= new
-            gameValue     $~ subtract val
-            deposit w $ Ada.lovelaceValueOf val
+.. literalinclude:: GameModel.hs
+   :start-after: START nextState Guess v1
+   :end-before: END nextState Guess v1
 
 ``GiveToken`` just transfers the game token from one wallet to another using transfer_.
 
-.. code-block:: haskell
-
-    nextState (GiveToken w) = do
-        w0 <- fromJust <$> viewContractState hasToken
-        transfer w0 w gameTokenVal
-        hasToken $= Just w
+.. literalinclude:: GameModel.hs
+   :start-after: START nextState GiveToken v1
+   :end-before: END nextState GiveToken v1
 
 At the end of each test, the ContractModel_ framework checks that
 every wallet contains the tokens that the model says it should.
@@ -479,9 +421,9 @@ to prevent such test cases ever being generated.
 To introduce preconditions, we add a definition of the precondition_
 method to our ContractModel_ instance.
 
-.. code-block:: haskell
-
-   precondition :: ModelState state -> Action state -> Bool
+.. literalinclude:: GameModel.hs
+   :start-after: START precondition type
+   :end-before: END precondition type
 
 The precondition_ is parameterised on the entire model state, which
 includes the contents of wallets as well as our contract state, so we
@@ -489,12 +431,9 @@ will need to extract this state as well as the fields we need from
 it. For now, we just restrict ``GiveToken`` actions to states in which
 the token exists:
 
-.. code-block:: haskell
-
-    precondition s (GiveToken _) = tok /= Nothing
-        where
-            tok = s ^. contractState . hasToken
-    precondition s _             = True
+.. literalinclude:: GameModel.hs
+   :start-after: START precondition v1
+   :end-before: END precondition v1
 
 Now if we try to run tests, something more interesting happens:
 
@@ -554,40 +493,24 @@ So far we are generating actions, but we have not yet linked them to
 the contract they are supposed to test--so 'running' the tests, as we
 did above, did not invoke the contract at all. To do so, we must import the emulator
 
- .. code-block:: haskell
-
-  import           Plutus.Trace.Emulator                                     as Trace
+.. literalinclude:: GameModel.hs
+   :start-after: START import Emulator
+   :end-before: END import Emulator
 
 Then we define the perform_ method of the ContractModel_ class:
 
-.. code-block:: haskell
-
-  perform :: HandleFun state
-             -> ModelState state
-             -> Action state
-             -> Plutus.Trace.Emulator.EmulatorTrace ()
+.. literalinclude:: GameModel.hs
+   :start-after: START perform type
+   :end-before: END perform type
 
 The job of the perform_ method in this case is just to invoke the
 contract end-points, using the API defined in the code under test, and
 transfer the game token from one wallet to another as specified by
 ``GiveToken`` actions.
 
-.. code-block:: haskell
-
-    perform handle s cmd = case cmd of
-        Lock w new val -> do
-            callEndpoint @"lock" (handle $ WalletKey w)
-                         LockArgs{ lockArgsSecret = new
-                                 , lockArgsValue = Ada.lovelaceValueOf val}
-        Guess w old new val -> do
-            callEndpoint @"guess" (handle $ WalletKey w)
-                GuessArgs{ guessArgsOldSecret = old
-                         , guessArgsNewSecret = new
-                         , guessArgsValueTakenOut = Ada.lovelaceValueOf val}
-        GiveToken w' -> do
-            let w = fromJust (s ^. contractState . hasToken)
-            payToWallet w w' gameTokenVal
-            return ()
+.. literalinclude:: GameModel.hs
+   :start-after: START perform v1
+   :end-before: END perform v1
 
 Every call to an end-point must be associated with one of the contract
 instances defined in our ``instanceSpec``; the ``handle`` argument to
@@ -646,37 +569,27 @@ but it cannot know how to shrink the actions themselves. We can
 specify this shrinking by defining the shrinkAction_ operation in the
 ContractModel_ class:
 
-.. code-block:: haskell
-
-  shrinkAction :: ModelState state -> Action state -> [Action state]
+.. literalinclude:: GameModel.hs
+   :start-after: START shrinkAction type
+   :end-before: END shrinkAction type
 
 This function returns a list of 'simpler' actions that should be tried
 as replacements for the given `Action`_, when QuickCheck is simplifying
 a failed test. In this case we define a shrinking function for wallets:
 
-.. code-block:: haskell
-
-   shrinkWallet :: Wallet -> [Wallet]
-   shrinkWallet w = [w' | w' <- wallets, w' < w]
+.. literalinclude:: GameModel.hs
+   :start-after: START shrinkWallet
+   :end-before: END shrinkWallet
 
 and shrink actions by shrinking the wallet and Ada parameters.
 
-.. code-block:: haskell
-
-    shrinkAction _s (Lock w secret val) =
-        [Lock w' secret val | w' <- shrinkWallet w] ++
-        [Lock w secret val' | val' <- shrink val]
-    shrinkAction _s (GiveToken w) =
-        [GiveToken w' | w' <- shrinkWallet w]
-    shrinkAction _s (Guess w old new val) =
-        [Guess w' old new val | w' <- shrinkWallet w] ++
-        [Guess w old new val' | val' <- shrink val]
+.. literalinclude:: GameModel.hs
+   :start-after: START shrinkAction
+   :end-before: END shrinkAction
 
 We choose not to shrink password/guess parameters, because they are
 not really significant--one password is as good as another in a failed
 test.
-
-
 
 
 Debugging the model
@@ -686,7 +599,7 @@ At this point, the contract model is complete, and tests are
 runnable. However, they do not pass, and so we need to adapt either
 the tests or the contract to resolve the inconsistencies revealed. Testing ``prop_Game`` now results in:
 
- .. code-block:: text
+.. code-block:: text
 
     > quickCheck prop_Game
     *** Failed! Falsified (after 6 tests and 3 shrinks):
@@ -703,7 +616,7 @@ In this test, wallet 1 attempts to lock zero Ada, and our model predicts
 that wallet 1 should receive a game token--but this did not
 happen. To understand why, we need to study the emulator log. Here are the relevant parts:
 
- .. code-block:: text
+.. code-block:: text
 
     ...
     [INFO] Slot 1: 00000000-0000-4000-8000-000000000000 {Contract instance for wallet 1}:
@@ -758,49 +671,24 @@ later via failed tests).
 
 We can cause the emulator to delay a number of slots like this:
 
-  .. code-block:: haskell
-
-    delay :: Int -> EmulatorTrace ()
-    delay n = void $ waitNSlots (fromIntegral n)
+.. literalinclude:: GameModel.hs
+   :start-after: START delay
+   :end-before: END delay
 
 We add a call to ``delay`` in each branch of perform_:
 
-  .. code-block:: haskell
-
-    perform handle s cmd = case cmd of
-        Lock w new val -> do
-            callEndpoint @"lock" (handle $ WalletKey w)
-                         LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
-            delay 2
-        Guess w old new val -> do
-            callEndpoint @"guess" (handle $ WalletKey w)
-                GuessArgs{ guessArgsOldSecret = old
-                         , guessArgsNewSecret = new
-                         , guessArgsValueTakenOut = Ada.lovelaceValueOf val}
-            delay 1
-        GiveToken w' -> do
-            let w = fromJust (s ^. contractState . hasToken)
-            payToWallet w w' gameTokenVal
-            delay 1
-
+.. literalinclude:: GameModel.hs
+   :start-after: START perform
+   :end-before: END perform
 
 This makes the *emulator* delay one or two slots, but we also need to
 delay in our *model*, to keep the model state in sync with the
 emulator. We do this using corresponding calls to wait_ in the
 definition of nextState_:
 
-  .. code-block:: haskell
-
-       nextState (Lock w secret val) = do
-           hasToken      $= Just w
-           currentSecret $= secret
-           gameValue     $= val
-           forge gameTokenVal
-           deposit  w gameTokenVal
-           withdraw w $ Ada.lovelaceValueOf val
-           wait 2
-
-       ...
+.. literalinclude:: GameModel.hs
+   :start-after: START nextState Lock v2
+   :end-before: END nextState Lock v2
 
 and similarly in the other cases.
 
@@ -816,19 +704,16 @@ copy-and-paste it from the QuickCheck output into your code. Since
 argument, then we can rerun a test by passing it to the
 property. In this case let us define
 
-  .. code-block:: haskell
-
-     testLock :: Property
-     testLock = prop_Game $
-       Actions
-         [Lock (Wallet 1) "hunter2" 0]
+.. literalinclude:: GameModel.hs
+   :start-after: START testLock v1
+   :end-before: END testLock v1
 
 ``testLock`` is itself a ``Property``, so we can test it using
 ``quickCheck``. Testing it *before* adding the delays in the last section
 generates the same output as before.  Testing it *after* the delays
 are added results in
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck testLock
   +++ OK, passed 100 tests.
@@ -844,12 +729,9 @@ The test passes, and the problem is fixed.
   there is no real need to test it 100 times. This can be avoided by
   adding ``withMaxSuccess`` to the definition:
 
-   .. code-block:: haskell
-
-    testLock :: Property
-    testLock = withMaxSuccess 1 . prop_Game $
-        Actions
-         [Lock (Wallet 1) "hunter2" 0]
+  .. literalinclude:: GameModel.hs
+    :start-after: START testLock withMaxSuccess
+    :end-before: END testLock withMaxSuccess
 
  .. note::
 
@@ -871,7 +753,7 @@ Controlling the log-level
 
 When we rerun random tests, they fail for a different reason:
 
-  .. code-block:: text
+.. code-block:: text
 
     > quickCheck prop_Game
     *** Failed! Assertion failed (after 5 tests and 7 shrinks):
@@ -887,7 +769,7 @@ When we rerun random tests, they fail for a different reason:
 
 Looking at the failing test case,
 
-  .. code-block:: text
+.. code-block:: text
 
     Actions
      [Lock (Wallet 1) "hunter2" 0,
@@ -901,21 +783,17 @@ The emulator log output can be rather overwhelming, but we can eliminate the
 'INFO' messages by running the test sequence with appropriate options. If we
 define
 
-  .. code-block:: haskell
+.. literalinclude:: GameModel.hs
+   :start-after: START import Log
+   :end-before: END import Log
 
-
-    import           Control.Monad.Freer.Log
-
-    propGame' :: LogLevel -> Actions GameModel -> Property
-    propGame' l s = propRunActionsWithOptions
-                        (set minLogLevel l defaultCheckOptions)
-                        instanceSpec
-                        (\ _ -> pure True)
-                        s
+.. literalinclude:: GameModel.hs
+   :start-after: START propGame'
+   :end-before: END propGame'
 
 then we can re-run the test and see more succinct output:
 
-  .. code-block:: text
+.. code-block:: text
 
     > quickCheck $ propGame' Warning
     *** Failed! Assertion failed (after 7 tests and 4 shrinks):
@@ -960,28 +838,20 @@ We can easily avoid this by *strengthening the precondition* of
 ``Lock``, so that it can only be performed once per test case. We
 do so by checking whether any wallet holds the game token:
 
-  .. code-block:: haskell
-
-    precondition s cmd = case cmd of
-            Lock _ _ _    -> tok == Nothing
-            Guess _ _ _ _ -> True
-            GiveToken _   -> tok /= Nothing
-        where
-            tok = s ^. contractState . hasToken
+.. literalinclude:: GameModel.hs
+   :start-after: START precondition v2
+   :end-before: END precondition v2
 
 Now the double-lock test case can no longer be generated. If we save
 the test case
 
- .. code-block:: haskell
-
-  testDoubleLock = prop_Game $
-    Actions
-      [Lock (Wallet 1) "*******" 0,
-       Lock (Wallet 1) "secret" 0]
+.. literalinclude:: GameModel.hs
+   :start-after: START testDoubleLock
+   :end-before: END testDoubleLock
 
 and try to rerun it, then QuickCheck will not do so:
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck testDoubleLock
   *** Gave up! Passed only 0 tests; 1000 discarded tests.
@@ -991,7 +861,7 @@ we see here--the faulty test case was discarded (1000 times).
 
 Rerunning random tests finds another 'bug':
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck $ propGame' Warning
   *** Failed! Assertion failed (after 10 tests and 6 shrinks):
@@ -1022,19 +892,14 @@ prevent us discovering other problems.
 We can strengthen the precondition of ``Guess`` to prevent this from
 happening.
 
- .. code-block:: haskell
-
-    precondition s cmd = case cmd of
-            Lock _ _ _    -> tok == Nothing
-            Guess w _ _ _ -> tok == Just w
-            GiveToken _   -> tok /= Nothing
-        where
-            tok = s ^. contractState . hasToken
+.. literalinclude:: GameModel.hs
+   :start-after: START precondition v3
+   :end-before: END precondition v3
 
 With this change, the tests *still* fail, and we must study the entire
 log output to understand why:
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck $ prop_Game
   *** Failed! Assertion failed (after 36 tests and 35 shrinks):
@@ -1062,17 +927,9 @@ both with the correct password. The first guess tries to withdraw more
 Ada than are available, which our model predicts should be a
 no-op. Recall we defined:
 
- .. code-block:: haskell
-
-    nextState (Guess w old new val) = do
-        correctGuess <- (old ==)    <$> viewContractState currentSecret
-        holdsToken   <- (Just w ==) <$> viewContractState hasToken
-        enoughAda    <- (val <=)    <$> viewContractState gameValue
-        when (correctGuess && holdsToken && enoughAda) $ do
-            currentSecret $= new
-            gameValue     $~ subtract val
-            deposit w $ Ada.lovelaceValueOf val
-        wait 1
+.. literalinclude:: GameModel.hs
+   :start-after: START nextState Guess
+   :end-before: END nextState Guess
 
 Our model predicts that the second guess, with the correct password
 and a withdrawal of only one Ada, ought to succeed. That is why we
@@ -1092,19 +949,13 @@ the second guess.
 We can avoid this problem too, by strengthening the precondition
 further:
 
- .. code-block:: haskell
-
-    precondition s cmd = case cmd of
-            Lock _ _ v    -> tok == Nothing
-            Guess w _ _ v -> tok == Just w && v <= val
-            GiveToken w   -> tok /= Nothing
-        where
-            tok = s ^. contractState . hasToken
-            val = s ^. contractState . gameValue
+.. literalinclude:: GameModel.hs
+   :start-after: START precondition
+   :end-before: END precondition
 
 Now the tests pass:
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck . withMaxSuccess 10000 $ prop_Game
   +++ OK, passed 10000 tests.
@@ -1156,21 +1007,14 @@ precondition. The action generator is itself parameterized on the
 contract state, so we could *guarantee* that generated guesses satisfy
 their preconditions by redefining it as follows:
 
- .. code-block:: haskell
-
-    arbitraryAction s = oneof $
-        [ Lock      <$> genWallet <*> genGuess <*> genValue ] ++
-        [ Guess w   <$> genGuess  <*> genGuess <*> choose (0, val)
-        | Just w <- [tok] ] ++
-        [ GiveToken <$> genWallet ]
-        where
-            tok = s ^. contractState . hasToken
-            val = s ^. contractState . gameValue
+.. literalinclude:: GameModel.hs
+   :start-after: START arbitaryAction v2
+   :end-before: END arbitaryAction v2
 
 With this change, ``Guess`` and ``GiveToken`` actions become equally
 frequent:
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck . withMaxSuccess 1000 $ prop_Game
   +++ OK, passed 1000 tests.
@@ -1209,18 +1053,9 @@ to change the generator too, then we might end up with less thorough
 testing than we expect. So rather than generate guesses as we did above,
 it would be better to define
 
- .. code-block:: haskell
-
-    arbitraryAction s = oneof $
-        [ Lock      <$> genWallet <*> genGuess <*> genValue ] ++
-        [ frequency $
-          [ (10, Guess w   <$> genGuess  <*> genGuess <*> choose (0, val))
-          | Just w <- [tok] ] ++
-          [ (1, Guess <$> genWallet <$> genGuess <*> genGuess <*> genValue) ] ]
-        [ GiveToken <$> genWallet ]
-        where
-            tok = s ^. contractState . hasToken
-            val = s ^. contractState . gameValue
+.. literalinclude:: GameModel.hs
+   :start-after: START arbitraryAction
+   :end-before: END arbitraryAction
 
 which generates valid guesses *most* of the time, with the occasional
 possibly-invalid one. This approach results in test cases with a
@@ -1236,10 +1071,9 @@ generating. For example, we might wonder what proportion of ``Guess``
 actions are correct guesses. We can find out by defining the
 monitoring_ method in the ContractModel_ class:
 
- .. code-block:: haskell
-
-  monitoring :: (ModelState state, ModelState state)
-                  -> Action state -> Property -> Property
+.. literalinclude:: GameModel.hs
+   :start-after: START monitoring type
+   :end-before: END monitoring type
 
 This function is called for every `Action`_ in a test case, and given the
 ModelState_ before and after the `Action`_. Its result is a function
@@ -1250,17 +1084,13 @@ output to counterexamples.
 To create a table showing the proportion of guesses
 which were right or wrong, we can define monitoring_ as
 
-  .. code-block:: haskell
-
-    monitoring (s,_) (Guess w old new v) =
-      tabulate "Guesses"
-        [if old==secret then "Right" else "Wrong"]
-      where secret = s ^. contractState . currentSecret
-    monitoring _ _ = id
+.. literalinclude:: GameModel.hs
+   :start-after: START monitoring
+   :end-before: END monitoring
 
 This generates output such as this:
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck . withMaxSuccess 1000 $ prop_Game
   +++ OK, passed 1000 tests.
@@ -1321,22 +1151,18 @@ which just means that we write test case generators that can mix
 random actions, specified actions, and assertions. These generators
 are little programs in the DL_ monad, such as this one:
 
- .. code-block:: haskell
-
-  unitTest :: DL GameModel ()
-  unitTest = do
-      action $ Lock w1 "hello" 10
-      action $ GiveToken w2
-      action $ Guess w2 "hello" "new secret" 3
+.. literalinclude:: GameModel.hs
+   :start-after: START unitTest v1
+   :end-before: END unitTest v1
 
 This DL_ fragment simply specifies a unit test in terms of the
 underlying ContractModel_ we have already seen, using `action <actionFun_>`_ to
 include a specific `Action <ActionType>`_ in the test. To run such a test, we
 must specify a QuickCheck property such as
 
-  .. code-block:: haskell
-
-   prop_DL dl = forAllDL dl prop_Game
+.. literalinclude:: GameModel.hs
+   :start-after: START propDL
+   :end-before: END propDL
 
 which uses forAllDL_ to generate a test sequence from the ``dl`` provided, and runs it
 using the same underlying property as before. The execution is checked
@@ -1346,9 +1172,9 @@ tests for a contract specified by a ContractModel_.
 
 We can run this test as follows:
 
- .. code-block:: text
+.. code-block:: text
 
-  > quickCheck . withMaxSuccess 1 $ prop_DL unitTest
+  > quickCheck . withMaxSuccess 1 $ propDL unitTest
   +++ OK, passed 1 test.
 
   Actions (3 in total):
@@ -1364,21 +1190,15 @@ generation. For example, if we wanted to generalize the unit test
 above a little to lock a random amount of Ada in the contract, then
 we could instead write:
 
- .. code-block:: haskell
-
-  unitTest :: DL GameModel ()
-  unitTest = do
-      val <- forAllQ $ chooseQ (1, 20)
-      action $ Lock w1 "hello" val
-      action $ GiveToken w2
-      action $ Guess w2 "hello" "new secret" 3
+.. literalinclude:: GameModel.hs
+   :start-after: START unitTest v2
+   :end-before: END unitTest v2
 
 Here forAllQ_ lets us generate a random value using chooseQ_:
 
- .. code-block:: haskell
-
-  chooseQ ::
-    (Arbitrary a, Random a, Ord a) => (a, a) -> Quantification a
+.. literalinclude:: GameModel.hs
+   :start-after: START chooseQ type
+   :end-before: END chooseQ type
 
 forAllQ_ takes a Quantification_, which resembles a QuickCheck
 generator, but with a more limited API to support its use in dynamic
@@ -1387,9 +1207,9 @@ logic.
 When this is tested, random values in the range 1-20 are locked... and
 a test fails:
 
- .. code-block:: text
+.. code-block:: text
 
-  > quickCheck $ prop_DL unitTest
+  > quickCheck $ propDL unitTest
   *** Failed! Falsified (after 3 tests):
   BadPrecondition
     [Witness (1 :: Integer),
@@ -1409,7 +1229,7 @@ action we specified--making the guess--cannot be run, because its
 precondition is ``False``. This is what the ``BadPrecondition`` tells
 us, and the action that could not be performed appears as
 
- .. code-block:: text
+.. code-block:: text
 
    [Action (Guess (Wallet 2) "hello" "new secret" 3)]
 
@@ -1433,21 +1253,15 @@ Repeating a dynamic logic test
 Once again, we can copy-and-paste the failed testcase into our source
 code:
 
- .. code-block:: haskell
-
-  badUnitTest =
-    BadPrecondition
-      [Witness (1 :: Integer),
-       Do $ Lock (Wallet 1) "hello" 1,
-       Do $ GiveToken (Wallet 2)]
-      [Action (Guess (Wallet 2) "hello" "new secret" 3)]
-      (GameModel {_gameValue = 1, _hasToken = Just (Wallet 2), _currentSecret = "hello"})
+.. literalinclude:: GameModel.hs
+   :start-after: START badUnitTest
+   :end-before: END badUnitTest
 
 We can rerun the test using withDLTest_, supplying the original DL_
 ``unitTest`` from which the test case was generated, as well as the
 underlying property:
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck $ withDLTest unitTest prop_Game badUnitTest
   *** Failed! Falsified (after 1 test):
@@ -1458,14 +1272,14 @@ in this case--the test case ``badUnitTest`` was supplied explicitly).
 If we now correct ``unitTest``, for example by changing the range of
 ``val`` from 1-20 to 3-20, then the saved bad test case passes:
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck $ withDLTest unitTest prop_Game badUnitTest
   +++ OK, passed 100 tests.
 
 as do freshly generated random tests:
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck $ forAllDL unitTest prop_Game
   +++ OK, passed 100 tests.
@@ -1493,12 +1307,9 @@ can include a random sequence of actions in a DL_ test using
 `anyActions_`_, and we can make assertions about the ModelState_ using
 assertModel_. Thus we can define
 
- .. code-block:: haskell
-
-  noLockedFunds :: DL GameModel ()
-  noLockedFunds = do
-      anyActions_
-      assertModel "Locked funds should be zero" $ isZero . lockedValue
+.. literalinclude:: GameModel.hs
+   :start-after: START noLockedFunds v1
+   :end-before: END noLockedFunds v1
 
 to assert that, after any sequence of actions, no funds should remain
 locked (lockedValue_ extracts the total value locked in contracts from
@@ -1506,7 +1317,7 @@ the ModelState_).
 
 Of course, this test fails:
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck $ forAllDL noLockedFunds prop_Game
   *** Failed! Falsified (after 1 test and 2 shrinks):
@@ -1526,22 +1337,15 @@ can recover the funds by making such a guess. To program our strategy,
 we will need to read the secret password, and the value remaining in
 the contract, from the contract model:
 
- .. code-block:: haskell
-
-  noLockedFunds :: DL GameModel ()
-  noLockedFunds = do
-      anyActions_
-      w <- forAllQ $ elementsQ wallets
-      secret <- viewContractState currentSecret
-      val    <- viewContractState gameValue
-      action $ Guess w "" secret val
-      assertModel "Locked funds should be zero" $ isZero . lockedValue
+.. literalinclude:: GameModel.hs
+   :start-after: START noLockedFunds v2
+   :end-before: END noLockedFunds v2
 
 After a random sequence of actions, we choose a random wallet and
 construct a correct guess that recovers all the locked Ada to this
 wallet. But this property also fails!
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck $ forAllDL noLockedFunds prop_Game
   *** Failed! Falsified (after 1 test and 2 shrinks):
@@ -1559,21 +1363,13 @@ property would pass without our doing anything at all. Perhaps we
 should only make a ``Guess`` if there are actually funds to be
 recovered:
 
- .. code-block:: haskell
-
-  noLockedFunds :: DL GameModel ()
-  noLockedFunds = do
-      anyActions_
-      w <- forAllQ $ elementsQ wallets
-      secret <- viewContractState currentSecret
-      val    <- viewContractState gameValue
-      when (val > 0) $ do
-          action $ Guess w "" secret val
-      assertModel "Locked funds should be zero" $ isZero . lockedValue
+.. literalinclude:: GameModel.hs
+   :start-after: START noLockedFunds v3
+   :end-before: END noLockedFunds v3
 
 This is better, but testing the property still fails:
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck $ forAllDL noLockedFunds prop_Game
   *** Failed! Falsified (after 1 test and 1 shrink):
@@ -1590,22 +1386,13 @@ wallet does not hold the game token. This test case shows that, as
 part of our strategy for recovering the funds, we also need to give
 the game token to the wallet that will make the guess.
 
- .. code-block:: haskell
-
-  noLockedFunds :: DL GameModel ()
-  noLockedFunds = do
-      anyActions_
-      w <- forAllQ $ elementsQ wallets
-      secret <- viewContractState currentSecret
-      val    <- viewContractState gameValue
-      when (val > 0) $ do
-          action $ GiveToken w
-          action $ Guess w "" secret val
-      assertModel "Locked funds should be zero" $ isZero . lockedValue
+.. literalinclude:: GameModel.hs
+   :start-after: START noLockedFunds v4
+   :end-before: END noLockedFunds v4
 
 Now we expect the tests to pass:
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck $ forAllDL noLockedFunds prop_Game
   *** Failed! Falsified (after 1 test):
@@ -1622,12 +1409,9 @@ our model indeed says that there are still 5 Ada locked in the
 contract. This is the effect of the nextState_ function in our model,
 so let us inspect the relevant part of its code:
 
- .. code-block:: haskell
-
-    nextState (Guess w old new val) = do
-        correctGuess <- (old ==)    <$> viewContractState currentSecret
-        ...
-
+.. literalinclude:: GameModel.hs
+   :start-after: START nextState Guess partial
+   :end-before: END nextState Guess partial
 
 Comparing carefully with the failed test, we see that our strategy is
 supplying the empty string as the old password (the guess), and the
@@ -1657,24 +1441,14 @@ can monitor_ at selected points.
 In this case, we choose to label test cases that actually invoke our
 fund recovery strategy:
 
- .. code-block:: haskell
-
-  noLockedFunds :: DL GameModel ()
-  noLockedFunds = do
-      anyActions_
-      w <- forAllQ $ elementsQ wallets
-      secret <- viewContractState currentSecret
-      val    <- viewContractState gameValue
-      when (val > 0) $ do
-          monitor $ label "Unlocking funds"
-          action $ GiveToken w
-          action $ Guess w secret "" val
-      assertModel "Locked funds should be zero" $ isZero . lockedValue
+.. literalinclude:: GameModel.hs
+   :start-after: START noLockedFunds v5
+   :end-before: END noLockedFunds v5
 
 With the addition of the monitor_ line, QuickCheck tells us what
 proportion of our tests actually leave funds to recover:
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck $ forAllDL noLockedFunds prop_Game
   +++ OK, passed 100 tests (31% Unlocking funds).
@@ -1691,27 +1465,14 @@ easy to address: we can simply use the dynamic logic to specify the
 initial ``Lock`` action *explicitly*, and generate larger amounts for
 the initial funds locked in the game (lines 3-5 below):
 
- .. code-block:: haskell
-
-  noLockedFunds :: DL GameModel ()
-  noLockedFunds = do
-      (w0,funds,pass) <-
-        forAllQ (elementsQ wallets, chooseQ (1,10000), elementsQ guesses)
-      action $ Lock w0 pass funds
-      anyActions_
-      w <- forAllQ $ elementsQ wallets
-      secret <- viewContractState currentSecret
-      val    <- viewContractState gameValue
-      when (val > 0) $ do
-          monitor $ label "Unlocking funds"
-          action $ GiveToken w
-          action $ Guess w secret "" val
-      assertModel "Locked funds should be zero" $ isZero . lockedValue
+.. literalinclude:: GameModel.hs
+   :start-after: START noLockedFunds
+   :end-before: END noLockedFunds
 
 With this addition, a much higher proportion of tests actually
 exercise our recovery strategy:
 
- .. code-block:: text
+.. code-block:: text
 
   > quickCheck $ forAllDL noLockedFunds prop_Game
   +++ OK, passed 100 tests (74% Unlocking funds).
@@ -1730,12 +1491,9 @@ write tests with random control flow, weight choices suitably, and so
 on. For example, anyActions_, which generates a random sequence of
 actions of expected length ``n``, is defined by
 
- .. code-block:: haskell
-
-  anyActions :: Int -> DL s ()
-  anyActions n = stopping
-             <|> weight (1 / fromIntegral n)
-             <|> (anyAction >> anyActions n)
+.. literalinclude:: GameModel.hs
+   :start-after: START anyActions
+   :end-before: END anyActions
 
 This code makes a random choice between three alternatives, expressed
 using ``(<|>)``. The first two alternatives terminate (and return
