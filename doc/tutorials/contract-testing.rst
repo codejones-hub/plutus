@@ -122,8 +122,11 @@ the corresponding monetary policy.
 Introducing contract models
 ---------------------------
 
-We test contracts using a *model* of the contract state; the first job
-to be done is thus defining that model. To do so, we import the
+We test contracts using a *model* of the system, which includes the
+state(s) of all the agents involved--the on-chain state, the off-chain
+state on your computer, the off-chain state on anyone else's
+computer--everything relevant to the contract(s) under test. The first
+job to be done is thus defining that model. To do so, we import the
 contract modelling library
 
 .. literalinclude:: GameModel.hs
@@ -1554,27 +1557,30 @@ different wallets may perform actions simultaneously. This usually
 results in two or more transactions that try to spend the same :term:`UTXO`,
 leading all but the first to fail. 
 
-:term:`Endpoint<endpoint>` calls that submit several transactions are even more
-problematic, because a transaction may fail part way through, leaving
-the blockchain in an intermediate, and possibly invalid
+:term:`Endpoint<endpoint>` calls that submit several transactions are
+even more problematic, because such a call may fail part way through,
+leaving the blockchain in an intermediate, and possibly invalid
 state. Arguably, contracts should be written to undo the effects of
 earlier transactions if later ones fail--although, as we saw, the
-``Lock`` :term:`endpoint` of the game contract does not do this: a second call
-to ``Lock`` fails, and leaves the blockchain in a state that the
-contract cannot handle.
+``Lock`` :term:`endpoint` of the game contract (which is implemented
+as two transactions) does not do this: a second call to ``Lock`` fails
+after the first transaction, and leaves the blockchain in a state that
+the contract cannot handle.
 
 It is possible to test this kind of behaviour in our framework, by
-*not* delaying before the next action, and including delays as an
-explicit Action_ in test cases instead. However, modelling becomes
-considerably harder, because the model must predict *which*
-transaction of several simultaneous ones succeeds, and must take into
-account how many transactions each end-point call results in. It isn't
-clear at present that the extra modelling effort is really worthwhile.
+*not* delaying before the next action, so that several actions can be
+started in the same slot. Delays must then be included as an explicit
+Action_ in test cases instead. However, modelling becomes considerably
+harder, because the model must predict *which* transaction of several
+simultaneous ones succeeds, and must take into account how many
+transactions each end-point call results in, and which slot each is
+expected to be commited in. It isn't clear that the extra
+modelling effort is really worthwhile.
 
-Moreover, transactions might be delayed, which means that :term:`endpoint`
-calls that generate several transactions might end up being
-interleaved in unexpected ways. The emulator doesn't currently support
-this, and so these kinds of tests cannot yet be run.
+Moreover, in reality transactions might be delayed, which means that
+:term:`endpoint` calls that generate several transactions might end up
+being interleaved in unexpected ways. The emulator doesn't currently
+simulate this, and so these kinds of tests cannot yet be run.
 
 Testing for information leaks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1589,14 +1595,16 @@ There are least two serious bugs that the game contract could contain,
 that would permit an adversary to steal all the money:
 
  - The secret could be stored in plain text in the contract state,
-   which is stored on the blockchain. The adversary could simply read
-   the secret, and make a correct guess to steal the money.
+   instead of encrypted. The contract state is stored on the
+   blockchain. The adversary could simply read the secret from the
+   blockchain, and then make a correct guess to steal the money.
 
  - The secret might be stored in encrypted form on the blockchain, but
    ``Guess`` transactions might contain an *encrypted* guess, rather
-   than a plain text guess. Then the adversary could simply read the
-   encrypted secret from the blockchain, and submit it in a guess
-   transaction to steal the money.
+   than a plain text guess (as they do in this implementation). Then
+   the adversary could simply read the encrypted secret from the
+   blockchain, and submit it in a guess transaction to steal the
+   money.
 
 Neither of these bugs would be detected by our tests, nor is it clear
 how they could be.
@@ -1604,7 +1612,7 @@ how they could be.
 This test framework is a powerful tool for testing that contracts
 behave correctly, when used as intended--but users should be aware of
 the limitations in this section, and be careful to avoid the pitfalls
-they reveal.
+they expose.
 
 .. _arbitraryAction: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:arbitraryAction
 .. _shrinkAction: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:shrinkAction
