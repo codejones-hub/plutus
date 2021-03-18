@@ -876,8 +876,8 @@ When we rerun random tests, they fail for a different reason:
     > quickCheck prop_Game
     *** Failed! Assertion failed (after 5 tests and 7 shrinks):
     Actions
-     [Var 1 := Lock (Wallet 1) "hunter2" 0,
-      Var 2 := Lock (Wallet 1) "hello" 0]
+     [Lock (Wallet 1) "hunter2" 0,
+      Lock (Wallet 1) "hello" 0]
     Outcome of Contract instance for wallet 1:
       False
     Failed 'Contract instance stopped with error'
@@ -890,8 +890,8 @@ Looking at the failing test case,
   .. code-block:: text
 
     Actions
-     [Var 1 := Lock (Wallet 1) "hunter2" 0,
-      Var 2 := Lock (Wallet 1) "hello" 0]
+     [Lock (Wallet 1) "hunter2" 0,
+      Lock (Wallet 1) "hello" 0]
 
 we can see that it does something unexpected: wallet 1 tries to lock
 *twice*. Our model allows this, but the error message tells us that
@@ -920,8 +920,8 @@ then we can re-run the test and see more succinct output:
     > quickCheck $ propGame' Warning
     *** Failed! Assertion failed (after 7 tests and 4 shrinks):
     Actions
-     [Var 3 := Lock (Wallet 1) "hello" 0,
-      Var 4 := Lock (Wallet 1) "*******" 0]
+     [Lock (Wallet 1) "hello" 0,
+      Lock (Wallet 1) "*******" 0]
     Outcome of Contract instance for wallet 1:
       False
     Failed 'Contract instance stopped with error'
