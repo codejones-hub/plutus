@@ -91,7 +91,7 @@ module Language.Plutus.Contract.Test.ContractModel
     --
     -- $walletHandles
     , SchemaConstraints
-    , HandleSpec(..)
+    , ContractInstanceSpec(..)
     , HandleFun
     -- ** Emulator properties
     , propRunScript_
@@ -157,9 +157,9 @@ imLookup k (IMCons key val m) =
 --
 -- In order to call contract endpoints using `Plutus.Trace.Emulator.callEndpoint`, a `ContractHandle`
 -- is required. Contract handles are managed behind the scenes by the `propRunScript` functions,
--- based on a given a list of `HandleSpec`s, associating `HandleKey`s with `Wallet`s and
+-- based on a given a list of `ContractInstanceSpec`s, associating `ContractInstanceKey`s with `Wallet`s and
 -- `Contract`s. Before testing starts, `activateContractWallet` is called for all entries in the
--- list and the mapping from `HandleKey` to `ContractHandle` is provided in the `HandleFun` argument
+-- list and the mapping from `ContractInstanceKey` to `ContractHandle` is provided in the `HandleFun` argument
 -- to `perform`.
 
 -- | The constraints required on contract schemas and error types to enable calling contract
@@ -174,22 +174,22 @@ type SchemaConstraints schema err =
         , JSON.FromJSON err
         )
 
--- | A `HandleSpec` associates a `HandleKey` with a concrete `Wallet` and `Contract`. The contract
---   schema and error types are hidden from the outside.
-data HandleSpec state where
-    HandleSpec :: SchemaConstraints schema err
-                  => HandleKey state schema err -- ^ The handle key used when looking up handles in `perform`
-                  -> Wallet                     -- ^ The wallet who owns the handle
-                  -> Contract schema err ()     -- ^ The contract that is the target of the handle
-                  -> HandleSpec state
+-- | A `ContractInstanceSpec` associates a `ContractInstanceKey` with a concrete `Wallet` and
+--   `Contract`. The contract schema and error types are hidden from the outside.
+data ContractInstanceSpec state where
+    ContractInstanceSpec :: SchemaConstraints schema err
+                  => ContractInstanceKey state schema err -- ^ The key used when looking up contract instance handles in `perform`
+                  -> Wallet                               -- ^ The wallet who owns the contract instance
+                  -> Contract schema err ()               -- ^ The contract that is running in the instance
+                  -> ContractInstanceSpec state
 
-type Handles state = IMap (HandleKey state) ContractHandle
+type Handles state = IMap (ContractInstanceKey state) ContractHandle
 
 
--- | A function returning the `ContractHandle` corresponding to a `HandleKey`. A `HandleFun` is
---   provided to the `perform` function to enable calling contract endpoints with
+-- | A function returning the `ContractHandle` corresponding to a `ContractInstanceKey`. A
+--   `HandleFun` is provided to the `perform` function to enable calling contract endpoints with
 --   `Plutus.Trace.Emulator.callEndpoint`.
-type HandleFun state = forall schema err. (Typeable schema, Typeable err) => HandleKey state schema err -> ContractHandle schema err
+type HandleFun state = forall schema err. (Typeable schema, Typeable err) => ContractInstanceKey state schema err -> ContractHandle schema err
 
 -- | The `ModelState` models the state of the blockchain. It contains,
 --
@@ -237,8 +237,8 @@ class ( Typeable state
       , Show state
       , Show (Action state)
       , Eq (Action state)
-      , (forall s e. Eq (HandleKey state s e))
-      , (forall s e. Show (HandleKey state s e))
+      , (forall s e. Eq (ContractInstanceKey state s e))
+      , (forall s e. Show (ContractInstanceKey state s e))
       ) => ContractModel state where
 
     -- | The type of actions that are supported by the contract. An action usually represents a single
@@ -246,18 +246,19 @@ class ( Typeable state
     --   that can be interpreted in the `EmulatorTrace` monad.
     data Action state
 
-    -- | To be able to call a contract endpoint from a wallet a `ContractHandle` is required.
-    --   These are managed by the test framework and all the user needs to do is provide this handle
-    --   key type representing the different handles that a test needs to work with, and when
-    --   creating a property (see `propRunScript_`) provide a list of handle keys together with
-    --   their wallets and contracts (a `HandleSpec`). Handle keys are indexed by the schema and
-    --   error type of the contract and should be defined as a GADT. For example, a handle type for
-    --   a contract with one seller and multiple buyers could look like this.
+    -- | To be able to call a contract endpoint from a wallet a `ContractHandle` is required. These
+    --   are managed by the test framework and all the user needs to do is provide this contract
+    --   instance key type representing the different contract instances that a test needs to work
+    --   with, and when creating a property (see `propRunScript_`) provide a list of contract
+    --   instance keys together with their wallets and contracts (a `ContractInstanceSpec`).
+    --   Contract instance keys are indexed by the schema and error type of the contract and should
+    --   be defined as a GADT. For example, a handle type for a contract with one seller and
+    --   multiple buyers could look like this.
     --
-    --   >  data HandleKey MyModel s e where
-    --   >      Buyer  :: Wallet -> HandleKey MyModel MySchema MyError
-    --   >      Seller :: HandleKey MyModel MySchema MyError
-    data HandleKey state :: Row * -> * -> *
+    --   >  data ContractInstanceKey MyModel s e where
+    --   >      Buyer  :: Wallet -> ContractInstanceKey MyModel MySchema MyError
+    --   >      Seller :: ContractInstanceKey MyModel MySchema MyError
+    data ContractInstanceKey state :: Row * -> * -> *
 
     -- | Given the current model state, provide a QuickCheck generator for a random next action.
     --   This is used in the `Arbitrary` instance for `Script`s as well as by `anyAction` and
@@ -286,7 +287,7 @@ class ( Typeable state
     -- | While `nextState` models the behaviour of the actions, `perform` contains the code for
     --   running the actions in the emulator (see "Plutus.Trace.Emulator"). It gets access to the
     --   wallet contract handles, the current model state, and the action to be performed.
-    perform :: HandleFun state  -- ^ Function from `HandleKey` to `ContractHandle`
+    perform :: HandleFun state  -- ^ Function from `ContractInstanceKey` to `ContractHandle`
             -> ModelState state -- ^ The model state before peforming the action
             -> Action state     -- ^ The action to perform
             -> EmulatorTrace ()
@@ -919,9 +920,9 @@ finalChecks opts predicate prop = do
         assertResult :: Monad m => Bool -> PropertyM m ()
         assertResult = QC.assert
 
-activateWallets :: forall state. ContractModel state => [HandleSpec state] -> EmulatorTrace (Handles state)
+activateWallets :: forall state. ContractModel state => [ContractInstanceSpec state] -> EmulatorTrace (Handles state)
 activateWallets [] = return IMNil
-activateWallets (HandleSpec key wallet contract : spec) = do
+activateWallets (ContractInstanceSpec key wallet contract : spec) = do
     h <- activateContractWallet wallet contract
     m <- activateWallets spec
     return $ IMCons key h m
@@ -934,8 +935,8 @@ activateWallets (HandleSpec key wallet contract : spec) = do
 -- @
 propRunScript_ ::
     ContractModel state
-    => [HandleSpec state]   -- ^ Required wallet contract handles
-    -> Script state         -- ^ The script to run
+    => [ContractInstanceSpec state] -- ^ Required wallet contract instances
+    -> Script state                 -- ^ The script to run
     -> Property
 propRunScript_ handleSpecs script =
     propRunScript handleSpecs (\ _ -> pure True) script
@@ -948,9 +949,9 @@ propRunScript_ handleSpecs script =
 -- @
 propRunScript ::
     ContractModel state
-    => [HandleSpec state]                    -- ^ Required wallet contract handles
-    -> (ModelState state -> TracePredicate)  -- ^ Predicate to check at the end
-    -> Script state                          -- ^ The script to run
+    => [ContractInstanceSpec state]         -- ^ Required wallet contract instances
+    -> (ModelState state -> TracePredicate) -- ^ Predicate to check at the end
+    -> Script state                         -- ^ The script to run
     -> Property
 propRunScript = propRunScriptWithOptions defaultCheckOptions
 
@@ -958,9 +959,9 @@ propRunScript = propRunScriptWithOptions defaultCheckOptions
 --   wallet balances, that no off-chain contract instance crashed, and that the given
 --   `TracePredicate` holds at the end. The predicate has access to the final model state.
 --
---   The `HandleSpec` argument lists the contract instances that should be created for the wallets
+--   The `ContractInstanceSpec` argument lists the contract instances that should be created for the wallets
 --   involved in the test. Before the script is run, contracts are activated using
---   `activateContractWallet` and a mapping from `HandleKey`s to the resulting `ContractHandle`s is
+--   `activateContractWallet` and a mapping from `ContractInstanceKey`s to the resulting `ContractHandle`s is
 --   provided to the `perform` function.
 --
 --   The `Script` argument can be generated by a `forAllDL` from a `DL` scenario, or using the
@@ -986,7 +987,7 @@ propRunScript = propRunScriptWithOptions defaultCheckOptions
 propRunScriptWithOptions ::
     ContractModel state
     => CheckOptions                          -- ^ Emulator options
-    -> [HandleSpec state]                    -- ^ Required wallet contract handles
+    -> [ContractInstanceSpec state]          -- ^ Required wallet contract instances
     -> (ModelState state -> TracePredicate)  -- ^ Predicate to check at the end
     -> Script state                          -- ^ The script to run
     -> Property
@@ -1004,8 +1005,8 @@ propRunScriptWithOptions opts handleSpecs predicate script' =
 checkBalances :: ModelState state -> TracePredicate
 checkBalances s = Map.foldrWithKey (\ w val p -> walletFundsChange w val .&&. p) (pure True) (s ^. balances)
 
-checkNoCrashes :: [HandleSpec state] -> TracePredicate
-checkNoCrashes = foldr (\ (HandleSpec _ w c) -> (assertOutcome c (walletInstanceTag w) notError "Contract instance stopped with error" .&&.))
+checkNoCrashes :: [ContractInstanceSpec state] -> TracePredicate
+checkNoCrashes = foldr (\ (ContractInstanceSpec _ w c) -> (assertOutcome c (walletInstanceTag w) notError "Contract instance stopped with error" .&&.))
                        (pure True)
     where
         notError Failed{}  = False

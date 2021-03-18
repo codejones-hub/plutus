@@ -124,14 +124,14 @@ data Phase = NotStarted | Bidding | AuctionOver
 
 makeLenses 'AuctionModel
 
-deriving instance Eq (HandleKey AuctionModel s e)
-deriving instance Show (HandleKey AuctionModel s e)
+deriving instance Eq (ContractInstanceKey AuctionModel s e)
+deriving instance Show (ContractInstanceKey AuctionModel s e)
 
 instance ContractModel AuctionModel where
 
-    data HandleKey AuctionModel s e where
-        SellerH :: HandleKey AuctionModel SellerSchema SM.SMContractError
-        BuyerH  :: Wallet -> HandleKey AuctionModel BuyerSchema SM.SMContractError
+    data ContractInstanceKey AuctionModel s e where
+        SellerH :: ContractInstanceKey AuctionModel SellerSchema SM.SMContractError
+        BuyerH  :: Wallet -> ContractInstanceKey AuctionModel BuyerSchema SM.SMContractError
 
     data Action AuctionModel = Init | Bid Wallet Integer | WaitUntil Slot
         deriving (Eq, Show)
@@ -208,8 +208,8 @@ prop_Auction script =
         (\ _ -> pure True)  -- TODO: check termination
         script
     where
-        spec = HandleSpec SellerH w1 seller :
-               [ HandleSpec (BuyerH w) w buyer | w <- map Wallet [2..4] ]
+        spec = ContractInstanceSpec SellerH w1 seller :
+               [ ContractInstanceSpec (BuyerH w) w buyer | w <- map Wallet [2..4] ]
 
 finishAuction :: DL AuctionModel ()
 finishAuction = do

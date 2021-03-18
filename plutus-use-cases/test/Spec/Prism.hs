@@ -156,18 +156,18 @@ waitSlots = 2
 users :: [Wallet]
 users = [user, Wallet 5]
 
-deriving instance Eq   (HandleKey PrismModel s e)
-deriving instance Show (HandleKey PrismModel s e)
+deriving instance Eq   (ContractInstanceKey PrismModel s e)
+deriving instance Show (ContractInstanceKey PrismModel s e)
 
 instance ContractModel PrismModel where
 
     data Action PrismModel = Delay | Issue Wallet | Revoke Wallet | Call Wallet | Present Wallet
         deriving (Eq, Show)
 
-    data HandleKey PrismModel s e where
-        MirrorH  :: HandleKey PrismModel C.MirrorSchema            C.MirrorError
-        UserH    :: Wallet -> HandleKey PrismModel C.STOSubscriberSchema     C.UnlockError
-        ManagerH :: HandleKey PrismModel C.CredentialManagerSchema C.CredentialManagerError
+    data ContractInstanceKey PrismModel s e where
+        MirrorH  :: ContractInstanceKey PrismModel C.MirrorSchema            C.MirrorError
+        UserH    :: Wallet -> ContractInstanceKey PrismModel C.STOSubscriberSchema     C.UnlockError
+        ManagerH :: ContractInstanceKey PrismModel C.CredentialManagerSchema C.CredentialManagerError
 
     arbitraryAction _ = QC.oneof [pure Delay, genUser Revoke, genUser Issue,
                                   genUser Call, genUser Present]
@@ -220,7 +220,7 @@ finalPredicate _ =
 prop_Prism :: Script PrismModel -> Property
 prop_Prism = propRunScript @PrismModel spec finalPredicate
     where
-        spec = [ HandleSpec (UserH w) w                 C.subscribeSTO | w <- users ] ++
-               [ HandleSpec MirrorH   mirror            C.mirror
-               , HandleSpec ManagerH  credentialManager C.credentialManager ]
+        spec = [ ContractInstanceSpec (UserH w) w                 C.subscribeSTO | w <- users ] ++
+               [ ContractInstanceSpec MirrorH   mirror            C.mirror
+               , ContractInstanceSpec ManagerH  credentialManager C.credentialManager ]
 

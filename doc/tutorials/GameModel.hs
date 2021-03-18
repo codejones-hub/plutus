@@ -35,13 +35,13 @@ data GameModel = GameModel
 
 makeLenses 'GameModel
 
-deriving instance Eq (HandleKey GameModel schema err)
-deriving instance Show (HandleKey GameModel schema err)
+deriving instance Eq (ContractInstanceKey GameModel schema err)
+deriving instance Show (ContractInstanceKey GameModel schema err)
 
 instance ContractModel GameModel where
 
-    data HandleKey GameModel schema err where
-        WalletKey :: Wallet -> HandleKey GameModel GameStateMachineSchema GameError
+    data ContractInstanceKey GameModel schema err where
+        WalletKey :: Wallet -> ContractInstanceKey GameModel GameStateMachineSchema GameError
 
     -- The commands available to a test case
     data Action GameModel = Lock      Wallet String Integer
@@ -139,8 +139,8 @@ instance ContractModel GameModel where
         [if old==s ^. contractState . currentSecret then "Right" else "Wrong"]
     monitoring _ _ = id
 
-handleSpec :: [HandleSpec GameModel]
-handleSpec = [ HandleSpec (WalletKey w) w G.contract | w <- wallets ]
+handleSpec :: [ContractInstanceSpec GameModel]
+handleSpec = [ ContractInstanceSpec (WalletKey w) w G.contract | w <- wallets ]
 
 -- | The main property. 'propRunScript_' checks that balances match the model after each test.
 prop_Game :: Script GameModel -> Property

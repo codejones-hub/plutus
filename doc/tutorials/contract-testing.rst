@@ -179,7 +179,7 @@ sequence of `Action <ActionType_>`_. We can run tests by using `propRunScript_`_
  .. code-block:: haskell
 
   prop_Game :: Script GameModel -> Property
-  prop_Game script = propRunScript_ handleSpec script
+  prop_Game script = propRunScript_ instanceSpec script
 
 When we test this property, ``quickCheck`` will generate random
 scripts to be tested, checking at the end of each test that tokens are
@@ -190,9 +190,9 @@ transferred correctly, and contracts didn't crash.
      There is also a more general function propRunScript_ that allows
      the check at the end of each test to be customized.
 
-But what is the ``handleSpec`` in the code above?  `propRunScript_`_
+But what is the ``instanceSpec`` in the code above?  `propRunScript_`_
 creates the contract instances that are tested by the script, and the
-``handleSpec`` tells it which contract instances to create. A 'handle'
+``instanceSpec`` tells it which contract instances to create. A handle
 is created for each contract instance, which is used to invoke their
 endpoints from the test. Different contracts have different endpoints,
 of different types--and thus different schemas. When we invoke an
@@ -201,34 +201,35 @@ and the type of errors it can return, so that the type-checker can
 ensure that the call is valid. We thus need to know the *type* of
 contract that each handle refers to.
 
-To achieve this, every contract handle in a test is *named* by a
-HandleKey_, another associated datatype of the ContractModel_ class;
-we talk to a contract instance by referring to its HandleKey_. The
-HandleKey_ type is parameterised *both* on the type of the contract
+To achieve this, every contract instance in a test is *named* by a
+ContractInstanceKey_, another associated datatype of the ContractModel_ class;
+we talk to a contract instance by referring to its ContractInstanceKey_. The
+ContractInstanceKey_ type is parameterised *both* on the type of the contract
 model, and on the schema and error type of the contract it refers
 to. Since the same test may refer to contracts of several different
-types, HandleKey_ is defined as a GADT.
+types, ContractInstanceKey_ is defined as a GADT.
 
 In this particular case, there is only one type of contract under
-test, and so it suffices to define a HandleKey_ type with a single
-constructor. There is one contract instance running in each emulated wallet, so we simply distinguish HandleKeys by the wallet they are running in:
+test, and so it suffices to define a ContractInstanceKey_ type with a single
+constructor. There is one contract instance running in each emulated wallet, so
+we simply distinguish contract instance keys by the wallet they are running in:
 
  .. code-block:: haskell
 
-    data HandleKey GameModel schema err where
-        WalletKey :: Wallet -> HandleKey GameModel G.GameStateMachineSchema G.GameError
+    data ContractInstanceKey GameModel schema err where
+        WalletKey :: Wallet -> ContractInstanceKey GameModel G.GameStateMachineSchema G.GameError
 
-Once this type is defined, we can construct our HandleSpec_:
+Once this type is defined, we can construct our ContractInstanceSpec_:
 
  .. code-block:: haskell
 
-  handleSpec :: [HandleSpec GameModel]
-  handleSpec = [ HandleSpec (WalletKey w) w G.contract | w <- wallets ]
+  instanceSpec :: [ContractInstanceSpec GameModel]
+  instanceSpec = [ ContractInstanceSpec (WalletKey w) w G.contract | w <- wallets ]
 
 This specifies (reading from right to left) that we should create one
 contract instance per wallet, running ``G.contract``, the contract
-under test, in emulated wallet ``w``, and distinguished by
-``HandleKeys`` of the form ``WalletKey w``.
+under test, in emulated wallet ``w``, and distinguished by a
+``ContractInstanceKey`` of the form ``WalletKey w``.
 
 Now we can run tests, although of course they will not yet succeed:
 
@@ -248,7 +249,7 @@ specify how to generate `Action <ActionType_>`_, which we will do next.
 
 .. _propRunScript_: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:propRunScript_
 
-.. _HandleSpec: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:HandleSpec
+.. _ContractInstanceSpec: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ContractInstanceSpec
 
 Generating actions
 ^^^^^^^^^^^^^^^^^^
@@ -410,7 +411,7 @@ deposit_, etc... don't confuse them with operations that *actually*
 forge or move tokens in the implementation. The ModelState_ type
 contains all of this information.
 
-        
+
 When making a guess, we need to check parts of the contract state
 (which we read using viewContractState_), and then we update the
 stored password, game value, and wallet contents appropriately. (Here
@@ -589,9 +590,9 @@ transfer the game token from one wallet to another as specified by
             return ()
 
 Every call to an end-point must be associated with one of the contract
-handles defined in our ``handleSpec``; the ``handle`` argument to
+instances defined in our ``instanceSpec``; the ``handle`` argument to
 perform_ lets us find the contract handle associated with each
-HandleKey_.
+ContractInstanceKey_.
 
 For the most part, it is good practice to keep the perform_ function
 simple: a direct relationship between actions in a test case and calls
@@ -906,7 +907,7 @@ The emulator log output can be rather overwhelming, but we can eliminate the 'IN
     propGame' :: LogLevel -> Script GameModel -> Property
     propGame' l s = propRunScriptWithOptions
                         (set minLogLevel l defaultCheckOptions)
-                        handleSpec
+                        instanceSpec
                         (\ _ -> pure True)
                         s
 
@@ -1768,7 +1769,7 @@ documentation for more details.
 .. _lockedValue: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:lockedValue
 .. _wait: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:wait
 .. _ActionType: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:Action
-.. _HandleKey: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:HandleKey
+.. _ContractInstanceKey: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ContractInstanceKey
 .. _ModelState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ModelState
 .. _DL: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:DL
 .. _actionFun: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:action
