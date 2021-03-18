@@ -23,6 +23,7 @@
 
 module Language.Marlowe.Client where
 import           Control.Lens
+import           Control.Monad                (forM_)
 import           Control.Monad.Error.Lens     (catching, throwing)
 import           Data.Aeson                   (FromJSON, ToJSON)
 import qualified Data.Map.Strict              as Map
@@ -33,9 +34,9 @@ import           Language.Marlowe.Semantics   hiding (Contract)
 import qualified Language.Marlowe.Semantics   as Marlowe
 import           Language.Marlowe.Util        (extractContractRoles)
 import           Ledger                       (Address (..), CurrencySymbol, Datum (..), PubKeyHash, Slot (..),
-                                               TokenName, TxOutTx (..), ValidatorCtx (..), ValidatorHash,
-                                               mkValidatorScript, pubKeyHash, txOutDatum, txOutValue, validatorHash,
-                                               valueSpent)
+                                               TokenName, TxOut (..), TxOutTx (..), TxOutType (..), ValidatorCtx (..),
+                                               ValidatorHash, mkValidatorScript, pubKeyHash, txOutDatum, txOutValue,
+                                               txOutputs, validatorHash, valueSpent)
 import           Ledger.Ada                   (adaSymbol, adaValueOf)
 import           Ledger.Constraints
 import qualified Ledger.Constraints           as Constraints
@@ -63,6 +64,11 @@ type MarloweSchema =
         .\/ Endpoint "wait" MarloweParams
         .\/ Endpoint "auto" (MarloweParams, Party, Slot)
         .\/ Endpoint "redeem" (MarloweParams, TokenName, PubKeyHash)
+
+
+type MarloweCompanionSchema =
+    BlockchainActions
+    .\/ Endpoint "contracts" ()
 
 data MarloweError =
     StateMachineError SM.SMContractError
@@ -496,3 +502,49 @@ mkMarloweClient params = SM.mkStateMachineClient (mkMachineInstance params)
 
 defaultTxValidationRange :: Slot
 defaultTxValidationRange = 10
+
+
+marloweCompanionContract :: Contract MarloweData MarloweCompanionSchema MarloweError ()
+marloweCompanionContract = contracts
+  where
+    contracts = do
+        endpoint @"contracts"
+        pkh <- pubKeyHash <$> ownPubKey
+        let ownAddress = PubKeyAddress pkh
+        utxo <- utxoAt ownAddress
+        let txOuts = fmap (txOutTxOut . snd) $ Map.toList utxo
+        forM_ txOuts zzz
+        cont ownAddress
+    cont ownAddress = do
+        txns <- nextTransactionsAt ownAddress
+        let txOuts = txns >>= txOutputs
+        forM_ txOuts zzz
+        cont ownAddress
+
+
+zzz :: TxOut -> Contract MarloweData MarloweCompanionSchema MarloweError ()
+zzz txout = do
+    let curSymbols = filterRoles txout
+    forM_ curSymbols $ \cs -> do
+        contracts <- asdf cs
+        forM_ contracts $ \marloweData -> do
+            tell marloweData
+
+
+filterRoles :: TxOut -> [CurrencySymbol]
+filterRoles TxOut { txOutValue, txOutType = PayToPubKey } =
+    let curSymbols = filter (/= adaSymbol) $ AssocMap.keys $ Val.getValue txOutValue
+    in  curSymbols
+filterRoles _ = []
+
+
+asdf :: CurrencySymbol -> Contract MarloweData MarloweCompanionSchema MarloweError [MarloweData]
+asdf curSym = do
+    let params = marloweParams curSym
+    let client = mkMarloweClient params
+    maybeState <- SM.getOnChainState client
+    case maybeState of
+        Just ((st, _), _) -> do
+            let marloweData = tyTxOutData st
+            pure [marloweData]
+        Nothing -> pure []
