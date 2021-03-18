@@ -16,7 +16,7 @@ module Language.Plutus.Contract.Test.StateModel(
   , Any(..)
   , Step(..)
   , LookUp, Var(..) -- we export the constructors so that users can construct test cases
-  , Script(..)
+  , Actions(..)
   , stateAfter
   , runScript
   , runScriptInState
@@ -98,20 +98,20 @@ instance Eq (Step state) where
   (Var i := act) == (Var j := act') =
     (i==j) && Some act == Some act'
 
-newtype Script state = Script [Step state]
+newtype Actions state = Actions [Step state]
   deriving Eq
 
-instance (forall a. Show (Action state a)) => Show (Script state) where
-  showsPrec d (Script as)
-    | d>10      = ("("++).showsPrec 0 (Script as).(")"++)
-    | null as   = ("Script []"++)
-    | otherwise = (("Script \n [")++) .
+instance (forall a. Show (Action state a)) => Show (Actions state) where
+  showsPrec d (Actions as)
+    | d>10      = ("("++).showsPrec 0 (Actions as).(")"++)
+    | null as   = ("Actions []"++)
+    | otherwise = (("Actions \n [")++) .
                   foldr (.) (showsPrec 0 (last as) . ("]"++))
                     [showsPrec 0 a . (",\n  "++) | a <- init as]
 
 
-instance (Typeable state, StateModel state) => Arbitrary (Script state) where
-  arbitrary = Script <$> arbActions initialState 1
+instance (Typeable state, StateModel state) => Arbitrary (Actions state) where
+  arbitrary = Actions <$> arbActions initialState 1
     where
       arbActions :: state -> Int -> Gen [Step state]
       arbActions s step = sized $ \n ->
@@ -128,8 +128,8 @@ instance (Typeable state, StateModel state) => Arbitrary (Script state) where
                               Nothing ->
                                 return [])]
 
-  shrink (Script as) =
-    map (Script . prune . map fst) (shrinkList shrinker (withStates as))
+  shrink (Actions as) =
+    map (Actions . prune . map fst) (shrinkList shrinker (withStates as))
     where shrinker ((Var i := act),s) = [((Var i := act'),s) | Some act' <- shrinkAction s act]
 
 prune :: StateModel state => [Step state] -> [Step state]
@@ -149,19 +149,19 @@ withStates = loop initialState
     loop s ((var := act):as) =
       ((var := act),s):loop (nextState s act var) as
 
-stateAfter :: StateModel state => Script state -> state
-stateAfter (Script script) = loop initialState script
+stateAfter :: StateModel state => Actions state -> state
+stateAfter (Actions script) = loop initialState script
   where
     loop s []                  = s
     loop s ((var := act) : as) = loop (nextState s act var) as
 
 runScript :: StateModel state =>
-                Script state -> PropertyM (ActionMonad state) (state,Env)
+                Actions state -> PropertyM (ActionMonad state) (state,Env)
 runScript = runScriptInState initialState
 
 runScriptInState :: StateModel state =>
-                    state -> Script state -> PropertyM (ActionMonad state) (state,Env)
-runScriptInState state (Script script) = loop state [] script
+                    state -> Actions state -> PropertyM (ActionMonad state) (state,Env)
+runScriptInState state (Actions script) = loop state [] script
   where
     loop _s env [] = return (_s,reverse env)
     loop s env ((Var n := act):as) = do

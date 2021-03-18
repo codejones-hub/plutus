@@ -86,7 +86,7 @@ module Language.Plutus.Contract.Test.ContractModel
     -- * Properties
     --
     -- $runningProperties
-    , Script(..)
+    , Actions(..)
     -- ** Wallet contract handles
     --
     -- $walletHandles
@@ -94,9 +94,9 @@ module Language.Plutus.Contract.Test.ContractModel
     , ContractInstanceSpec(..)
     , HandleFun
     -- ** Emulator properties
-    , propRunScript_
-    , propRunScript
-    , propRunScriptWithOptions
+    , propRunActions_
+    , propRunActions
+    , propRunActionsWithOptions
     -- ** DL properties
     , forAllDL
     -- ** Test cases
@@ -127,7 +127,7 @@ import qualified Language.Plutus.Contract.Test.DynamicLogic.Monad    as DL
 import           Language.Plutus.Contract.Test.DynamicLogic.Quantify (Quantifiable (..), Quantification, arbitraryQ,
                                                                       chooseQ, elementsQ, exactlyQ, frequencyQ, mapQ,
                                                                       oneofQ, whereQ)
-import           Language.Plutus.Contract.Test.StateModel            hiding (Action, Script, arbitraryAction,
+import           Language.Plutus.Contract.Test.StateModel            hiding (Action, Actions, arbitraryAction,
                                                                       initialState, monitoring, nextState, perform,
                                                                       precondition, shrinkAction)
 import qualified Language.Plutus.Contract.Test.StateModel            as StateModel
@@ -156,7 +156,7 @@ imLookup k (IMCons key val m) =
 -- $walletHandles
 --
 -- In order to call contract endpoints using `Plutus.Trace.Emulator.callEndpoint`, a `ContractHandle`
--- is required. Contract handles are managed behind the scenes by the `propRunScript` functions,
+-- is required. Contract handles are managed behind the scenes by the `propRunActions` functions,
 -- based on a given a list of `ContractInstanceSpec`s, associating `ContractInstanceKey`s with `Wallet`s and
 -- `Contract`s. Before testing starts, `activateContractWallet` is called for all entries in the
 -- list and the mapping from `ContractInstanceKey` to `ContractHandle` is provided in the `HandleFun` argument
@@ -249,7 +249,7 @@ class ( Typeable state
     -- | To be able to call a contract endpoint from a wallet a `ContractHandle` is required. These
     --   are managed by the test framework and all the user needs to do is provide this contract
     --   instance key type representing the different contract instances that a test needs to work
-    --   with, and when creating a property (see `propRunScript_`) provide a list of contract
+    --   with, and when creating a property (see `propRunActions_`) provide a list of contract
     --   instance keys together with their wallets and contracts (a `ContractInstanceSpec`).
     --   Contract instance keys are indexed by the schema and error type of the contract and should
     --   be defined as a GADT. For example, a handle type for a contract with one seller and
@@ -261,7 +261,7 @@ class ( Typeable state
     data ContractInstanceKey state :: Row * -> * -> *
 
     -- | Given the current model state, provide a QuickCheck generator for a random next action.
-    --   This is used in the `Arbitrary` instance for `Script`s as well as by `anyAction` and
+    --   This is used in the `Arbitrary` instance for `Actions`s as well as by `anyAction` and
     --   `anyActions`.
     arbitraryAction :: ModelState state -> Gen (Action state)
 
@@ -305,7 +305,7 @@ class ( Typeable state
     -- | The `monitoring` function allows you to collect statistics of your testing using QuickCheck
     --   functions like `Test.QuickCheck.label`, `Test.QuickCheck.collect`,
     --   `Test.QuickCheck.classify`, and `Test.QuickCheck.tabulate`. This function is called by
-    --   `propRunScript` (and friends) for any actions in the given `Script`.
+    --   `propRunActions` (and friends) for any actions in the given `Actions`.
     --
     --   Statistics on which actions are executed are always collected.
     monitoring :: (ModelState state, ModelState state)  -- ^ Model state before and after the action
@@ -340,7 +340,7 @@ currentSlot = currentSlotL
 
 -- | Get the current wallet balances. These are delta balances, so they start out at zero and can be
 --   negative. The absolute balances used by the emulator can be set in the `CheckOptions` argument
---   to `propRunScriptWithOptions`.
+--   to `propRunActionsWithOptions`.
 --
 --   `Spec` monad update functions: `withdraw`, `deposit`, `transfer`.
 balances :: Getter (ModelState state) (Map Wallet Value)
@@ -348,7 +348,7 @@ balances = balancesL
 
 -- | Get the current balance for a wallet. This is the delta balance, so it starts out at zero and
 --   can be negative. The absolute balance used by the emulator can be set in the `CheckOptions`
---   argument to `propRunScriptWithOptions`.
+--   argument to `propRunActionsWithOptions`.
 --
 --   `Spec` monad update functions: `withdraw`, `deposit`, `transfer`.
 balance :: Wallet -> Getter (ModelState state) Value
@@ -406,7 +406,7 @@ viewContractState l = viewModelState (contractStateL . l)
 -- contract in the emulator, causing test failures. The simplest way to deal with this is
 -- to make sure that each wallet has enough starting funds to cover any scenario encountered during
 -- testing. The starting funds can be provided in the `CheckOptions` argument to
--- `propRunScriptWithOptions`.
+-- `propRunActionsWithOptions`.
 -- Another option is to model the starting funds of each contract in the contract state and check
 -- that enough funds are available before performing a transfer.
 
@@ -508,7 +508,7 @@ instance ContractModel state => StateModel (ModelState state) where
     shrinkAction s (ContractAction a) = [ Some @() (ContractAction a') | a' <- shrinkAction s a ]
 
     initialState = ModelState { _currentSlot   = 0
-                              , _lastSlot      = 125        -- Set by propRunScript
+                              , _lastSlot      = 125        -- Set by propRunActions
                               , _balances      = Map.empty
                               , _forged        = mempty
                               , _contractState = initialState }
@@ -544,31 +544,31 @@ instance ContractModel state => StateModel (ModelState state) where
 --
 -- Now the failing test can be rerun to check if changes code or model has fixed the problem.
 
--- | A `Script` is a list of `Action`s.
-newtype Script s = Script [Action s]
+-- | A `Actions` is a list of `Action`s.
+newtype Actions s = Actions [Action s]
 
-instance ContractModel state => Show (Script state) where
-  showsPrec d (Script as)
-    | d>10      = ("("++).showsPrec 0 (Script as).(")"++)
-    | null as   = ("Script []"++)
-    | otherwise = (("Script \n [")++) .
+instance ContractModel state => Show (Actions state) where
+  showsPrec d (Actions as)
+    | d>10      = ("("++).showsPrec 0 (Actions as).(")"++)
+    | null as   = ("Actions []"++)
+    | otherwise = (("Actions \n [")++) .
                   foldr (.) (showsPrec 0 (last as) . ("]"++))
                     [showsPrec 0 a . (",\n  "++) | a <- init as]
 
-instance ContractModel s => Arbitrary (Script s) where
+instance ContractModel s => Arbitrary (Actions s) where
   arbitrary = fromStateModelScript <$> arbitrary
   shrink = map fromStateModelScript . shrink . toStateModelScript
 
 toStateModelScript :: ContractModel state =>
-                        Script state -> StateModel.Script (ModelState state)
-toStateModelScript (Script s) =
-  StateModel.Script [ Var i := ContractAction act | (i,act) <- zip [1..] s ]
+                        Actions state -> StateModel.Actions (ModelState state)
+toStateModelScript (Actions s) =
+  StateModel.Actions [ Var i := ContractAction act | (i,act) <- zip [1..] s ]
 
-fromStateModelScript :: StateModel.Script (ModelState s) -> Script s
-fromStateModelScript (StateModel.Script s) =
-  Script [act | Var _i := ContractAction act <- s]
+fromStateModelScript :: StateModel.Actions (ModelState s) -> Actions s
+fromStateModelScript (StateModel.Actions s) =
+  Actions [act | Var _i := ContractAction act <- s]
 
--- | An instance of a `DL` scenario generated by `forAllDL`. It is turned into a `Script` before
+-- | An instance of a `DL` scenario generated by `forAllDL`. It is turned into a `Actions` before
 --   being passed to the property argument of `forAllDL`, but in case of a failure the generated
 --   `DLTest` is printed. This test can then be rerun using `withDLTest`.
 data DLTest state =
@@ -618,7 +618,7 @@ bracket (first:rest) = ["  ["++first++", "] ++
                        ["   " ++ last rest ++ "]"]
 
 -- | One step of a test case. Either an `Action` (`Do`) or a value generated by a `DL.forAllQ`
---   (`Witness`). When a `DLTest` is turned into a `Script` to be executed the witnesses are
+--   (`Witness`). When a `DLTest` is turned into a `Actions` to be executed the witnesses are
 --   stripped away.
 data TestStep s = Do (Action s)
                 | forall a. (Eq a, Show a, Typeable a) => Witness a
@@ -675,7 +675,7 @@ fromDLTestStep (DL.Witness a)                    = Witness a
 --   been fixed after updating the code or the model.
 withDLTest :: (ContractModel state, Testable prop)
            => DL state ()              -- ^ The `DL` scenario
-           -> (Script state -> prop)   -- ^ The property. Typically a call to `propRunScript_`
+           -> (Actions state -> prop)   -- ^ The property. Typically a call to `propRunActions_`
            -> DLTest state             -- ^ The specific test case to run
            -> Property
 withDLTest dl prop test = DL.withDLTest dl (prop . fromStateModelScript) (toDLTest test)
@@ -854,15 +854,15 @@ monitor = DL.monitorDL
 assertModel :: String -> (ModelState state -> Bool) -> DL state ()
 assertModel = DL.assertModel
 
--- | Turn a `DL` scenario into a QuickCheck property. Generates a random `Script` matching the
+-- | Turn a `DL` scenario into a QuickCheck property. Generates a random `Actions` matching the
 --   scenario and feeds it to the given property. The property can be a full property running the
---   emulator and checking the results, defined using `propRunScript_`, `propRunScript`, or
---   `propRunScriptWithOptions`. Assuming a model for an auction contract and `DL` scenario that
+--   emulator and checking the results, defined using `propRunActions_`, `propRunActions`, or
+--   `propRunActionsWithOptions`. Assuming a model for an auction contract and `DL` scenario that
 --   checks that you can always complete the auction, you can write:
 --
 -- @
 -- finishAuction :: `DL` AuctionState ()
--- prop_Auction  = `propRunScript_` handles
+-- prop_Auction  = `propRunActions_` handles
 --   where handles = ...
 -- prop_Finish = `forAllDL` finishAuction prop_Auction
 -- @
@@ -876,7 +876,7 @@ assertModel = DL.assertModel
 --   This will check all the assertions and other failure conditions of the `DL` scenario very
 --   quickly. Once this property passes a large number of tests, you can run the full property
 --   checking that the model agrees with reality.
-forAllDL :: (ContractModel state, Testable p) => DL state () -> (Script state -> p) -> Property
+forAllDL :: (ContractModel state, Testable p) => DL state () -> (Actions state -> p) -> Property
 forAllDL dl prop = DL.forAllMappedDL toDLTest fromDLTest fromStateModelScript dl prop
 
 instance ContractModel s => DL.DynLogicModel (ModelState s) where
@@ -898,13 +898,13 @@ instance GetModelState (DL state) where
 -- $runningProperties
 --
 -- Once you have a `ContractModel` and some `DL` scenarios you need to turn these into QuickCheck
--- properties that can be run by `quickCheck`. The functions `propRunScript_`, `propRunScript`, and
--- `propRunScriptWithOptions` take a sequence of actions (a `Script`), runs it through the
+-- properties that can be run by `quickCheck`. The functions `propRunActions_`, `propRunActions`, and
+-- `propRunActionsWithOptions` take a sequence of actions (a `Actions`), runs it through the
 -- blockchain emulator ("Plutus.Trace.Emulator") and checks that the model and the emulator agree
 -- on who owns what tokens at the end.
 --
--- To generate a `Script` you can use the `Arbitrary` instance, which generates a random sequence of
--- actions using `arbitraryAction`, or you can use `forAllDL` to generate a `Script` from a `DL`
+-- To generate a `Actions` you can use the `Arbitrary` instance, which generates a random sequence of
+-- actions using `arbitraryAction`, or you can use `forAllDL` to generate a `Actions` from a `DL`
 -- scenario.
 
 finalChecks :: CheckOptions -> TracePredicate -> PropertyM (ContractMonad state) a -> PropertyM (ContractMonad state) a
@@ -927,35 +927,35 @@ activateWallets (ContractInstanceSpec key wallet contract : spec) = do
     m <- activateWallets spec
     return $ IMCons key h m
 
--- | Run a `Script` in the emulator and check that the model and the emulator agree on the final
+-- | Run a `Actions` in the emulator and check that the model and the emulator agree on the final
 --   wallet balances. Equivalent to
 --
 -- @
--- propRunScript_ hs script = `propRunScript` hs (`const` `$` `pure` `True`) script
+-- propRunActions_ hs script = `propRunActions` hs (`const` `$` `pure` `True`) script
 -- @
-propRunScript_ ::
+propRunActions_ ::
     ContractModel state
     => [ContractInstanceSpec state] -- ^ Required wallet contract instances
-    -> Script state                 -- ^ The script to run
+    -> Actions state                 -- ^ The script to run
     -> Property
-propRunScript_ handleSpecs script =
-    propRunScript handleSpecs (\ _ -> pure True) script
+propRunActions_ handleSpecs script =
+    propRunActions handleSpecs (\ _ -> pure True) script
 
--- | Run a `Script` in the emulator and check that the model and the emulator agree on the final
+-- | Run a `Actions` in the emulator and check that the model and the emulator agree on the final
 --   wallet balances, and that the given `TracePredicate` holds at the end. Equivalent to:
 --
 -- @
--- propRunScript = `propRunScriptWithOptions` `defaultCheckOptions`
+-- propRunActions = `propRunActionsWithOptions` `defaultCheckOptions`
 -- @
-propRunScript ::
+propRunActions ::
     ContractModel state
     => [ContractInstanceSpec state]         -- ^ Required wallet contract instances
     -> (ModelState state -> TracePredicate) -- ^ Predicate to check at the end
-    -> Script state                         -- ^ The script to run
+    -> Actions state                         -- ^ The script to run
     -> Property
-propRunScript = propRunScriptWithOptions defaultCheckOptions
+propRunActions = propRunActionsWithOptions defaultCheckOptions
 
--- | Run a `Script` in the emulator and check that the model and the emulator agree on the final
+-- | Run a `Actions` in the emulator and check that the model and the emulator agree on the final
 --   wallet balances, that no off-chain contract instance crashed, and that the given
 --   `TracePredicate` holds at the end. The predicate has access to the final model state.
 --
@@ -964,12 +964,12 @@ propRunScript = propRunScriptWithOptions defaultCheckOptions
 --   `activateContractWallet` and a mapping from `ContractInstanceKey`s to the resulting `ContractHandle`s is
 --   provided to the `perform` function.
 --
---   The `Script` argument can be generated by a `forAllDL` from a `DL` scenario, or using the
+--   The `Actions` argument can be generated by a `forAllDL` from a `DL` scenario, or using the
 --   `Arbitrary` instance for scripts which generates random actions using `arbitraryAction`:
 --
--- >>> quickCheck $ propRunScript_ handles
+-- >>> quickCheck $ propRunActions_ handles
 -- +++ OK, passed 100 tests
--- >>> quickCheck $ forAllDL dl $ propRunScript_ handles
+-- >>> quickCheck $ forAllDL dl $ propRunActions_ handles
 -- +++ OK, passed 100 tests
 --
 --   The options argument can be used to configure the emulator--setting initial wallet balances,
@@ -984,14 +984,14 @@ propRunScript = propRunScriptWithOptions defaultCheckOptions
 --                         `&` `minLogLevel`                        `.~` logLevel
 -- @
 --
-propRunScriptWithOptions ::
+propRunActionsWithOptions ::
     ContractModel state
     => CheckOptions                          -- ^ Emulator options
     -> [ContractInstanceSpec state]          -- ^ Required wallet contract instances
     -> (ModelState state -> TracePredicate)  -- ^ Predicate to check at the end
-    -> Script state                          -- ^ The script to run
+    -> Actions state                          -- ^ The script to run
     -> Property
-propRunScriptWithOptions opts handleSpecs predicate script' =
+propRunActionsWithOptions opts handleSpecs predicate script' =
     monadic (flip State.evalState mempty) $ finalChecks opts finalPredicate $ do
         QC.run $ getHandles $ activateWallets handleSpecs
         let initState = StateModel.initialState { _lastSlot = opts ^. maxSlot }

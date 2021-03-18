@@ -202,9 +202,9 @@ instance ContractModel AuctionModel where
 delay :: Integer -> Trace.EmulatorTrace ()
 delay n = void $ Trace.waitNSlots $ fromIntegral n
 
-prop_Auction :: Script AuctionModel -> Property
+prop_Auction :: Actions AuctionModel -> Property
 prop_Auction script =
-    propRunScriptWithOptions (set minLogLevel Info options) spec
+    propRunActionsWithOptions (set minLogLevel Info options) spec
         (\ _ -> pure True)  -- TODO: check termination
         script
     where

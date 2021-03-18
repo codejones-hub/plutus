@@ -154,12 +154,12 @@ instance ContractModel GameModel where
 handleSpec :: [ContractInstanceSpec GameModel]
 handleSpec = [ ContractInstanceSpec (WalletKey w) w G.contract | w <- wallets ]
 
--- | The main property. 'propRunScript_' checks that balances match the model after each test.
-prop_Game :: Script GameModel -> Property
-prop_Game script = propRunScript_ handleSpec script
+-- | The main property. 'propRunActions_' checks that balances match the model after each test.
+prop_Game :: Actions GameModel -> Property
+prop_Game script = propRunActions_ handleSpec script
 
-propGame' :: LogLevel -> Script GameModel -> Property
-propGame' l s = propRunScriptWithOptions
+propGame' :: LogLevel -> Actions GameModel -> Property
+propGame' l s = propRunActionsWithOptions
                     (set minLogLevel l defaultCheckOptions)
                     handleSpec
                     (\ _ -> pure True)

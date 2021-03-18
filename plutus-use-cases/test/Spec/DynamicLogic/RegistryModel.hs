@@ -158,7 +158,7 @@ shrinkTid s tid = [ tid' | tid' <- tids s, tid' < tid ]
 
 tabu tab xs = tabulate tab xs . foldr (.) id [classify True (tab++": "++x) | x <- xs]
 
-prop_Registry :: Script RegState -> Property
+prop_Registry :: Actions RegState -> Property
 prop_Registry s = monadicIO $ do
   _ <- run cleanUp
   monitor $ counterexample "\nExecution\n"
@@ -185,22 +185,22 @@ anyScript s = passed .|||. afterAny anyScript
 
 always p s = p s .|||. afterAny (always p)
 
-propFollows :: DLProp RegState -> Script RegState -> Property
-propFollows dl (Script s) =
+propFollows :: DLProp RegState -> Actions RegState -> Property
+propFollows dl (Actions s) =
   collect (head (dropWhile (<length s) $ iterate (*2) 1)) $
   (if null s then property else collect (showStepAction (last s))) $
-  follows initialState (dl initialState) (Script s)
+  follows initialState (dl initialState) (Actions s)
 
 propWellFormed d = forAll (scriptFor d) $ propFollows d
 
-propAccepts :: DLProp RegState -> Script RegState -> Bool
-propAccepts p (Script s) =
-  accepts initialState (p initialState) (Script s)
+propAccepts :: DLProp RegState -> Actions RegState -> Bool
+propAccepts p (Actions s) =
+  accepts initialState (p initialState) (Actions s)
 
 propAccepted d = forAll (scriptFor d) $ propAccepts d
 
 propCanGenerate :: DLProp RegState -> Property
-propCanGenerate d = forAll (scriptFor d) $ \(Script x) -> collect (length x) $ x==x
+propCanGenerate d = forAll (scriptFor d) $ \(Actions x) -> collect (length x) $ x==x
 
 showStepAction (var := act) = show act
 -}

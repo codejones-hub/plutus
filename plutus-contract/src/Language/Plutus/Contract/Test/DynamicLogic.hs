@@ -135,23 +135,23 @@ class StateModel s => DynLogicModel s where
     restricted _ = False
 
 forAllScripts :: (DynLogicModel s, Testable a) =>
-                   DynLogic s -> (Script s -> a) -> Property
+                   DynLogic s -> (Actions s -> a) -> Property
 forAllScripts d k =
     forAllShrink (sized $ generateDLTest d) (shrinkDLTest d) $
         withDLScript d k
 
 forAllMappedScripts ::
   (DynLogicModel s, Testable a, Show rep) =>
-    (rep -> DynLogicTest s) -> (DynLogicTest s -> rep) -> DynLogic s -> (Script s -> a) -> Property
+    (rep -> DynLogicTest s) -> (DynLogicTest s -> rep) -> DynLogic s -> (Actions s -> a) -> Property
 forAllMappedScripts to from d k =
     forAllShrink (sized $ (from<$>) . generateDLTest d) ((from<$>) . shrinkDLTest d . to) $
         withDLScript d k . to
 
-withDLScript :: (DynLogicModel s, Testable a) => DynLogic s -> (Script s -> a) -> DynLogicTest s -> Property
+withDLScript :: (DynLogicModel s, Testable a) => DynLogic s -> (Actions s -> a) -> DynLogicTest s -> Property
 withDLScript d k test =
     validDLTest d test .&&. (applyMonitoring d test . property $ k (scriptFromDL test))
 
-withDLScriptPrefix :: (DynLogicModel s, Testable a) => DynLogic s -> (Script s -> a) -> DynLogicTest s -> Property
+withDLScriptPrefix :: (DynLogicModel s, Testable a) => DynLogic s -> (Actions s -> a) -> DynLogicTest s -> Property
 withDLScriptPrefix d k test =
     validDLTest d test' .&&. (applyMonitoring d test' . property $ k (scriptFromDL test'))
     where
@@ -428,9 +428,9 @@ validDLTest :: DynLogic s -> DynLogicTest s -> Bool
 validDLTest _ (DLScript _) = True
 validDLTest _ _            = False
 
-scriptFromDL :: DynLogicTest s -> Script s
-scriptFromDL (DLScript s) = Script [a | Do a <- s]
-scriptFromDL _            = Script []
+scriptFromDL :: DynLogicTest s -> Actions s
+scriptFromDL (DLScript s) = Actions [a | Do a <- s]
+scriptFromDL _            = Actions []
 
 badActions :: StateModel s => DynLogic s -> s -> [Any (Action s)]
 badActions EmptySpec _    = []

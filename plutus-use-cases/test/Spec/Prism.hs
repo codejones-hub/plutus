@@ -217,8 +217,8 @@ finalPredicate _ =
     assertNotDone @C.MirrorSchema            C.mirror            (Trace.walletInstanceTag mirror)            "Mirror stopped"             .&&.
     assertNotDone @C.CredentialManagerSchema C.credentialManager (Trace.walletInstanceTag credentialManager) "Credential manager stopped"
 
-prop_Prism :: Script PrismModel -> Property
-prop_Prism = propRunScript @PrismModel spec finalPredicate
+prop_Prism :: Actions PrismModel -> Property
+prop_Prism = propRunActions @PrismModel spec finalPredicate
     where
         spec = [ ContractInstanceSpec (UserH w) w                 C.subscribeSTO | w <- users ] ++
                [ ContractInstanceSpec MirrorH   mirror            C.mirror

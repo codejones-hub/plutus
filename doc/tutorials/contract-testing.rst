@@ -173,24 +173,24 @@ In this case we define three actions:
  - a ``GiveToken`` action, to give the game token to a player so they
    can make a guess.
 
-A generated test is called a ``Script``, and is (essentially) a
-sequence of `Action <ActionType_>`_. We can run tests by using `propRunScript_`_:
+A generated test is called Actions_, and is, as the name suggests, essentially a
+sequence of `Action <ActionType_>`_ values. We can run tests by using `propRunActions_`_:
 
  .. code-block:: haskell
 
-  prop_Game :: Script GameModel -> Property
-  prop_Game script = propRunScript_ instanceSpec script
+  prop_Game :: Actions GameModel -> Property
+  prop_Game actions = propRunActions_ instanceSpec actions
 
 When we test this property, ``quickCheck`` will generate random
-scripts to be tested, checking at the end of each test that tokens are
+action sequences to be tested, checking at the end of each test that tokens are
 transferred correctly, and contracts didn't crash.
 
   .. note::
 
-     There is also a more general function propRunScript_ that allows
+     There is also a more general function propRunActions_ that allows
      the check at the end of each test to be customized.
 
-But what is the ``instanceSpec`` in the code above?  `propRunScript_`_
+But what is the ``instanceSpec`` in the code above?  `propRunActions_`_
 creates the contract instances that are tested by the script, and the
 ``instanceSpec`` tells it which contract instances to create. A handle
 is created for each contract instance, which is used to invoke their
@@ -245,9 +245,9 @@ specify how to generate `Action <ActionType_>`_, which we will do next.
 
 .. _ContractModel: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ContractModel
 
-.. _propRunScript: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:propRunScript
+.. _propRunActions: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:propRunActions
 
-.. _propRunScript_: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:propRunScript_
+.. _propRunActions_: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:propRunActions_
 
 .. _ContractInstanceSpec: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ContractInstanceSpec
 
@@ -285,12 +285,12 @@ ContractModel_ class:
         [ GiveToken <$> genWallet                                        ]
 
 With this method defined, we can start to generate test cases. Using
-``sample`` we can see what scripts look like:
+``sample`` we can see what action sequences look like:
 
 .. code-block:: text
 
-  > sample (arbitrary :: Gen (Script GameModel))
-  Script
+  > sample (arbitrary :: Gen (Actions GameModel))
+  Actions
     [Lock (Wallet 2) "hunter2" 5,
      Guess (Wallet 3) "*******" "hello" 6,
      Guess (Wallet 1) "secret" "*******" 10,
@@ -312,7 +312,7 @@ We can even run 'tests' now, although they don't do much yet:
   33.89% Guess
   32.17% GiveToken
 
-The output tells us the distribution of generated Actions, aggregated
+The output tells us the distribution of generated actions, aggregated
 across all the tests. We can see that each action was generated around
 one third of the time, which is to be expected since our generator
 does not weight them at all. Keep an eye on this table as we extend
@@ -454,7 +454,7 @@ the real contract. Doing so immediately reveals a problem:
     CallStack (from HasCallStack):
       error, called at libraries/base/Data/Maybe.hs:148:21 in base:Data.Maybe
       fromJust, called at GSM0.hs:122:15 in main:GSM0
-  Script
+  Actions
    [GiveToken (Wallet 1)]
 
 Looking at the last two lines, we see the generated test script, and
@@ -502,7 +502,7 @@ Now if we try to run tests, something more interesting happens:
 
   > quickCheck prop_Game
   *** Failed! Assertion failed (after 2 tests):
-  Script
+  Actions
    [Lock (Wallet 1) "hello" 0]
   Expected funds of W1 to change by Value {getValue = Map {unMap = [(f687...,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
   but they changed by
@@ -521,7 +521,7 @@ The test has failed, of course. The generated (and simplified) test case only pe
 
 .. code-block:: text
 
-  Script
+  Actions
    [Lock (Wallet 1) "hello" 0]
 
 Wallet 1 attempts to create a game contract guarding zero
@@ -550,7 +550,7 @@ to link actions in a test to the emulator.
 Performing actions
 ^^^^^^^^^^^^^^^^^^
 
-So far we are generating Actions, but we have not yet linked them to
+So far we are generating actions, but we have not yet linked them to
 the contract they are supposed to test--so 'running' the tests, as we
 did above, did not invoke the contract at all. To do so, we must import the emulator
 
@@ -690,7 +690,7 @@ the tests or the contract to resolve the inconsistencies revealed. Testing ``pro
 
     > quickCheck prop_Game
     *** Failed! Falsified (after 6 tests and 3 shrinks):
-    Script
+    Actions
      [Lock (Wallet 1) "hunter2" 0]
     Expected funds of W1 to change by Value {getValue = Map {unMap = [(f687...,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
     but they changed by
@@ -820,7 +820,7 @@ property. In this case let us define
 
      testLock :: Property
      testLock = prop_Game $
-       Script
+       Actions
          [Lock (Wallet 1) "hunter2" 0]
 
 ``testLock`` is itself a ``Property``, so we can test it using
@@ -848,7 +848,7 @@ The test passes, and the problem is fixed.
 
     testLock :: Property
     testLock = withMaxSuccess 1 . prop_Game $
-        Script
+        Actions
          [Lock (Wallet 1) "hunter2" 0]
 
  .. note::
@@ -875,7 +875,7 @@ When we rerun random tests, they fail for a different reason:
 
     > quickCheck prop_Game
     *** Failed! Assertion failed (after 5 tests and 7 shrinks):
-    Script
+    Actions
      [Var 1 := Lock (Wallet 1) "hunter2" 0,
       Var 2 := Lock (Wallet 1) "hello" 0]
     Outcome of Contract instance for wallet 1:
@@ -889,7 +889,7 @@ Looking at the failing test case,
 
   .. code-block:: text
 
-    Script
+    Actions
      [Var 1 := Lock (Wallet 1) "hunter2" 0,
       Var 2 := Lock (Wallet 1) "hello" 0]
 
@@ -904,8 +904,8 @@ The emulator log output can be rather overwhelming, but we can eliminate the 'IN
 
     import           Control.Monad.Freer.Log
 
-    propGame' :: LogLevel -> Script GameModel -> Property
-    propGame' l s = propRunScriptWithOptions
+    propGame' :: LogLevel -> Actions GameModel -> Property
+    propGame' l s = propRunActionsWithOptions
                         (set minLogLevel l defaultCheckOptions)
                         instanceSpec
                         (\ _ -> pure True)
@@ -917,7 +917,7 @@ then we can re-run the test and see more succinct output:
 
     > quickCheck $ propGame' Warning
     *** Failed! Assertion failed (after 7 tests and 4 shrinks):
-    Script
+    Actions
      [Var 3 := Lock (Wallet 1) "hello" 0,
       Var 4 := Lock (Wallet 1) "*******" 0]
     Outcome of Contract instance for wallet 1:
@@ -973,7 +973,7 @@ the test case
  .. code-block:: haskell
 
   testDoubleLock = prop_Game $
-    Script
+    Actions
       [Lock (Wallet 1) "*******" 0,
        Lock (Wallet 1) "secret" 0]
 
@@ -993,7 +993,7 @@ Rerunning random tests finds another 'bug':
 
   > quickCheck $ propGame' Warning
   *** Failed! Assertion failed (after 10 tests and 6 shrinks):
-  Script
+  Actions
    [Lock (Wallet 2) "hello" 0,
     Guess (Wallet 1) "hello" "secret" 0]
   Outcome of Contract instance for wallet 1:
@@ -1036,7 +1036,7 @@ log output to understand why:
 
   > quickCheck $ prop_Game
   *** Failed! Assertion failed (after 36 tests and 35 shrinks):
-  Script
+  Actions
    [Lock (Wallet 1) "*******" 1,
     GiveToken (Wallet 2),
     Guess (Wallet 2) "*******" "hello" 2,
@@ -1239,7 +1239,7 @@ monitoring_ method in the ContractModel_ class:
   monitoring :: (ModelState state, ModelState state)
                   -> Action state -> Property -> Property
 
-This function is called for every `Action`_ in a ``Script``, and given the
+This function is called for every `Action`_ in a test case, and given the
 ModelState_ before and after the `Action`_. Its result is a function
 that is applied to the property being tested, so it can use any of the
 QuickCheck functions for analysing test case distribution or adding
@@ -1329,7 +1329,7 @@ are little programs in the DL_ monad, such as this one:
 
 This DL_ fragment simply specifies a unit test in terms of the
 underlying ContractModel_ we have already seen, using `action <actionFun_>`_ to
-include specific ``Actions`` in the test. To run such a test, we
+include a specific `Action <ActionType>`_ in the test. To run such a test, we
 must specify a QuickCheck property such as
 
   .. code-block:: haskell
@@ -1397,7 +1397,7 @@ a test fails:
     (GameModel {_gameValue = 1, _hasToken = Just (Wallet 2), _currentSecret = "hello"})
 
 Dynamic logic test cases are a little more complex than the simple
-scripts we have seen so far, and they give us a little more
+action sequences we have seen so far, and they give us a little more
 information. Every such test contains a list of Action_, tagged
 ``Do``, and *witnesses*, tagged ``Witness``. The witnesses record the
 results of random choices made by forAllQ_: in this case, the Ada
@@ -1768,6 +1768,7 @@ documentation for more details.
 .. _viewContractState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:viewContractState
 .. _lockedValue: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:lockedValue
 .. _wait: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#v:wait
+.. _Actions: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:Actions
 .. _ActionType: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:Action
 .. _ContractInstanceKey: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ContractInstanceKey
 .. _ModelState: ../haddock/plutus-contract/html/Language-Plutus-Contract-Test-ContractModel.html#t:ModelState
