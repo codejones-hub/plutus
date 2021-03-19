@@ -123,7 +123,7 @@ module.exports = {
     placeContent: false,
     placeSelf: false,
     alignItems: true,
-    alignContent: false,
+    alignContent: true,
     alignSelf: true,
     justifyItems: false,
     justifyContent: true,
