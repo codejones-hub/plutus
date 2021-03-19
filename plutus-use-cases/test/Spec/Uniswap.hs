@@ -77,8 +77,8 @@ flattenValue v = do
 startTrace :: Trace.EmulatorTrace ()
 startTrace = do
     let w1 = Wallet 1
-    hd1 <- Trace.activateContractWallet w1 endpoints
-    Trace.callEndpoint @"start" hd1 ()
+    hd <- Trace.activateContractWallet w1 start
+    Trace.callEndpoint @"start" hd ()
     void $ Trace.waitUntilSlot 5
 
 myTrace :: Trace.EmulatorTrace ()
@@ -86,30 +86,34 @@ myTrace = do
     let w1 = Wallet 1
         w2 = Wallet 2
         w3 = Wallet 3
-    hd1 <- Trace.activateContractWallet w1 endpoints
-    hd2 <- Trace.activateContractWallet w2 endpoints
-    hd3 <- Trace.activateContractWallet w3 endpoints
 
-    Trace.callEndpoint @"start" hd1 ()
+
+    hd <- Trace.activateContractWallet w1 start
+
+    Trace.callEndpoint @"start" hd ()
     void $ Trace.waitUntilSlot 5
-    c <- cCurrency . fromJust <$> findUniswapCoin
+    us <- uniswap . cCurrency . fromJust <$> findUniswapCoin
 
-    Trace.callEndpoint @"create" hd2 $ CreateParams c coinA coinB 500000 1000000
+    hd1 <- Trace.activateContractWallet w1 $ userEndpoints us
+    hd2 <- Trace.activateContractWallet w2 $ userEndpoints us
+    hd3 <- Trace.activateContractWallet w3 $ userEndpoints us
+
+    Trace.callEndpoint @"create" hd2 $ CreateParams coinA coinB 500000 1000000
     void $ Trace.waitUntilSlot 10
 
-    Trace.callEndpoint @"swap" hd1 $ SwapParams c coinA coinB 1000 0
+    Trace.callEndpoint @"swap" hd1 $ SwapParams coinA coinB 1000 0
     void $ Trace.waitUntilSlot 15
 
-    Trace.callEndpoint @"add" hd3 $ AddParams c coinA coinB 500000 1000000
+    Trace.callEndpoint @"add" hd3 $ AddParams coinA coinB 500000 1000000
     void $ Trace.waitUntilSlot 20
 
-    Trace.callEndpoint @"swap" hd1 $ SwapParams c coinB coinA 1990 0
+    Trace.callEndpoint @"swap" hd1 $ SwapParams coinB coinA 1990 0
     void $ Trace.waitUntilSlot 25
 
-    Trace.callEndpoint @"remove" hd2 $ RemoveParams c coinA coinB 707107
+    Trace.callEndpoint @"remove" hd2 $ RemoveParams coinA coinB 707107
     void $ Trace.waitUntilSlot 30
 
-    Trace.callEndpoint @"close" hd3 $ CloseParams c coinA coinB
+    Trace.callEndpoint @"close" hd3 $ CloseParams coinA coinB
     void $ Trace.waitUntilSlot 35
 
 findUniswapCoin :: Trace.EmulatorTrace (Maybe Coin)

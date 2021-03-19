@@ -20,19 +20,21 @@
 module Language.PlutusTx.Coordination.Contracts.Uniswap
     ( Coin (..)
     , coin, coinValueOf
+    , Uniswap (..), uniswap
     , poolStateCoinFromUniswapCurrency, liquidityCoin
     , CreateParams (..)
     , SwapParams (..)
     , CloseParams (..)
     , RemoveParams (..)
     , AddParams (..)
-    , UniswapSchema
-    , start, create, add, remove, close, swap
-    , endpoints
+    , UniswapOwnerSchema, UniswapUserSchema, UserContractState
+    , start, create, add, remove, close, swap, pools
+    , userEndpoints
     ) where
 
 import           Control.Monad                                     hiding (fmap)
 import qualified Data.Map                                          as Map
+import           Data.Monoid                                       (Last (..))
 import           Data.Text                                         (Text, pack)
 import           Language.Plutus.Contract                          hiding (when)
 import qualified Language.PlutusTx                                 as PlutusTx
@@ -536,18 +538,16 @@ liquidityCoin cs coinA coinB = Coin (liquidityCurrency $ uniswap cs) $ lpTicker 
 
 -- | Paraneters for the @create@-endpoint, which creates a new liquidity pool.
 data CreateParams = CreateParams
-    { cpUniswap :: CurrencySymbol -- ^ Currency used for the Uniswap factory token, the Uniswap liquidity pool tokens and the liquidity tokens.
-    , cpCoinA   :: Coin
-    , cpCoinB   :: Coin
-    , cpAmountA :: Integer
-    , cpAmountB :: Integer
+    { cpCoinA   :: Coin    -- ^ One 'Coin' of the liquidity pair.
+    , cpCoinB   :: Coin    -- ^ The other 'Coin'.
+    , cpAmountA :: Integer -- ^ Amount of liquidity for the first 'Coin'.
+    , cpAmountB :: Integer -- ^ Amount of liquidity for the second 'Coin'.
     } deriving (Generic, ToJSON, FromJSON, ToSchema)
 
 -- | Parameters for the @swap@-endpoint, which allows swaps between the two different coins in a liquidity pool.
 -- One of the provided amounts must be positive, the other must be zero.
 data SwapParams = SwapParams
-    { spUniswap :: CurrencySymbol -- ^ Currency used for the Uniswap factory token, the Uniswap liquidity pool tokens and the liquidity tokens.
-    , spCoinA   :: Coin           -- ^ One 'Coin' of the liquidity pair.
+    { spCoinA   :: Coin           -- ^ One 'Coin' of the liquidity pair.
     , spCoinB   :: Coin           -- ^ The other 'Coin'.
     , spAmountA :: Integer        -- ^ The amount the first 'Coin' that should be swapped.
     , spAmountB :: Integer        -- ^ The amount of the second 'Coin' that should be swapped.
@@ -555,41 +555,41 @@ data SwapParams = SwapParams
 
 -- | Parameters for the @close@-endpoint, which closes a liquidity pool.
 data CloseParams = CloseParams
-    { clpUniswap :: CurrencySymbol -- ^ Currency used for the Uniswap factory token, the Uniswap liquidity pool tokens and the liquidity tokens.
-    , clpCoinA   :: Coin           -- ^ One 'Coin' of the liquidity pair.
+    { clpCoinA   :: Coin           -- ^ One 'Coin' of the liquidity pair.
     , clpCoinB   :: Coin           -- ^ The other 'Coin' of the liquidity pair.
     } deriving (Generic, ToJSON, FromJSON, ToSchema)
 
 -- | Parameters for the @remove@-endpoint, which removes some liquidity from a liquidity pool.
 data RemoveParams = RemoveParams
-    { rpUniswap :: CurrencySymbol -- ^ Currency used for the Uniswap factory token, the Uniswap liquidity pool tokens and the liquidity tokens.
-    , rpCoinA   :: Coin           -- ^ One 'Coin' of the liquidity pair.
+    { rpCoinA   :: Coin           -- ^ One 'Coin' of the liquidity pair.
     , rpCoinB   :: Coin           -- ^ The other 'Coin' of the liquidity pair.
     , rpDiff    :: Integer        -- ^ The amount of liquidity tokens to burn in exchange for liquidity from the pool.
     } deriving (Generic, ToJSON, FromJSON, ToSchema)
 
 -- | Parameters for the @add@-endpoint, which adds liquidity to a liquidity pool in exchange for liquidity tokens.
 data AddParams = AddParams
-    { apUniswap :: CurrencySymbol -- ^ Currency used for the Uniswap factory token, the Uniswap liquidity pool tokens and the liquidity tokens.
-    , apCoinA   :: Coin           -- ^ One 'Coin' of the liquidity pair.
+    { apCoinA   :: Coin           -- ^ One 'Coin' of the liquidity pair.
     , apCoinB   :: Coin           -- ^ The other 'Coin' of the liquidity pair.
     , apAmountA :: Integer        -- ^ The amount of coins of the first kind to add to the pool.
     , apAmountB :: Integer        -- ^ The amount of coins of the second kind to add to the pool.
     } deriving (Generic, ToJSON, FromJSON, ToSchema)
 
--- | Schema for the 'endpoints'.
-type UniswapSchema =
+-- | Schema for the endpoints for the owner of the Uniswap instance.
+type UniswapOwnerSchema = BlockchainActions .\/ Endpoint "start"  ()
+
+-- | Schema for the endpoints for users of Uniswap.
+type UniswapUserSchema =
     BlockchainActions
-        .\/ Endpoint "start"  ()
         .\/ Endpoint "create" CreateParams
         .\/ Endpoint "swap"   SwapParams
         .\/ Endpoint "close"  CloseParams
         .\/ Endpoint "remove" RemoveParams
         .\/ Endpoint "add"    AddParams
+        .\/ Endpoint "pools"  ()
 
 -- | Creates a Uniswap "factory". This factory will keep track of the existing liquidity pools and enforce that there will be at most one liquidity pool
 -- for any pair of tokens at any given time.
-start :: Contract () UniswapSchema Text ()
+start :: Contract (Last Uniswap) UniswapOwnerSchema Text ()
 start = do
     ()  <- endpoint @"start"
     pkh <- pubKeyHash <$> ownPubKey
@@ -604,14 +604,17 @@ start = do
     void $ awaitTxConfirmed $ txId ledgerTx
 
     logInfo @String $ printf "started Uniswap %s at address %s" (show us) (show $ uniswapAddress us)
+    tell $ Last $ Just us
+
+-- | Type of the Uniswap user contracts: A list of existing liquidity pools and their liquidity.
+type UserContractState = Last [((Coin, Integer), (Coin, Integer))]
 
 -- | Creates a liquidity pool for a pair of coins. The creator provides liquidity for both coins and gets liquidity tokens in return.
-create :: Contract () UniswapSchema Text ()
-create = do
+create :: Uniswap -> Contract w UniswapUserSchema Text ()
+create us = do
     CreateParams{..} <- endpoint @"create"
     when (cpCoinA == cpCoinB)               $ throwError "coins must be different"
     when (cpAmountA <= 0 || cpAmountB <= 0) $ throwError "amounts must be positive"
-    let us = uniswap cpUniswap
     (oref, o, lps) <- findUniswapFactory us
     let liquidity = calculateInitialLiquidity cpAmountA cpAmountB
         lp        = LiquidityPool {lpCoinA = cpCoinA, lpCoinB = cpCoinB}
@@ -640,10 +643,9 @@ create = do
     logInfo $ "created liquidity pool: " ++ show lp
 
 -- | Closes a liquidity pool by burning all remaining liquidity tokens in exchange for all liquidity remaining in the pool.
-close :: Contract () UniswapSchema Text ()
-close = do
+close :: Uniswap -> Contract w UniswapUserSchema Text ()
+close us = do
     CloseParams{..} <- endpoint @"close"
-    let us = uniswap clpUniswap
     ((oref1, o1, lps), (oref2, o2, lp, liquidity)) <- findUniswapFactoryAndPool us clpCoinA clpCoinB
     pkh                                            <- pubKeyHash <$> ownPubKey
     let usInst   = uniswapInstance us
@@ -675,10 +677,9 @@ close = do
     logInfo $ "closed liquidity pool: " ++ show lp
 
 -- | Removes some liquidity from a liquidity pool in exchange for liquidity tokens.
-remove :: Contract () UniswapSchema Text ()
-remove = do
+remove :: Uniswap -> Contract w UniswapUserSchema Text ()
+remove us = do
     RemoveParams{..} <- endpoint @"remove"
-    let us = uniswap rpUniswap
     (_, (oref, o, lp, liquidity)) <- findUniswapFactoryAndPool us rpCoinA rpCoinB
     pkh                           <- pubKeyHash <$> ownPubKey
     when (rpDiff < 1 || rpDiff >= liquidity) $ throwError "removed liquidity must be positive and less than total liquidity"
@@ -712,10 +713,9 @@ remove = do
     logInfo $ "removed liquidity from pool: " ++ show lp
 
 -- | Adds some liquidity to an existing liquidity pool in exchange for newly minted liquidity tokens.
-add :: Contract () UniswapSchema Text ()
-add = do
+add :: Uniswap -> Contract w UniswapUserSchema Text ()
+add us = do
     AddParams{..} <- endpoint @"add"
-    let us = uniswap apUniswap
     pkh                           <- pubKeyHash <$> ownPubKey
     (_, (oref, o, lp, liquidity)) <- findUniswapFactoryAndPool us apCoinA apCoinB
     when (apAmountA < 0 || apAmountB < 0) $ throwError "amounts must not be negative"
@@ -759,11 +759,10 @@ add = do
     logInfo $ "added liquidity to pool: " ++ show lp
 
 -- | Uses a liquidity pool two swap one sort of coins in the pool against the other.
-swap :: Contract () UniswapSchema Text ()
-swap = do
+swap :: Uniswap -> Contract w UniswapUserSchema Text ()
+swap us = do
     SwapParams{..} <- endpoint @"swap"
     unless (spAmountA > 0 && spAmountB == 0 || spAmountA == 0 && spAmountB > 0) $ throwError "exactly one amount must be positive"
-    let us = uniswap spUniswap
     (_, (oref, o, lp, liquidity)) <- findUniswapFactoryAndPool us spCoinA spCoinB
     let outVal = txOutValue $ txOutTxOut o
     let oldA = coinValueOf outVal spCoinA
@@ -798,7 +797,48 @@ swap = do
 
     logInfo $ "swapped with: " ++ show lp
 
-findUniswapInstance :: Uniswap -> Coin -> (UniswapDatum -> Maybe a) -> Contract w UniswapSchema Text (TxOutRef, TxOutTx, a)
+-- | Finds all liquidity pools and their liquidity belonging to the Uniswap instance.
+-- This merely inspects the blockchain and does not issue any transactions.
+pools :: Uniswap -> Contract UserContractState UniswapUserSchema Text ()
+pools us = do
+    ()  <- endpoint @"pools"
+    utxos <- utxoAt $ ScriptAddress $ uniswapHash us
+    xs    <- go $ snd <$> Map.toList utxos
+    tell $ Last $ Just xs
+  where
+    c :: Coin
+    c = poolStateCoin us
+
+    go :: [TxOutTx] -> Contract UserContractState UniswapUserSchema Text [((Coin, Integer), (Coin, Integer))]
+    go []       = return []
+    go (o : os) = do
+        let v = txOutValue $ txOutTxOut o
+        if coinValueOf v c == 1
+            then do
+                d <- getUniswapDatum o
+                case d of
+                    Factory _ -> go os
+                    Pool lp _ -> do
+                        let coinA = lpCoinA lp
+                            coinB = lpCoinB lp
+                            amtA  = coinValueOf v coinA
+                            amtB  = coinValueOf v coinB
+                            s     = ((coinA, amtA), (coinB, amtB))
+                        logInfo $ "found pool: " ++ show s
+                        ss <- go os
+                        return $ s : ss
+            else go os
+
+getUniswapDatum :: TxOutTx -> Contract w UniswapUserSchema Text UniswapDatum
+getUniswapDatum o = case txOutType $ txOutTxOut o of
+        PayToPubKey   -> throwError "unexpected out type"
+        PayToScript h -> case Map.lookup h $ txData $ txOutTxTx o of
+            Nothing -> throwError "datum not found"
+            Just (Datum e) -> case PlutusTx.fromData e of
+                Nothing -> throwError "datum has wrong type"
+                Just d  -> return d
+
+findUniswapInstance :: Uniswap -> Coin -> (UniswapDatum -> Maybe a) -> Contract w UniswapUserSchema Text (TxOutRef, TxOutTx, a)
 findUniswapInstance us c f = do
     let addr = uniswapAddress us
     logInfo @String $ printf "looking for Uniswap instance at address %s containing coin %s " (show addr) (show c)
@@ -806,24 +846,20 @@ findUniswapInstance us c f = do
     go  [x | x@(_, o) <- Map.toList utxos, coinValueOf (txOutValue $ txOutTxOut o) c == 1]
   where
     go [] = throwError "Uniswap instance not found"
-    go ((oref, o) : xs) = case txOutType $ txOutTxOut o of
-        PayToPubKey   -> throwError "unexpected out type"
-        PayToScript h -> case Map.lookup h $ txData $ txOutTxTx o of
-            Nothing -> throwError "datum not found"
-            Just (Datum e) -> case PlutusTx.fromData e of
-                Nothing -> throwError "datum has wrong type"
-                Just d  -> case f d of
-                    Nothing -> go xs
-                    Just a  -> do
-                        logInfo @String $ printf "found Uniswap instance with datum: %s" (show d)
-                        return (oref, o, a)
+    go ((oref, o) : xs) = do
+        d <- getUniswapDatum o
+        case f d of
+            Nothing -> go xs
+            Just a  -> do
+                logInfo @String $ printf "found Uniswap instance with datum: %s" (show d)
+                return (oref, o, a)
 
-findUniswapFactory :: Uniswap -> Contract w UniswapSchema Text (TxOutRef, TxOutTx, [LiquidityPool])
+findUniswapFactory :: Uniswap -> Contract w UniswapUserSchema Text (TxOutRef, TxOutTx, [LiquidityPool])
 findUniswapFactory us@Uniswap{..} = findUniswapInstance us usCoin $ \case
     Factory lps -> Just lps
     Pool _ _    -> Nothing
 
-findUniswapPool :: Uniswap -> LiquidityPool -> Contract w UniswapSchema Text (TxOutRef, TxOutTx, Integer)
+findUniswapPool :: Uniswap -> LiquidityPool -> Contract w UniswapUserSchema Text (TxOutRef, TxOutTx, Integer)
 findUniswapPool us lp = findUniswapInstance us (poolStateCoin us) $ \case
         Pool lp' l
             | lp == lp' -> Just l
@@ -832,7 +868,7 @@ findUniswapPool us lp = findUniswapInstance us (poolStateCoin us) $ \case
 findUniswapFactoryAndPool :: Uniswap
                           -> Coin
                           -> Coin
-                          -> Contract w UniswapSchema Text ( (TxOutRef, TxOutTx, [LiquidityPool])
+                          -> Contract w UniswapUserSchema Text ( (TxOutRef, TxOutTx, [LiquidityPool])
                                                          , (TxOutRef, TxOutTx, LiquidityPool, Integer)
                                                          )
 findUniswapFactoryAndPool us coinA coinB = do
@@ -871,29 +907,16 @@ findSwapA oldA oldB inA
 findSwapB :: Integer -> Integer -> Integer -> Integer
 findSwapB oldA oldB = findSwapA oldB oldA
 
-{-
-findValue :: Value -> Contract w UniswapSchema Text UtxoMap
-findValue v = do
-    pkh   <- pubKeyHash <$> ownPubKey
-    utxos <- utxoAt $ PubKeyAddress pkh
-    go Map.empty v $ Map.toList utxos
-  where
-    go :: UtxoMap -> Value -> [(TxOutRef, TxOutTx)] -> Contract w UniswapSchema Text UtxoMap
-    go acc w _
-        | Value.leq w mempty  = return acc
-    go _   w []               = throwError $ pack $ "insufficient funds: need " ++ show v ++ ", have " ++ show (v <> negate w)
-    go acc w ((oref, o) : xs) = go (Map.insert oref o acc) (w <> negate (txOutValue $ txOutTxOut o)) xs
--}
-
--- | Provides the following endpoints:
+-- | Provides the following endpoints for users of a Uniswap instance:
 --
---      [@start@]: Creates a Uniswap "factory".
---          This factory will keep track of the existing liquidity pools and enforce that there will be at most one liquidity pool
---          for any pair of tokens at any given time.
 --      [@create@]: Creates a liquidity pool for a pair of coins. The creator provides liquidity for both coins and gets liquidity tokens in return.
 --      [@swap@]: Uses a liquidity pool two swap one sort of coins in the pool against the other.
 --      [@close@]: Closes a liquidity pool by burning all remaining liquidity tokens in exchange for all liquidity remaining in the pool.
 --      [@remove@]: Removes some liquidity from a liquidity pool in exchange for liquidity tokens.
 --      [@add@]: Adds some liquidity to an existing liquidity pool in exchange for newly minted liquidity tokens.
-endpoints :: Contract () UniswapSchema Text ()
-endpoints = (start `select` create `select` swap `select` close `select` remove `select` add) >> endpoints
+userEndpoints :: Uniswap -> Contract UserContractState UniswapUserSchema Text ()
+userEndpoints us =
+  let
+    endpoints = (create us `select` swap us `select` close us `select` remove us `select` add us `select` pools us) >> endpoints
+  in
+    endpoints
