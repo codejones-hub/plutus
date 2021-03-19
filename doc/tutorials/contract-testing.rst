@@ -79,7 +79,7 @@ With these imports, we can construct values in the Ada :term:`currency`:
 .. code-block:: text
 
   > Ada.lovelaceValueOf 1
-  Value {getValue = Map {unMap = [(,Map {unMap = [(,1)]})]}}
+  Value (Map [(,Map [(,1)])])
 
 We will also need a game :term:`token`. After importing the ``Scripts`` module
 
@@ -98,16 +98,14 @@ The value of the :term:`token` is (with long hash values abbreviated):
 .. code-block:: text
 
   > gameTokenVal
-  Value {getValue = Map {unMap = [(f687...,Map {unMap = [(guess,1)]})]}}
+  Value (Map [(f687...,Map [(guess,1)])])
 
 We can even construct a ``Value`` containing an Ada and a game :term:`token`:
 
 .. code-block:: text
 
   > Ada.lovelaceValueOf 1 <> gameTokenVal
-  Value {getValue = Map {unMap =
-    [(,Map {unMap = [(,1)]}),
-     (f687...,Map {unMap = [(guess,1)]})]}}
+  Value (Map [(,Map [(,1)]),(f687...,Map [(guess,1)])])
 
 If you inspect the output closely, you will see that a ``Value``
 contains maps nested within another ``Map``. The outer ``Map`` is
@@ -446,9 +444,9 @@ Now if we try to run tests, something more interesting happens:
   *** Failed! Assertion failed (after 2 tests):
   Actions
    [Lock (Wallet 1) "hello" 0]
-  Expected funds of W1 to change by Value {getValue = Map {unMap = [(f687...,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
-  but they changed by
-  Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}}
+  Expected funds of W1 to change by
+    Value (Map [(f687...,Map [(guess,1)])])
+  but they did not change
   Test failed.
   Emulator log:
   [INFO] Slot 1: TxnValidate 4feb...
@@ -472,10 +470,9 @@ with the wrong contents:
 
 .. code-block:: text
 
-  Expected funds of W1 to change by Value {getValue = Map {unMap =
-    [(f687...,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
-  but they changed by
-  Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}}
+  Expected funds of W1 to change by
+    Value (Map [(f687...,Map [(guess,1)])])
+  but they did not change
 
 Our model predicted that wallet 1 would end up containing the game
 :term:`token`, but in fact its contents were unchanged.
@@ -608,9 +605,9 @@ the tests or the contract to resolve the inconsistencies revealed. Testing ``pro
     *** Failed! Falsified (after 6 tests and 3 shrinks):
     Actions
      [Lock (Wallet 1) "hunter2" 0]
-    Expected funds of W1 to change by Value {getValue = Map {unMap = [(f687...,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}
-    but they changed by
-    Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}}
+    Expected funds of W1 to change by
+      Value (Map [(f687...,Map [(guess,1)])])
+    but they did not change
     Test failed.
     Emulator log:
     ... 49 lines of emulator log messages ...
@@ -629,7 +626,7 @@ happen. To understand why, we need to study the emulator log. Here are the relev
                            Tx 2542...:
                              {inputs:
                              outputs:
-                               - Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}} addressed to
+                               - Value (Map []) addressed to
                                  ScriptAddress: d1e1...
     ...
     [INFO] Slot 1: W1: TxSubmit: 2542...
@@ -641,9 +638,9 @@ happen. To understand why, we need to study the emulator log. Here are the relev
                                 - 2542...!0
                                   Redeemer: <>
                              outputs:
-                               - Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]})]}} addressed to
+                               - Value (Map []) addressed to
                                  ScriptAddress: d1e1...
-                             forge: Value {getValue = Map {unMap = [(f687...,Map {unMap = [(guess,1)]})]}}
+                             forge: Value (Map [(f687...,Map [(guess,1)])])
     ...
     [INFO] Slot 2: W1: TxSubmit: 2d66...
 
@@ -876,9 +873,9 @@ Rerunning random tests finds another 'bug':
   Failed 'Contract instance stopped with error'
   Test failed.
   Emulator log:
-  [WARNING] Slot 3: W1: handleTx failed: InsufficientFunds "Total: Value {getValue = Map {unMap = [(,Map {unMap = [(,100000000)]})]}} expected: Value {getValue = Map {unMap = [(f687...,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}"
+  [WARNING] Slot 3: W1: handleTx failed: InsufficientFunds "Total: Value (Map [(,Map [(,100000000)])]) expected: Value (Map [(f687...,Map [(guess,1)])])"
   [WARNING] Slot 3: 00000000-0000-4000-8000-000000000000 {Contract instance for wallet 1}:
-                      Contract instance stopped with error: GameSMError (SMCContractError (WalletError (InsufficientFunds "Total: Value {getValue = Map {unMap = [(,Map {unMap = [(,100000000)]})]}} expected: Value {getValue = Map {unMap = [(f687...,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,0)]})]}}")))
+                      Contract instance stopped with error: GameSMError (SMCContractError (WalletError (InsufficientFunds "Total: Value (Map [(,Map [(,100000000)])]) expected: Value (Map [(f687...,Map [(guess,1)])])")))
 
 In this case, the contract instance in wallet 1 crashes, because the
 wallet contains 'insufficient funds'. Reading the last line closely,
@@ -911,9 +908,10 @@ log output to understand why:
     GiveToken (Wallet 2),
     Guess (Wallet 2) "*******" "hello" 2,
     Guess (Wallet 2) "*******" "hunter2" 1]
-  Expected funds of W2 to change by Value {getValue = Map {unMap = [(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,Map {unMap = [(guess,1)]}),(,Map {unMap = [(,1)]})]}}
+  Expected funds of W2 to change by
+    Value (Map [(,Map [(,1)]),(f687...,Map [(guess,1)])])
   but they changed by
-  Value {getValue = Map {unMap = [(,Map {unMap = [(,0)]}),(f6879a6330ef3c0c4e9b73663bab99ab3a397984ceccb5c6569f8aeb3a3d61da,Map {unMap = [(guess,1)]})]}}
+    Value (Map [(f687...,Map [(guess,1)])])
   Test failed.
   Emulator log:
   ... 52 lines of log output ...
