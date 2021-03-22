@@ -38,14 +38,14 @@ main :: IO ()
 main = void $ Simulator.runSimulationWith handlers $ do
     Simulator.logString @Marlowe "Starting marlowe PAB webserver on port 8080. Press enter to exit."
     shutdown <- PAB.Server.startServerDebug
-    Simulator.activateContract (Wallet 1) MarloweApp
+    void $ Simulator.activateContract (Wallet 1) MarloweApp
     -- You can add simulator actions here:
     -- Simulator.callEndpointOnInstance
     -- Simulator.observableState
     -- etc.
     -- That way, the simulation gets to a predefined state and you don't have to
     -- use the HTTP API for setup.
-    _ <- liftIO getLine
+    void $ liftIO getLine
     shutdown
 
 data Marlowe
