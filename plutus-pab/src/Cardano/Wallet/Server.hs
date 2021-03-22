@@ -17,7 +17,7 @@ module Cardano.Wallet.Server
 import           Cardano.BM.Data.Trace            (Trace)
 import qualified Cardano.ChainIndex.Client        as ChainIndexClient
 import           Cardano.ChainIndex.Types         (ChainIndexUrl (..))
-import           Cardano.Node.Types               (NodeUrl (..))
+import qualified Cardano.Protocol.Socket.Client   as Client
 import           Cardano.Wallet.API               (API)
 import           Cardano.Wallet.Mock
 import           Cardano.Wallet.Types             (Port (..), WalletConfig (..), WalletMsg (..), WalletUrl (..),
@@ -30,7 +30,9 @@ import           Control.Monad.Freer.Extras.Log   (logInfo)
 import           Control.Monad.IO.Class           (liftIO)
 import           Data.Coerce                      (coerce)
 import           Data.Function                    ((&))
+import qualified Data.Map.Strict                  as Map
 import           Data.Proxy                       (Proxy (Proxy))
+import qualified Ledger.Crypto                    as Crypto
 import           Network.HTTP.Client              (defaultManagerSettings, newManager)
 import qualified Network.Wai.Handler.Warp         as Warp
 import           Plutus.PAB.Arbitrary             ()
@@ -42,30 +44,29 @@ import           Wallet.Effects                   (ownOutputs, ownPubKey, startW
 import           Wallet.Emulator.Wallet           (emptyWalletState)
 import qualified Wallet.Emulator.Wallet           as Wallet
 
-
-app :: Trace IO WalletMsg -> ClientEnv -> ClientEnv -> MVar Wallets -> Application
-app trace nodeClientEnv chainIndexEnv mVarState =
+app :: Trace IO WalletMsg -> Client.ClientHandler -> ClientEnv -> MVar Wallets -> Application
+app trace clientHandler chainIndexEnv mVarState =
     serve (Proxy @API) $
     hoistServer
         (Proxy @API)
-        (processWalletEffects trace nodeClientEnv chainIndexEnv mVarState) $
-            (createWallet) :<|>
+        (processWalletEffects trace clientHandler chainIndexEnv mVarState) $
+            createWallet :<|>
             (\w tx -> multiWallet w (submitTxn tx) >>= const (pure NoContent)) :<|>
             (\w -> multiWallet w ownPubKey) :<|>
-            (\w -> multiWallet w . (uncurry updatePaymentWithChange)) :<|>
+            (\w -> multiWallet w . uncurry updatePaymentWithChange) :<|>
             (\w -> multiWallet w walletSlot) :<|>
             (\w -> multiWallet w ownOutputs) :<|>
             (\w tx -> multiWallet w (walletAddSignature tx))
 
-
-main :: Trace IO WalletMsg -> WalletConfig -> NodeUrl -> ChainIndexUrl -> Availability -> IO ()
-main trace WalletConfig { baseUrl, wallet } (NodeUrl nodeUrl) (ChainIndexUrl chainUrl) availability = LM.runLogEffects trace $ do
-    nodeClientEnv <- buildEnv nodeUrl defaultManagerSettings
+main :: Trace IO WalletMsg -> WalletConfig -> FilePath -> ChainIndexUrl -> Availability -> IO ()
+main trace WalletConfig { baseUrl, wallet } serverSocket (ChainIndexUrl chainUrl) availability = LM.runLogEffects trace $ do
+    clientHandler <- liftIO $ Client.runClientNode serverSocket (\_ _ -> pure ())
     chainIndexEnv <- buildEnv chainUrl defaultManagerSettings
-    mVarState <- liftIO $ newMVar mempty
+    let knownWallets = Map.fromList $ zip (fmap Wallet.Wallet [1..10]) Crypto.knownPrivateKeys
+    mVarState <- liftIO $ newMVar knownWallets
     runClient chainIndexEnv
     logInfo $ StartingWallet (Port servicePort)
-    liftIO $ Warp.runSettings warpSettings $ app trace nodeClientEnv chainIndexEnv mVarState
+    liftIO $ Warp.runSettings warpSettings $ app trace clientHandler chainIndexEnv mVarState
     where
         servicePort = baseUrlPort (coerce baseUrl)
         warpSettings = Warp.defaultSettings & Warp.setPort servicePort & Warp.setBeforeMainLoop (available availability)

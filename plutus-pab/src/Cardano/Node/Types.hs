@@ -56,16 +56,16 @@ import           Servant.Client                 (BaseUrl)
 
 import           Cardano.BM.Data.Tracer         (ToObject (..))
 import           Cardano.BM.Data.Tracer.Extras  (Tagged (..), mkObjectStr)
+import qualified Cardano.Protocol.Socket.Client as Client
 import           Control.Monad.Freer.Extras.Log (LogMessage, LogMsg (..))
 import           Control.Monad.Freer.Reader     (Reader)
 import           Control.Monad.Freer.State      (State)
-import qualified Language.Plutus.Contract.Trace as Trace
+import qualified Plutus.Contract.Trace          as Trace
 import           Wallet.Emulator                (Wallet)
 import qualified Wallet.Emulator                as EM
 import           Wallet.Emulator.Chain          (ChainControlEffect, ChainEffect, ChainEvent, ChainState)
 import qualified Wallet.Emulator.MultiAgent     as MultiAgent
 
-import qualified Cardano.Protocol.Socket.Server as Server
 import           Plutus.PAB.Arbitrary           ()
 
 -- Configuration ------------------------------------------------------------------------------------------------------
@@ -186,7 +186,7 @@ type NodeServerEffects m
         , ChainEffect
         , State ChainState
         , LogMsg MockServerLogMsg
-        , Reader Server.ServerHandler
+        , Reader Client.ClientHandler
         , State AppState
         , LogMsg MockServerLogMsg
         , m]

@@ -43,11 +43,11 @@ import           GHC.Stack                 (HasCallStack)
 import           Hedgehog
 import qualified Hedgehog.Gen              as Gen
 import qualified Hedgehog.Range            as Range
-import qualified Language.PlutusTx.Prelude as P
 import qualified Ledger.Index              as Index
 import qualified Plutus.V1.Ledger.Ada      as Ada
 import qualified Plutus.V1.Ledger.Interval as Interval
 import qualified Plutus.V1.Ledger.Value    as Value
+import qualified PlutusTx.Prelude          as P
 
 import           Ledger
 
@@ -202,7 +202,7 @@ genSizedByteStringExact s =
     in Gen.bytes range
 
 genTokenName :: MonadGen m => m TokenName
-genTokenName = Value.TokenName <$> Gen.utf8 (Range.linear 0 32) Gen.unicode
+genTokenName = Value.TokenName <$> genSizedByteString 32
 
 genValue' :: MonadGen m => Range Integer -> m Value
 genValue' valueRange = do

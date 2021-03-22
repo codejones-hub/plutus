@@ -4,25 +4,25 @@
 module Spec.Uniswap(tests) where
 
 import           Control.Lens
-import           Control.Monad                                    (guard, void)
-import qualified Data.Map.Lazy                                    as Map
-import           Data.Maybe                                       (fromJust)
-import           Data.Semigroup                                   (Last (..))
+import           Control.Monad                           (guard, void)
+import qualified Data.Map.Lazy                           as Map
+import           Data.Maybe                              (fromJust)
+import           Data.Semigroup                          (Last (..))
 
-import           Language.Plutus.Contract
-import           Language.Plutus.Contract.Test
-import           Ledger                                           (Ada, Value, getIndex, pubKeyHash, txOutAddress, txOutValue)
-import qualified Ledger.Ada                                       as Ada
+import           Plutus.Contract
+import           Plutus.Contract.Test
+import           Ledger                                  (Ada, Value, getIndex, pubKeyHash, txOutAddress, txOutValue)
+import qualified Ledger.Ada                              as Ada
 
-import qualified Language.Plutus.Contract.StateMachine            as SM
-import qualified Language.PlutusTx.AssocMap                       as AMap
-import           Language.PlutusTx.Coordination.Contracts.Auction
-import           Language.PlutusTx.Coordination.Contracts.Uniswap
-import           Language.PlutusTx.Monoid                         (inv)
-import qualified Ledger.Value                                     as Value
-import qualified Plutus.Trace.Emulator                            as Trace
+import qualified Plutus.Contract.StateMachine            as SM
+import qualified PlutusTx.AssocMap                       as AMap
+import           Plutus.Contracts.Auction
+import           Plutus.Contracts.Uniswap
+import           PlutusTx.Monoid                         (inv)
+import qualified Ledger.Value                            as Value
+import qualified Plutus.Trace.Emulator                   as Trace
 import           Plutus.V1.Ledger.Address
-import           Wallet.Emulator.Chain                            as Wallet
+import           Wallet.Emulator.Chain                   as Wallet
 
 import           Test.Tasty
 

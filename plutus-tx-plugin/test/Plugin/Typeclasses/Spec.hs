@@ -3,7 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# OPTIONS_GHC -fno-ignore-interface-pragmas #-}
-{-# OPTIONS -fplugin Language.PlutusTx.Plugin -fplugin-opt Language.PlutusTx.Plugin:defer-errors -fplugin-opt Language.PlutusTx.Plugin:no-context -fplugin-opt Language.PlutusTx.Plugin:dont-typecheck #-}
+{-# OPTIONS -fplugin PlutusTx.Plugin -fplugin-opt PlutusTx.Plugin:defer-errors -fplugin-opt PlutusTx.Plugin:no-context -fplugin-opt PlutusTx.Plugin:dont-typecheck #-}
 
 module Plugin.Typeclasses.Spec where
 
@@ -14,13 +14,13 @@ import           Plugin.Data.Spec
 import           Plugin.Lib
 import           Plugin.Typeclasses.Lib
 
-import qualified Language.PlutusTx.Builtins   as Builtins
-import           Language.PlutusTx.Code
-import           Language.PlutusTx.Plugin
-import qualified Language.PlutusTx.Prelude    as P
+import qualified PlutusTx.Builtins      as Builtins
+import           PlutusTx.Code
+import           PlutusTx.Plugin
+import qualified PlutusTx.Prelude       as P
 
-import qualified Language.PlutusCore.Builtins as PLC
-import qualified Language.PlutusCore.Universe as PLC
+import qualified PlutusCore.Builtins    as PLC
+import qualified PlutusCore.Universe    as PLC
 
 import           Data.Proxy
 
@@ -33,6 +33,9 @@ typeclasses = testNested "Typeclasses" [
     , goldenPir "partialApplication" partialApplication
     , goldenPir "sequenceTest" sequenceTest
     , goldenPir "compareTest" compareTest
+    , goldenPir "concatTest" concatTest
+    , goldenPir "sumTest" sumTest
+    , goldenPir "fmapDefaultTest" fmapDefaultTest
   ]
 
 class Sized a where
@@ -100,5 +103,14 @@ opCompare a b = case P.compare a b of
     EQ -> EQ
     GT -> LT
 
-compareTest :: CompiledCode (Ordering)
+compareTest :: CompiledCode Ordering
 compareTest = plc (Proxy @"compareTest") (opCompare (1::Integer) (2::Integer))
+
+concatTest :: CompiledCode [Integer]
+concatTest = plc (Proxy @"concatTest") (P.concat [[(1 :: Integer), 2], [3, 4]])
+
+sumTest :: CompiledCode Integer
+sumTest = plc (Proxy @"sumTest") (P.sum [(1 :: Integer), 2, 3, 4])
+
+fmapDefaultTest :: CompiledCode [Integer]
+fmapDefaultTest = plc (Proxy @"fmapDefaultTest") (P.fmapDefault (P.+ 1) [(1 :: Integer), 2, 3, 4])

@@ -7,7 +7,7 @@
 , enableHaskellProfiling ? false
 }:
 let
-  inherit (packages) pkgs plutus plutus-playground marlowe-playground plutus-pab marlowe-dashboard deployment;
+  inherit (packages) pkgs plutus plutus-playground marlowe-playground plutus-pab marlowe-dashboard deployment docs;
   inherit (pkgs) stdenv lib utillinux python3 nixpkgs-fmt;
   inherit (plutus) haskell agdaPackages stylish-haskell sphinxcontrib-haddock nix-pre-commit-hooks;
   inherit (plutus) agdaWithStdlib;
@@ -61,6 +61,7 @@ let
 
   # local build inputs ( -> ./nix/pkgs/default.nix )
   localInputs = (with plutus; [
+    aws-mfa-login
     cabal-install
     fixPurty
     fixStylishHaskell
@@ -82,7 +83,6 @@ let
     updateMaterialized
     updateClientDeps
     updateMetadataSamples
-    deployment.getCreds
   ]);
 
 in
@@ -108,7 +108,7 @@ haskell.project.shellFor {
   # We also use it in a deployment hack.
   # We have a local passwords store that we use for deployments etc.
   + ''
-    export PLUTUS_ROOT=$(pwd)
-    export PASSWORD_STORE_DIR="$(pwd)/secrets"
+    #export PLUTUS_ROOT=$(pwd)
+    #export PASSWORD_STORE_DIR="$(pwd)/secrets"
   '';
 }

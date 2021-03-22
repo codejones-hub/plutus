@@ -19,7 +19,7 @@ import           Codec.Serialise                (Serialise)
 import           Control.DeepSeq                (NFData)
 import           Control.Lens                   hiding (index)
 import           Control.Monad.Freer
-import           Control.Monad.Freer.Extras.Log (LogMsg, logDebug, logInfo)
+import           Control.Monad.Freer.Extras.Log (LogMsg, logDebug, logInfo, logWarn)
 import           Control.Monad.Freer.State
 import qualified Control.Monad.State            as S
 import           Data.Aeson                     (FromJSON, ToJSON)
@@ -29,11 +29,11 @@ import           Data.Maybe                     (isNothing)
 import           Data.Text.Prettyprint.Doc
 import           Data.Traversable               (for)
 import           GHC.Generics                   (Generic)
-import           Language.Plutus.Contract.Util  (uncurry3)
 import           Ledger                         (Block, Blockchain, ScriptValidationEvent, Slot (..), Tx (..), TxId,
                                                  txId)
 import qualified Ledger.Index                   as Index
 import qualified Ledger.Interval                as Interval
+import           Plutus.Contract.Util           (uncurry3)
 
 -- | Events produced by the blockchain emulator.
 data ChainEvent =
@@ -104,8 +104,9 @@ handleControlChain = \case
 
 logEvent :: Member (LogMsg ChainEvent) effs => ChainEvent -> Eff effs ()
 logEvent e = case e of
-    SlotAdd _ -> logDebug e
-    _         -> logInfo e
+    SlotAdd{}           -> logDebug e
+    TxnValidationFail{} -> logWarn e
+    _                   -> logInfo e
 
 handleChain :: (Members ChainEffs effs) => ChainEffect ~> Eff effs
 handleChain = \case

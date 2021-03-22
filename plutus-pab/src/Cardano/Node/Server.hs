@@ -1,46 +1,53 @@
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE FlexibleContexts   #-}
+{-# LANGUAGE NamedFieldPuns     #-}
+{-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE TypeApplications   #-}
 
 module Cardano.Node.Server
     ( main
     ) where
 
-import           Control.Concurrent               (MVar, forkIO, newMVar)
-import           Control.Concurrent.Availability  (Availability, available)
-import           Control.Monad                    (void)
-import           Control.Monad.Freer.Extras.Log   (logInfo)
-import           Control.Monad.IO.Class           (liftIO)
-import           Data.Function                    ((&))
-import           Data.Proxy                       (Proxy (Proxy))
-import qualified Network.Wai.Handler.Warp         as Warp
-import           Servant                          (Application, hoistServer, serve, (:<|>) ((:<|>)))
-import           Servant.Client                   (BaseUrl (baseUrlPort))
-
 import           Cardano.BM.Data.Trace            (Trace)
 import           Cardano.Node.API                 (API)
 import           Cardano.Node.Mock
 import           Cardano.Node.Types
+import qualified Cardano.Protocol.Socket.Client   as Client
 import qualified Cardano.Protocol.Socket.Server   as Server
+import           Control.Concurrent               (MVar, forkIO, modifyMVar_, newMVar)
+import           Control.Concurrent.Availability  (Availability, available)
+import           Control.Lens                     (over, set)
+import           Control.Monad                    (void)
+import           Control.Monad.Freer.Extras.Log   (logInfo)
+import           Control.Monad.IO.Class           (liftIO)
+import           Data.Function                    ((&))
+import qualified Data.Map.Strict                  as Map
+import           Data.Proxy                       (Proxy (Proxy))
+import           Ledger                           (Block, Slot (..))
+import qualified Ledger.Ada                       as Ada
+import qualified Network.Wai.Handler.Warp         as Warp
 import           Plutus.PAB.Arbitrary             ()
 import qualified Plutus.PAB.Monitoring.Monitoring as LM
+import           Servant                          (Application, hoistServer, serve, (:<|>) ((:<|>)))
+import           Servant.Client                   (BaseUrl (baseUrlPort))
+import           Wallet.Emulator.Chain            (chainNewestFirst, currentSlot)
 
 app ::
     Trace IO MockServerLogMsg
- -> Server.ServerHandler
+ -> Client.ClientHandler
  -> MVar AppState
  -> Application
-app trace serverHandler stateVar =
+app trace clientHandler stateVar =
     serve (Proxy @API) $
     hoistServer
         (Proxy @API)
-        (liftIO . processChainEffects trace serverHandler stateVar)
-        (healthcheck :<|> addTx :<|> getCurrentSlot :<|>
+        (liftIO . processChainEffects trace clientHandler stateVar)
+        (healthcheck :<|>
          (genRandomTx :<|>
           consumeEventHistory stateVar))
 
 data Ctx = Ctx { serverHandler :: Server.ServerHandler
+               , clientHandler :: Client.ClientHandler
                , serverState   :: MVar AppState
                , mockTrace     :: Trace IO MockServerLogMsg
                }
@@ -53,29 +60,43 @@ main trace MockServerConfig { mscBaseUrl
                             , mscInitialTxWallets
                             , mscSocketPath} availability = LM.runLogEffects trace $ do
 
-    serverHandler <- liftIO $ Server.runServerNode mscSocketPath (_chainState $ initialAppState mscInitialTxWallets)
-    serverState <- liftIO $ newMVar (initialAppState mscInitialTxWallets)
+    -- make initial distribution of 1 billion Ada to all configured wallets
+    let dist = Map.fromList $ zip mscInitialTxWallets (repeat (Ada.adaValueOf 1000_000_000))
+    let appState = AppState
+            { _chainState = initialChainState dist
+            , _eventHistory = mempty
+            }
+    serverHandler <- liftIO $ Server.runServerNode mscSocketPath (_chainState appState)
+    serverState   <- liftIO $ newMVar appState
+    clientHandler <- liftIO $ Client.runClientNode mscSocketPath (updateChainState serverState)
 
-    let ctx = Ctx serverHandler serverState trace
+    let ctx = Ctx serverHandler clientHandler serverState trace
 
     runSlotCoordinator ctx mscSlotLength
     maybe (logInfo NoRandomTxGeneration) (runRandomTxGeneration ctx) mscRandomTxInterval
     maybe (logInfo KeepingOldBlocks) (runBlockReaper ctx) mscBlockReaper
 
     logInfo $ StartingMockServer $ baseUrlPort mscBaseUrl
-    liftIO $ Warp.runSettings warpSettings $ app trace serverHandler serverState
+    liftIO $ Warp.runSettings warpSettings $ app trace clientHandler serverState
 
         where
             warpSettings = Warp.defaultSettings & Warp.setPort (baseUrlPort mscBaseUrl) & Warp.setBeforeMainLoop (available availability)
 
-            runRandomTxGeneration Ctx { serverHandler , serverState , mockTrace } randomTxInterval = do
+            runRandomTxGeneration Ctx { clientHandler , serverState , mockTrace } randomTxInterval = do
                     logInfo StartingRandomTx
-                    void $ liftIO $ forkIO $ transactionGenerator mockTrace randomTxInterval serverHandler serverState
+                    void $ liftIO $ forkIO $ transactionGenerator mockTrace randomTxInterval clientHandler serverState
 
-            runBlockReaper Ctx { serverHandler , serverState , mockTrace } reaperConfig = do
+            runBlockReaper Ctx { serverHandler } reaperConfig = do
                 logInfo RemovingOldBlocks
-                void $ liftIO $ forkIO $ blockReaper mockTrace reaperConfig serverHandler serverState
+                void $ liftIO $ forkIO $ blockReaper reaperConfig serverHandler
 
-            runSlotCoordinator Ctx { serverHandler , serverState , mockTrace } slotLength = do
+            runSlotCoordinator Ctx { serverHandler } slotLength = do
                 logInfo StartingSlotCoordination
-                void $ liftIO $ forkIO $ slotCoordinator mockTrace slotLength serverHandler serverState
+                void $ liftIO $ forkIO $ slotCoordinator slotLength serverHandler
+
+            updateChainState :: MVar AppState -> Block -> Slot -> IO ()
+            updateChainState mv block slot =
+                modifyMVar_ mv $ pure .
+                  over (chainState . chainNewestFirst) (block :) .
+                  set  (chainState . currentSlot     ) slot
+
