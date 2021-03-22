@@ -32,13 +32,14 @@ import           Plutus.PAB.Simulator                     (SimulatorContractHand
 import qualified Plutus.PAB.Simulator                     as Simulator
 import           Plutus.PAB.Types                         (PABError (..))
 import qualified Plutus.PAB.Webserver.Server              as PAB.Server
+import           Wallet.Emulator.Types                    (Wallet (..))
 
 main :: IO ()
 main = void $ Simulator.runSimulationWith handlers $ do
-    liftIO $ putStrLn "Starting marlowe PAB webserver on port 8080. Press enter to exit."
+    Simulator.logString @Marlowe "Starting marlowe PAB webserver on port 8080. Press enter to exit."
     shutdown <- PAB.Server.startServerDebug
+    Simulator.activateContract (Wallet 1) MarloweApp
     -- You can add simulator actions here:
-    -- Simulator.activateContract
     -- Simulator.callEndpointOnInstance
     -- Simulator.observableState
     -- etc.
