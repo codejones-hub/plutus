@@ -11,7 +11,7 @@
 module Main(main) where
 
 import           Control.Monad                            (void)
-import           Control.Monad.Freer                      (Eff, Member, interpret, reinterpret, type (~>))
+import           Control.Monad.Freer                      (Eff, Member, reinterpret, type (~>))
 import           Control.Monad.Freer.Error                (Error)
 import           Control.Monad.Freer.Extras.Log           (LogMsg)
 import           Control.Monad.IO.Class                   (MonadIO (..))
@@ -23,12 +23,12 @@ import           Data.Text.Prettyprint.Doc                (Pretty (..), viaShow)
 import           GHC.Generics                             (Generic)
 import qualified Language.Marlowe.Client                  as Marlowe
 import           Playground.Schema                        (endpointsToSchemas)
-import           Plutus.PAB.Core                          (EffectHandlers)
 import           Plutus.PAB.Effects.Contract              (ContractEffect (..), PABContract (..))
 import           Plutus.PAB.Effects.Contract.ContractTest (doContractInit, doContractUpdate)
 import           Plutus.PAB.Events.Contract               (ContractPABRequest)
 import           Plutus.PAB.Events.ContractInstanceState  (PartiallyDecodedResponse)
 import           Plutus.PAB.Monitoring.PABLogMsg          (ContractEffectMsg (..))
+import           Plutus.PAB.Simulator                     (SimulatorContractHandler, SimulatorEffectHandlers)
 import qualified Plutus.PAB.Simulator                     as Simulator
 import           Plutus.PAB.Types                         (PABError (..))
 import qualified Plutus.PAB.Webserver.Server              as PAB.Server
@@ -37,11 +37,13 @@ main :: IO ()
 main = void $ Simulator.runSimulationWith handlers $ do
     liftIO $ putStrLn "Starting marlowe PAB webserver on port 8080. Press enter to exit."
     shutdown <- PAB.Server.startServerDebug
-    -- You can now run simulator actions here
+    -- You can add simulator actions here:
     -- Simulator.activateContract
     -- Simulator.callEndpointOnInstance
     -- Simulator.observableState
     -- etc.
+    -- That way, the simulation gets to a predefined state and you don't have to
+    -- use the HTTP API for setup.
     _ <- liftIO getLine
     shutdown
 
@@ -80,8 +82,9 @@ handleMarloweContract = \case
     where
         marlowe = first tshow Marlowe.marlowePlutusContract
 
-handlers :: EffectHandlers Marlowe (SimulatorState Marlowe)
+handlers :: SimulatorEffectHandlers Marlowe
 handlers = Simulator.mkSimulatorHandlers @Marlowe [MarloweApp] mlw where
+    mlw :: SimulatorContractHandler Marlowe
     mlw =
-        Simulator.handleContractEffectMsg
+        Simulator.handleContractEffectMsg @Marlowe
         . reinterpret handleMarloweContract
