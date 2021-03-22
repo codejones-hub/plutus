@@ -51,7 +51,7 @@ data Marlowe
 
 data MarloweContracts =
     MarloweApp -- the main marlowe contract
-    -- TODO: Add a constructor for the companion contract
+    | WalletCompanion -- TODO: actually implement this!
     deriving (Eq, Ord, Show, Generic)
     deriving anyclass (FromJSON, ToJSON)
 
@@ -71,11 +71,14 @@ handleMarloweContract ::
     ~> Eff effs
 handleMarloweContract = \case
     InitialState c -> case c of
-        MarloweApp -> doContractInit marlowe
+        MarloweApp      -> doContractInit marlowe
+        WalletCompanion -> error "wallet companion not implemented"
     UpdateContract c state p -> case c of
-        MarloweApp -> doContractUpdate marlowe state p
+        MarloweApp      -> doContractUpdate marlowe state p
+        WalletCompanion -> error "wallet companion not implemented"
     ExportSchema t -> case t of
-        MarloweApp -> pure $ endpointsToSchemas @Empty
+        MarloweApp      -> pure $ endpointsToSchemas @Empty
+        WalletCompanion -> pure $ endpointsToSchemas @Empty
             -- TODO:
             -- replace with (Marlowe.MarloweSchema .\\ BlockchainActions)
             -- (needs some instances for the Marlowe types (MarloweParams, etc))
