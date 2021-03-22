@@ -124,3 +124,22 @@ executable marlowe-app
     plutus-pab -any,
     plutus-contract -any,
     marlowe
+
+-- | The PAB Specialised to the marlowe contract(s)
+executable marlowe-pab-simulator
+  import: lang
+  main-is: Main.hs
+  hs-source-dirs: pab
+  build-depends:
+    base >= 4.9 && < 5,
+    plutus-pab -any,
+    plutus-contract -any,
+    marlowe,
+    aeson -any,
+    freer-simple -any,
+    prettyprinter -any,
+    freer-extras -any,
+    playground-common -any,
+    row-types -any,
+    plutus-ledger -any
+  

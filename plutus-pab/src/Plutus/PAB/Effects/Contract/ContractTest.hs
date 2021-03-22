@@ -20,6 +20,9 @@
 module Plutus.PAB.Effects.Contract.ContractTest(
     TestContracts(..)
     , handleContractTest
+    -- * handlers for general use
+    , doContractInit
+    , doContractUpdate
     ) where
 
 import           Control.Monad                               (void)
