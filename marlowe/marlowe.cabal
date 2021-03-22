@@ -126,7 +126,7 @@ executable marlowe-app
     marlowe
 
 -- | The PAB Specialised to the marlowe contract(s)
-executable marlowe-pab-simulator
+executable marlowe-pab
   import: lang
   main-is: Main.hs
   hs-source-dirs: pab
