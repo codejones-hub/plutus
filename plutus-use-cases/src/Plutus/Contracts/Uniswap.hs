@@ -625,6 +625,7 @@ data UserContractState =
       Pools [((Coin, Integer), (Coin, Integer))]
     | Funds Value
     | Created Coin Integer Coin Integer
+    | Swapped Coin Integer Coin Integer
     deriving (Show, Generic, FromJSON, ToJSON)
 
 -- | Creates a liquidity pool for a pair of coins. The creator provides liquidity for both coins and gets liquidity tokens in return.
@@ -778,7 +779,7 @@ add us = do
     logInfo $ "added liquidity to pool: " ++ show lp
 
 -- | Uses a liquidity pool two swap one sort of coins in the pool against the other.
-swap :: Uniswap -> Contract w UniswapUserSchema Text ()
+swap :: Uniswap -> Contract (Last UserContractState) UniswapUserSchema Text ()
 swap us = do
     SwapParams{..} <- endpoint @"swap"
     unless (spAmountA > 0 && spAmountB == 0 || spAmountA == 0 && spAmountB > 0) $ throwError "exactly one amount must be positive"
@@ -815,6 +816,7 @@ swap us = do
     void $ awaitTxConfirmed $ txId ledgerTx
 
     logInfo $ "swapped with: " ++ show lp
+    tell $ Last $ Just $ Swapped spCoinA newA spCoinB newB
 
 -- | Finds all liquidity pools and their liquidity belonging to the Uniswap instance.
 -- This merely inspects the blockchain and does not issue any transactions.
