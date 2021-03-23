@@ -36,6 +36,7 @@ module Plutus.Contracts.Uniswap
 import           Control.Monad                    hiding (fmap)
 import qualified Data.Map                         as Map
 import           Data.Monoid                      (Last (..))
+import           Data.Proxy                       (Proxy (..))
 import           Data.Text                        (Text, pack)
 import           Data.Void                        (Void)
 import           Ledger                           hiding (singleton)
@@ -947,61 +948,35 @@ data UserContractState =
 --      [@pools@]: Finds all liquidity pools and their liquidity belonging to the Uniswap instance. This merely inspects the blockchain and does not issue any transactions.
 --      [@funds@]: Gets the caller's funds. This merely inspects the blockchain and does not issue any transactions.
 --      [@stop@]: Stops the contract.
-userEndpoints :: Uniswap -> Contract (Last (Either Text UserContractState)) UniswapUserSchema Text ()
+userEndpoints :: Uniswap -> Contract (Last (Either Text UserContractState)) UniswapUserSchema Void ()
 userEndpoints us =
     stop
         `select`
-    ((create' `select` swap' `select` close' `select` remove' `select` add' `select` pools' `select` funds') >> userEndpoints us)
+    ((f (Proxy @"create") (const Created) create                 `select`
+      f (Proxy @"swap")   (const Swapped) swap                   `select`
+      f (Proxy @"close")  (const Closed)  close                  `select`
+      f (Proxy @"remove") (const Removed) remove                 `select`
+      f (Proxy @"add")    (const Added)   add                    `select`
+      f (Proxy @"pools")  Pools           (\us' () -> pools us') `select`
+      f (Proxy @"funds")  Funds           (\_us () -> funds))    >> userEndpoints us)
   where
+    f :: forall l a p.
+         HasEndpoint l p UniswapUserSchema
+      => Proxy l
+      -> (a -> UserContractState)
+      -> (Uniswap -> p -> Contract (Last (Either Text UserContractState)) UniswapUserSchema Text a)
+      -> Contract (Last (Either Text UserContractState)) UniswapUserSchema Void ()
+    f _ g c = do
+        e <- runError $ do
+            p <- endpoint @l
+            c us p
+        tell $ Last $ Just $ case e of
+            Left err -> Left err
+            Right a  -> Right $ g a
+
+    stop :: Contract (Last (Either Text UserContractState)) UniswapUserSchema Void ()
     stop = do
-        endpoint @"stop"
-        tell $ Last $ Just $ Right Stopped
-
-    create' = do
-        cp <- endpoint @"create"
-        e <- mapError (const "endpoint error: create") $ runError $ create us cp
+        e <- runError $ endpoint @"stop"
         tell $ Last $ Just $ case e of
             Left err -> Left err
-            Right () -> Right Created
-
-    swap' = do
-        sp <- endpoint @"swap"
-        e <- mapError (const "") $ runError $ swap us sp
-        tell $ Last $ Just $ case e of
-            Left err -> Left err
-            Right () -> Right Swapped
-
-    close' = do
-        cp <- endpoint @"close"
-        e <- mapError (const "") $ runError $ close us cp
-        tell $ Last $ Just $ case e of
-            Left err -> Left err
-            Right () -> Right Closed
-
-    remove' = do
-        rp <- endpoint @"remove"
-        e <- mapError (const "") $ runError $ remove us rp
-        tell $ Last $ Just $ case e of
-            Left err -> Left err
-            Right () -> Right Removed
-
-    add' = do
-        adp <- endpoint @"add"
-        e <- mapError (const "") $ runError $ add us adp
-        tell $ Last $ Just $ case e of
-            Left err -> Left err
-            Right () -> Right Added
-
-    pools' = do
-        endpoint @"pools"
-        e <- mapError (const "") $ runError $ pools us
-        tell $ Last $ Just $ case e of
-            Left err -> Left err
-            Right ps -> Right $ Pools ps
-
-    funds' = do
-        endpoint @"funds"
-        e <- mapError (const "") $ runError funds
-        tell $ Last $ Just $ case e of
-            Left err -> Left err
-            Right v  -> Right $ Funds v
+            Right () -> Right Stopped
