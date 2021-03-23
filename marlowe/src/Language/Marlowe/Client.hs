@@ -104,7 +104,7 @@ data PartyAction
 
 type RoleOwners = AssocMap.Map Val.TokenName PubKeyHash
 
-marlowePlutusContract :: Contract () MarloweSchema MarloweError ()
+marlowePlutusContract :: Contract [MarloweParams] MarloweSchema MarloweError ()
 marlowePlutusContract = do
     create `select` apply `select` wait `select` auto `select` redeem
   where
@@ -162,7 +162,7 @@ marlowePlutusContract = do
     auto = do
         (params, party, untilSlot) <- endpoint @"auto"
         let theClient = mkMarloweClient params
-        let continueWith :: MarloweData -> Contract () MarloweSchema MarloweError ()
+        let continueWith :: MarloweData -> Contract [MarloweParams] MarloweSchema MarloweError ()
             continueWith md@MarloweData{marloweContract} =
                 if canAutoExecuteContractForParty party marloweContract
                 then autoExecuteContract theClient party md
@@ -188,7 +188,7 @@ marlowePlutusContract = do
     autoExecuteContract :: StateMachineClient MarloweData MarloweInput
                       -> Party
                       -> MarloweData
-                      -> Contract () MarloweSchema MarloweError ()
+                      -> Contract [MarloweParams] MarloweSchema MarloweError ()
     autoExecuteContract theClient party marloweData = do
         slot <- currentSlot
         let slotRange = (slot, slot + defaultTxValidationRange)
@@ -242,7 +242,7 @@ setupMarloweParams
        , HasTxConfirmation s
        , AsMarloweError e
        )
-    => RoleOwners -> Marlowe.Contract -> Contract () s e (MarloweParams, TxConstraints i o)
+    => RoleOwners -> Marlowe.Contract -> Contract [MarloweParams] s e (MarloweParams, TxConstraints i o)
 setupMarloweParams owners contract = mapError (review _MarloweError) $ do
     creator <- pubKeyHash <$> ownPubKey
     let roles = extractContractRoles contract
@@ -327,7 +327,7 @@ canAutoExecuteContractForParty party = check
 applyInputs :: (AsContractError e, AsSMContractError e, AsMarloweError e)
     => MarloweParams
     -> [Input]
-    -> Contract () MarloweSchema e MarloweData
+    -> Contract [MarloweParams] MarloweSchema e MarloweData
 applyInputs params inputs = do
     slot <- currentSlot
     let slotRange = (slot, slot + defaultTxValidationRange)
@@ -504,7 +504,7 @@ defaultTxValidationRange :: Slot
 defaultTxValidationRange = 10
 
 
-marloweCompanionContract :: Contract MarloweData MarloweCompanionSchema MarloweError ()
+marloweCompanionContract :: Contract [MarloweData] MarloweCompanionSchema MarloweError ()
 marloweCompanionContract = contracts
   where
     contracts = do
@@ -522,13 +522,12 @@ marloweCompanionContract = contracts
         cont ownAddress
 
 
-zzz :: TxOut -> Contract MarloweData MarloweCompanionSchema MarloweError ()
+zzz :: TxOut -> Contract [MarloweData] MarloweCompanionSchema MarloweError ()
 zzz txout = do
     let curSymbols = filterRoles txout
     forM_ curSymbols $ \cs -> do
         contracts <- asdf cs
-        forM_ contracts $ \marloweData -> do
-            tell marloweData
+        tell contracts
 
 
 filterRoles :: TxOut -> [CurrencySymbol]
@@ -538,7 +537,7 @@ filterRoles TxOut { txOutValue, txOutType = PayToPubKey } =
 filterRoles _ = []
 
 
-asdf :: CurrencySymbol -> Contract MarloweData MarloweCompanionSchema MarloweError [MarloweData]
+asdf :: CurrencySymbol -> Contract [MarloweData] MarloweCompanionSchema MarloweError [MarloweData]
 asdf curSym = do
     let params = marloweParams curSym
     let client = mkMarloweClient params

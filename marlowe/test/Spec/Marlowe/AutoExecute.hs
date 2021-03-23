@@ -57,9 +57,10 @@ import           Test.Tasty.QuickCheck
 tests :: TestTree
 tests = testGroup "Marlowe Auto Execution"
     [ awaitUntilTimeoutTest
-    , autoexecZCBTest
-    , autoexecZCBTestAliceWalksAway
-    , autoexecZCBTestBobWalksAway
+    -- , autoexecZCBTest
+    -- , autoexecZCBTestAliceWalksAway
+    -- , autoexecZCBTestBobWalksAway
+    , tttt
     ]
 
 
@@ -69,13 +70,55 @@ bob = Wallet 2
 carol = Wallet 3
 
 
+tttt :: TestTree
+tttt = checkPredicate "ZCB Auto Execute Contract"
+    (assertNoFailedTransactions
+    -- /\ emulatorLog (const False) ""
+    T..&&. assertNotDone marlowePlutusContract (Trace.walletInstanceTag alice) "contract should not have any errors"
+    T..&&. assertNotDone marlowePlutusContract (Trace.walletInstanceTag bob) "contract should not have any errors"
+    T..&&. walletFundsChange alice (lovelaceValueOf 150)
+    T..&&. walletFundsChange bob (lovelaceValueOf (-150))
+    ) $ do
+
+    let aliceRole = Role "alice"
+    let bobRole = Role "bob"
+    let zeroCouponBond = When [ Case
+            (Deposit alicePk alicePk ada (Constant 850))
+            (Pay alicePk (Party bobRole) ada (Constant 850)
+                (When
+                    [ Case (Deposit alicePk bobRole ada (Constant 1000)) Close] 40 Close
+                ))] 20 Close
+
+    bobHdl <- Trace.activateContractWallet bob marlowePlutusContract
+    bobCompanionHdl <- Trace.activateContractWallet bob marloweCompanionContract
+    aliceHdl <- Trace.activateContractWallet alice marlowePlutusContract
+
+    -- Bob will wait for the contract to appear on chain
+
+    -- Init a contract
+    Trace.callEndpoint @"create" aliceHdl (AssocMap.fromList [("bob", pubKeyHash $ walletPubKey bob)], zeroCouponBond)
+    Trace.waitNSlots 1
+
+    -- Trace.callEndpoint @"auto" aliceHdl (params, alicePk, contractLifespan)
+    Trace.waitNSlots 1
+
+    -- Return money to Alice
+    -- Trace.payToWallet carol alice defaultLovelaceAmount
+    Trace.waitNSlots 1
+    Trace.callEndpoint @"contracts" bobCompanionHdl ()
+
+    -- Now Alice should be able to retry and pay to Bob
+    void $ Trace.waitNSlots 1
+
+
+
 autoexecZCBTest :: TestTree
 autoexecZCBTest = checkPredicate "ZCB Auto Execute Contract"
     (assertNoFailedTransactions
     -- /\ emulatorLog (const False) ""
-    T..&&. assertNotDone (marlowePlutusContract) (Trace.walletInstanceTag alice) "contract should not have any errors"
-    T..&&. assertNotDone (marlowePlutusContract) (Trace.walletInstanceTag bob) "contract should not have any errors"
-    T..&&. walletFundsChange alice (lovelaceValueOf (150))
+    T..&&. assertNotDone marlowePlutusContract (Trace.walletInstanceTag alice) "contract should not have any errors"
+    T..&&. assertNotDone marlowePlutusContract (Trace.walletInstanceTag bob) "contract should not have any errors"
+    T..&&. walletFundsChange alice (lovelaceValueOf 150)
     T..&&. walletFundsChange bob (lovelaceValueOf (-150))
     ) $ do
 
@@ -109,8 +152,8 @@ autoexecZCBTestAliceWalksAway = checkPredicate
     "ZCB Auto Execute Contract when Alice walks away"
     (assertNoFailedTransactions
     -- /\ emulatorLog (const False) ""
-    T..&&. assertNotDone (marlowePlutusContract) (Trace.walletInstanceTag alice) "contract should not have any errors"
-    T..&&. assertNotDone (marlowePlutusContract) (Trace.walletInstanceTag bob) "contract should not have any errors"
+    T..&&. assertNotDone marlowePlutusContract (Trace.walletInstanceTag alice) "contract should not have any errors"
+    T..&&. assertNotDone marlowePlutusContract (Trace.walletInstanceTag bob) "contract should not have any errors"
     T..&&. walletFundsChange alice (P.inv defaultLovelaceAmount)
     T..&&. walletFundsChange carol defaultLovelaceAmount
     ) $ do
@@ -140,8 +183,8 @@ autoexecZCBTestBobWalksAway = checkPredicate
     "ZCB Auto Execute Contract when Bob walks away"
     (assertNoFailedTransactions
     -- /\ emulatorLog (const False) ""
-    T..&&. assertNotDone (marlowePlutusContract) (Trace.walletInstanceTag alice) "contract should not have any errors"
-    T..&&. assertNotDone (marlowePlutusContract) (Trace.walletInstanceTag bob) "contract should not have any errors"
+    T..&&. assertNotDone marlowePlutusContract (Trace.walletInstanceTag alice) "contract should not have any errors"
+    T..&&. assertNotDone marlowePlutusContract (Trace.walletInstanceTag bob) "contract should not have any errors"
     T..&&. walletFundsChange alice (lovelaceValueOf (-850))
     T..&&. walletFundsChange carol defaultLovelaceAmount
     ) $ do
@@ -183,8 +226,8 @@ awaitUntilTimeoutTest = checkPredicate "Party waits for contract to appear on ch
     -- here Bob gets Timeout and closes the contract
     void $ Trace.waitNSlots 15
 
-alicePk = PK $ (pubKeyHash $ walletPubKey alice)
-bobPk = PK $ (pubKeyHash $ walletPubKey bob)
+alicePk = PK (pubKeyHash $ walletPubKey alice)
+bobPk = PK (pubKeyHash $ walletPubKey bob)
 
 params = defaultMarloweParams
 
