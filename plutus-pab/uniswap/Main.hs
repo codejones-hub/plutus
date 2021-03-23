@@ -73,19 +73,19 @@ main = void $ Simulator.runSimulationWith handlers $ do
         cid <- Simulator.activateContract w $ UniswapUser us
         Simulator.logString @Uniswap $ "Uniswap user contract started for " ++ show w
         _ <- Simulator.callEndpointOnInstance cid "funds" ()
-        v <- flip Simulator.waitForState cid $ \json -> case (fromJSON json :: Result (Monoid.Last Uniswap.UserContractState)) of
-                Success (Monoid.Last (Just (Uniswap.Funds v))) -> Just v
-                _                                              -> Nothing
+        v <- flip Simulator.waitForState cid $ \json -> case (fromJSON json :: Result (Monoid.Last (Either Text Uniswap.UserContractState))) of
+                Success (Monoid.Last (Just (Right (Uniswap.Funds v)))) -> Just v
+                _                                                      -> Nothing
         Simulator.logString @Uniswap $ "initial funds in wallet " ++ show w ++ ": " ++ show v
         return (w, cid)
 
     let cp = Uniswap.CreateParams ada (coins Map.! "A") 100000 500000
     Simulator.logString @Uniswap $ "creating liquidity pool: " ++ show (encode cp)
     _  <- Simulator.callEndpointOnInstance (cids Map.! Wallet 2) "create" cp
-    cres <- flip Simulator.waitForState (cids Map.! Wallet 2) $ \json -> case (fromJSON json :: Result (Monoid.Last Uniswap.UserContractState)) of
-            Success (Monoid.Last (Just (Uniswap.Created ca aa cb bb))) -> Just (ca, aa, cb, bb)
-            _                                                          -> Nothing
-    Simulator.logString @Uniswap $ "pool created " ++ show cres
+    flip Simulator.waitForState (cids Map.! Wallet 2) $ \json -> case (fromJSON json :: Result (Monoid.Last (Either Text Uniswap.UserContractState))) of
+        Success (Monoid.Last (Just (Right Uniswap.Created))) -> Just ()
+        _                                                    -> Nothing
+    Simulator.logString @Uniswap "liquidity pool created"
 
     _ <- liftIO getLine
     shutdown
