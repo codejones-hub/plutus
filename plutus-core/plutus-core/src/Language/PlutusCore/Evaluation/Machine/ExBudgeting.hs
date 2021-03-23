@@ -102,7 +102,7 @@ module Language.PlutusCore.Evaluation.Machine.ExBudgeting
     , ModelSubtractedSizes(..)
     , ModelOrientation(..)
     , ModelLinearSize(..)
-    , ModelMultiSizes(..)
+    , ModelMultipliedSizes(..)
     , ModelMinSize(..)
     , ModelMaxSize(..)
     , ModelSplitConst(..)
@@ -230,7 +230,7 @@ instance (PrettyDefaultBy config Integer, PrettyBy config exBudgetCat, Ord exBud
 -- | When we want to just evaluate the program we use the 'Restricting' mode with an enormous
 -- budget, so that evaluation costs of on-chain budgeting are reflected accurately in benchmarks.
 enormousBudget :: ExBudgetMode
-enormousBudget = Restricting . ExRestrictingBudget $ ExBudget (10^(10::Int)) (10^(10::Int))
+enormousBudget = Restricting . ExRestrictingBudget $ ExBudget (10^(20::Int)) (10^(20::Int))
 
 emptyExTally :: ExTally exBudgetCat
 emptyExTally = ExTally $ MonoidalHashMap HashMap.empty
@@ -369,12 +369,12 @@ data ModelLinearSize = ModelLinearSize
         '[FieldLabelModifier (StripPrefix "modelLinearSize", CamelToSnake)] ModelLinearSize
 
 -- | s * (x * y) + I
-data ModelMultiSizes = ModelMultiSizes
-    { modelMultiSizesIntercept :: Double
-    , modelMultiSizesSlope     :: Double
+data ModelMultipliedSizes = ModelMultipliedSizes
+    { modelMultipliedSizesIntercept :: Double
+    , modelMultipliedSizesSlope     :: Double
     } deriving (Show, Eq, Generic, Lift, NFData)
     deriving (FromJSON, ToJSON) via CustomJSON
-        '[FieldLabelModifier (StripPrefix "modelMultiSizes", CamelToSnake)] ModelMultiSizes
+        '[FieldLabelModifier (StripPrefix "modelMultipliedSizes", CamelToSnake)] ModelMultipliedSizes
 
 -- | s * min(x, y) + I
 data ModelMinSize = ModelMinSize
@@ -404,7 +404,7 @@ data ModelTwoArguments =
       ModelTwoArgumentsConstantCost    Integer
     | ModelTwoArgumentsAddedSizes      ModelAddedSizes
     | ModelTwoArgumentsSubtractedSizes ModelSubtractedSizes
-    | ModelTwoArgumentsMultiSizes      ModelMultiSizes
+    | ModelTwoArgumentsMultipliedSizes ModelMultipliedSizes
     | ModelTwoArgumentsMinSize         ModelMinSize
     | ModelTwoArgumentsMaxSize         ModelMaxSize
     | ModelTwoArgumentsSplitConstMulti ModelSplitConst
@@ -425,28 +425,28 @@ runTwoArgumentModel
     (ModelTwoArgumentsConstantCost c) _ _ = c
 runTwoArgumentModel
     (ModelTwoArgumentsAddedSizes (ModelAddedSizes intercept slope)) (ExMemory size1) (ExMemory size2) =
-        ceiling $ (fromInteger (size1 + size2)) * slope + intercept -- TODO is this even correct? If not, adjust the other implementations too.
+        ceiling $ (10000 *) $ (fromInteger (size1 + size2)) * slope + intercept -- TODO is this even correct? If not, adjust the other implementations too.
 runTwoArgumentModel
     (ModelTwoArgumentsSubtractedSizes (ModelSubtractedSizes intercept slope minSize)) (ExMemory size1) (ExMemory size2) =
-        ceiling $ (max minSize (fromInteger (size1 - size2))) * slope + intercept
+        ceiling $ (10000 *) $ (max minSize (fromInteger (size1 - size2))) * slope + intercept
 runTwoArgumentModel
-    (ModelTwoArgumentsMultiSizes (ModelMultiSizes intercept slope)) (ExMemory size1) (ExMemory size2) =
-        ceiling $ (fromInteger (size1 * size2)) * slope + intercept
+    (ModelTwoArgumentsMultipliedSizes (ModelMultipliedSizes intercept slope)) (ExMemory size1) (ExMemory size2) =
+        ceiling $ (10000 *) $ (fromInteger (size1 * size2)) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsMinSize (ModelMinSize intercept slope)) (ExMemory size1) (ExMemory size2) =
-        ceiling $ (fromInteger (min size1 size2)) * slope + intercept
+        ceiling $ (10000 *) $ (fromInteger (min size1 size2)) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsMaxSize (ModelMaxSize intercept slope)) (ExMemory size1) (ExMemory size2) =
-        ceiling $ (fromInteger (max size1 size2)) * slope + intercept
+        ceiling $ (10000 *) $ (fromInteger (max size1 size2)) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsSplitConstMulti (ModelSplitConst intercept slope)) (ExMemory size1) (ExMemory size2) =
-        ceiling $ (if (size1 > size2) then (fromInteger size1) * (fromInteger size2) else 0) * slope + intercept
+        ceiling $ (10000 *) $ (if (size1 > size2) then (fromInteger size1) * (fromInteger size2) else 0) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsLinearSize (ModelLinearSize intercept slope ModelOrientationX)) (ExMemory size1) (ExMemory _) =
-        ceiling $ (fromInteger size1) * slope + intercept
+        ceiling $ (10000 *) $ (fromInteger size1) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsLinearSize (ModelLinearSize intercept slope ModelOrientationY)) (ExMemory _) (ExMemory size2) =
-        ceiling $ (fromInteger size2) * slope + intercept
+        ceiling $ (10000 *) $ (fromInteger size2) * slope + intercept
 
 data ModelThreeArguments =
     ModelThreeArgumentsConstantCost Integer
@@ -461,7 +461,7 @@ instance Default ModelThreeArguments where
 runThreeArgumentModel :: ModelThreeArguments -> ExMemory -> ExMemory -> ExMemory -> Integer
 runThreeArgumentModel (ModelThreeArgumentsConstantCost i) _ _ _ = i
 runThreeArgumentModel (ModelThreeArgumentsAddedSizes (ModelAddedSizes intercept slope)) (ExMemory size1) (ExMemory size2) (ExMemory size3) =
-    ceiling $ (fromInteger (size1 + size2 + size3)) * slope + intercept
+    ceiling $ (10000 *) $ (fromInteger (size1 + size2 + size3)) * slope + intercept
 
 runCostingFunThreeArguments :: CostingFun ModelThreeArguments -> ExMemory -> ExMemory -> ExMemory -> ExBudget
 runCostingFunThreeArguments (CostingFun cpu mem) mem1 mem2 mem3 =

@@ -32,7 +32,7 @@ import           System.Random
 type UntypedPlain f (uni :: GHC.Type -> GHC.Type) (fun :: GHC.Type) = f Name uni fun ()
 
 
--- Not totally sure what's going on here.  `env` is supposed to procude data
+-- Not totally sure what's going on here.  `env` is supposed to produce data
 -- that will be supplied to the things being benchmarked.  Here we've got a term
 -- and we evaluate it to get back the budget consumed, but then we throw that away
 -- and evaluate the term again.  This may have the effect of avoiding warmup, but
@@ -75,8 +75,9 @@ createTwoTermBuiltinBench name as bs =
 
         as
 
--- TODO: create a similar function for comparisons, but given a list [x1,x2, ...]
--- just do the benchmarking on (x1,x1), (x2,x2), ... since that is the worst case.
+-- ^ TODO: create a similar function for (integer and bytestring) comparisons,
+-- but given a list [x1,x2, ...]  just do the benchmarking on (x1,x1), (x2,x2), ...
+-- since that is the worst case.
 
 benchComparison :: [Benchmark]
 benchComparison = (\n -> runTermBench ("CalibratingBench/ExMemory " <> show n) (erase $ createRecursiveTerm n)) <$> [1..20]

@@ -3,6 +3,7 @@
 -- string names. I.e. 'Unique's are used instead of string names. This is for efficiency reasons.
 -- The CEK machines handles name capture by design.
 
+{-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DeriveAnyClass        #-}
@@ -168,9 +169,17 @@ data ExBudgetCategory fun
     | BDelay
     | BForce
     | BError
-    | BBuiltin         -- Cost of evaluating a Builtin AST node
-    | BBuiltinApp fun  -- Cost of evaluating a fully applied builtin function
+    | BBuiltin       -- Cost of evaluating a Builtin AST node
+    | BApplyLam      -- Apply a LamAbs
+    | BApplyBiInit   -- Apply a builtin to a non-final argument
+    | BApplyBiFinal  -- Apply a builtin to its final argument (no more forces afterwards)
+    | BForceDelay    -- ((force (delay ...))
+    | BForceBiInit   -- Interleaved force of builtin
+    | BForceBiFinal  -- Final force of builtin  (no more term arguments afterwards)
+    | BBuiltinExe fun -- Cost of evaluating a fully applied builtin function
     | BAST
+    | BCompute
+    | BReturn
     deriving stock (Show, Eq, Ord, Generic)
     deriving anyclass (NFData, Hashable)
 instance Show fun => PrettyBy config (ExBudgetCategory fun) where
@@ -234,7 +243,7 @@ dischargeCekValEnv valEnv =
     -- substitution function any more and so we will terminate.
     termSubstFreeNames $ \name -> do
         val <- lookupName name valEnv
-        Just $ dischargeCekValue val
+        Just $! dischargeCekValue val
 
 -- Convert a CekValue into a term by replacing all bound variables with the terms
 -- they're bound to (which themselves have to be obtain by recursively discharging values).
@@ -243,9 +252,9 @@ dischargeCekValue
     => CekValue uni fun -> TermWithMem uni fun
 dischargeCekValue = \case
     VCon     ex val                     -> Constant ex val
-    VDelay   ex body env                -> Delay ex (dischargeCekValEnv env body)
-    VLamAbs  ex name body env           -> LamAbs ex name (dischargeCekValEnv env body)
-    VBuiltin ex bn arity0 _ forces args -> mkBuiltinApplication ex bn arity0 forces (fmap dischargeCekValue args)
+    VDelay   ex body env                -> Delay ex $! (dischargeCekValEnv env body)
+    VLamAbs  ex name body env           -> LamAbs ex name $!(dischargeCekValEnv env body)
+    VBuiltin ex bn arity0 _ forces args -> mkBuiltinApplication ex bn arity0 forces $! (fmap dischargeCekValue args)
     {- We only discharge a value when (a) it's being returned by the machine,
        or (b) it's needed for an error message.  When we're discharging VBuiltin
        we use arity0 to get the type and term arguments into the right sequence. -}
@@ -271,7 +280,7 @@ instance ToExMemory (CekValue uni fun) where
         VBuiltin ex _ _ _ _ _ -> ex
 
 instance ExBudgetBuiltin fun (ExBudgetCategory fun) where
-    exBudgetBuiltin = BBuiltinApp
+    exBudgetBuiltin = BBuiltinExe
 
 instance MonadEmitter (CekCarryingM term uni fun s) where
     emit str = do
@@ -345,8 +354,8 @@ lookupVarName varName varEnv = do
 -- us to count the number of times each node type is evaluated.  We may wish to
 -- change this later if it turns out that different node types have
 -- significantly different costs.
-astNodeCost :: ExBudget
-astNodeCost = ExBudget 1 0
+unitCpuCost :: ExBudget
+unitCpuCost = ExBudget 1 0
 
 -- | The computing part of the CEK machine.
 -- Either
@@ -362,36 +371,43 @@ computeCek
     => Context uni fun -> CekValEnv uni fun -> TermWithMem uni fun -> CekM uni fun s (Term Name uni fun ())
 -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
 computeCek ctx env (Var _ varName) = do
-    spendBudget BVar astNodeCost
+--    spendBudget BCompute unitCpuCost
+    spendBudget BVar unitCpuCost
     val <- lookupVarName varName env
     returnCek ctx val
 computeCek ctx _ (Constant ex val) = do
-    spendBudget BConst astNodeCost
+--    spendBudget BCompute unitCpuCost
+    spendBudget BConst unitCpuCost
     returnCek ctx (VCon ex val)
 computeCek ctx env (LamAbs ex name body) = do
-    spendBudget BLamAbs astNodeCost
+--    spendBudget BCompute unitCpuCost
+    spendBudget BLamAbs unitCpuCost
     returnCek ctx (VLamAbs ex name body env)
 computeCek ctx env (Delay ex body) = do
-    spendBudget BDelay astNodeCost
+--    spendBudget BCompute unitCpuCost
+    spendBudget BDelay unitCpuCost
     returnCek ctx (VDelay ex body env)
 -- s ; ρ ▻ lam x L  ↦  s ◅ lam x (L , ρ)
 computeCek ctx env (Force _ body) = do
-    spendBudget BForce astNodeCost
+--    spendBudget BCompute unitCpuCost
+    spendBudget BForce unitCpuCost
     computeCek (FrameForce : ctx) env body
 -- s ; ρ ▻ [L M]  ↦  s , [_ (M,ρ)]  ; ρ ▻ L
 computeCek ctx env (Apply _ fun arg) = do
-    spendBudget BApply astNodeCost
+--    spendBudget BCompute unitCpuCost
+    spendBudget BApply unitCpuCost
     computeCek (FrameApplyArg env arg : ctx) env fun
 -- s ; ρ ▻ abs α L  ↦  s ◅ abs α (L , ρ)
 -- s ; ρ ▻ con c  ↦  s ◅ con c
 -- s ; ρ ▻ builtin bn  ↦  s ◅ builtin bn arity arity [] [] ρ
 computeCek ctx _ (Builtin ex bn) = do
-    spendBudget BBuiltin astNodeCost
+--    spendBudget BCompute unitCpuCost
+    spendBudget BBuiltin unitCpuCost
     BuiltinRuntime _ arity _ _ <- asksM $ lookupBuiltin bn . cekEnvRuntime
     returnCek ctx (VBuiltin ex bn arity arity 0 [])
 -- s ; ρ ▻ error A  ↦  <> A
 computeCek _ _ (Error _) = do
-    spendBudget BError astNodeCost
+    spendBudget BError unitCpuCost
     throwing_ _EvaluationFailure
 -- s ; ρ ▻ x  ↦  s ◅ ρ[ x ]
 -- | Call 'dischargeCekValue' over the received 'CekVal' and feed the resulting 'Term' to
@@ -426,14 +442,18 @@ returnCek
 -- . ◅ V           ↦  [] V
 returnCek [] val = pure $ void $ dischargeCekValue val
 -- s , {_ A} ◅ abs α M  ↦  s ; ρ ▻ M [ α / A ]*
-returnCek (FrameForce : ctx) fun = forceEvaluate ctx fun
+returnCek (FrameForce : ctx) fun = do
+--  spendBudget BReturn unitCpuCost
+  forceEvaluate ctx fun
 -- s , [_ (M,ρ)] ◅ V  ↦  s , [V _] ; ρ ▻ M
 returnCek (FrameApplyArg argVarEnv arg : ctx) fun = do
-    computeCek (FrameApplyFun fun : ctx) argVarEnv arg
+--  spendBudget BReturn unitCpuCost
+  computeCek (FrameApplyFun fun : ctx) argVarEnv arg
 -- s , [(lam x (M,ρ)) _] ◅ V  ↦  s ; ρ [ x  ↦  V ] ▻ M
 -- FIXME: add rule for VBuiltin once it's in the specification.
 returnCek (FrameApplyFun fun : ctx) arg = do
-    applyEvaluate ctx fun arg
+--  spendBudget BReturn unitCpuCost
+  applyEvaluate ctx fun arg
 
 {- Note [Accumulating arguments].  The VBuiltin value contains lists of type and
 term arguments which grow as new arguments are encountered.  In the code below
@@ -459,7 +479,9 @@ forceEvaluate
        , Hashable fun, Ix fun
        )
     => Context uni fun -> CekValue uni fun -> CekM uni fun s (Term Name uni fun ())
-forceEvaluate ctx (VDelay _ body env) = computeCek ctx env body
+forceEvaluate ctx (VDelay _ body env) = do
+--  spendBudget BForceDelay unitCpuCost
+  computeCek ctx env body
 forceEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) =
     case arity of
       []             ->
@@ -472,8 +494,12 @@ forceEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) =
                         where val' = VBuiltin ex bn arity0 arity (forces + 1) args -- reconstruct the bad application
       TypeArg:arity' ->
           case arity' of
-            [] -> applyBuiltin ctx bn args  -- Final argument is a type argument
-            _  -> returnCek ctx $ VBuiltin ex bn arity0 arity' (forces + 1) args -- More arguments expected
+            [] -> do
+--                 spendBudget BForceBiFinal unitCpuCost
+                 applyBuiltin ctx bn args  -- Final argument is a type argument
+            _  -> do
+--                 spendBudget BForceBiInit unitCpuCost
+                 returnCek ctx $ VBuiltin ex bn arity0 arity' (forces + 1) args -- More arguments expected
 forceEvaluate _ val =
         throwingDischarged _MachineError NonPolymorphicInstantiationMachineError val
 
@@ -491,7 +517,8 @@ applyEvaluate
     -> CekValue uni fun   -- lhs of application
     -> CekValue uni fun   -- rhs of application
     -> CekM uni fun s (Term Name uni fun ())
-applyEvaluate ctx (VLamAbs _ name body env) arg =
+applyEvaluate ctx (VLamAbs _ name body env) arg = do
+--    spendBudget BApplyLam unitCpuCost
     computeCek ctx (extendEnv name arg env) body
 applyEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) arg = do
     case arity of
@@ -502,8 +529,12 @@ applyEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) arg = do
       TermArg:arity' -> do
           let args' = args ++ [arg]
           case arity' of
-            [] -> applyBuiltin ctx bn args' -- 'arg' was the final argument
-            _  -> returnCek ctx $ VBuiltin ex bn arity0 arity' forces args'  -- More arguments expected
+            [] -> do
+                 spendBudget BApplyBiFinal unitCpuCost
+                 applyBuiltin ctx bn args' -- 'arg' was the final argument
+            _  -> do
+--                 spendBudget BApplyBiInit unitCpuCost
+                 returnCek ctx $ VBuiltin ex bn arity0 arity' forces args'  -- More arguments expected
 applyEvaluate _ val _ = throwingDischarged _MachineError NonFunctionalApplicationMachineError val
 
 -- | Apply a builtin to a list of CekValue arguments
