@@ -405,3 +405,24 @@ executable tx-inject
         text -any,
         time-units -any,
         yaml -any
+
+-- | The PAB specialised to the Uniswap contract(s)
+executable uniswap-pab
+  import: lang
+  main-is: Main.hs
+  hs-source-dirs: uniswap
+  ghc-options:
+    -threaded
+  build-depends:
+    base >= 4.9 && < 5,
+    containers,
+    plutus-pab -any,
+    plutus-contract -any,
+    aeson -any,
+    freer-simple -any,
+    prettyprinter -any,
+    freer-extras -any,
+    playground-common -any,
+    row-types -any,
+    plutus-ledger -any,
+    plutus-use-cases -any
