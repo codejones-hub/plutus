@@ -9,7 +9,10 @@
 {-# LANGUAGE TypeApplications   #-}
 {-# LANGUAGE TypeFamilies       #-}
 {-# LANGUAGE TypeOperators      #-}
-module Main(main) where
+
+module Main
+    ( main
+    ) where
 
 import           Control.Monad                            (forM, forM_, void, when)
 import           Control.Monad.Freer                      (Eff, Member, reinterpret, type (~>))
@@ -83,24 +86,6 @@ main = void $ Simulator.runSimulationWith handlers $ do
             Success (Monoid.Last (Just (Uniswap.Created ca aa cb bb))) -> Just (ca, aa, cb, bb)
             _                                                          -> Nothing
     Simulator.logString @Uniswap $ "pool created " ++ show cres
-
-    let sp = Uniswap.SwapParams ada (coins Map.! "A") 1000 0
-    Simulator.logString @Uniswap $ "swapping: " ++ show (encode sp)
-{-
-    _ <- Simulator.callEndpointOnInstance (cids Map.! Wallet 3) "swap" sp
-    sres <- flip Simulator.waitForState (cids Map.! Wallet 3) $ \json -> case (fromJSON json :: Result (Monoid.Last Uniswap.UserContractState)) of
-        Success (Monoid.Last (Just (Uniswap.Swapped ca aa cb ab))) -> Just (ca, aa, cb, ab)
-        _                                                          -> Nothing
-    Simulator.logString @Uniswap $ "swapped: " ++ show sres
-
-    forM_ wallets $ \w -> do
-        let cid = cids Map.! w
-        _ <- Simulator.callEndpointOnInstance cid "funds" ()
-        v <- flip Simulator.waitForState cid $ \json -> case (fromJSON json :: Result (Monoid.Last Uniswap.UserContractState)) of
-                Success (Monoid.Last (Just (Uniswap.Funds v))) -> Just v
-                _                                              -> Nothing
-        Simulator.logString @Uniswap $ "funds in wallet " ++ show w ++ ": " ++ show v
--}
 
     _ <- liftIO getLine
     shutdown
