@@ -425,4 +425,5 @@ executable uniswap-pab
     playground-common -any,
     row-types -any,
     plutus-ledger -any,
-    plutus-use-cases -any
+    plutus-use-cases -any,
+    text

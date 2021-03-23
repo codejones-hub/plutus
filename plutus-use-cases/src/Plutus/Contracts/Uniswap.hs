@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveAnyClass             #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
@@ -29,13 +30,14 @@ module Plutus.Contracts.Uniswap
     , AddParams (..)
     , UniswapOwnerSchema, UniswapUserSchema, UserContractState (..)
     , start, create, add, remove, close, swap, pools
-    , userEndpoints
+    , ownerEndpoint, userEndpoints
     ) where
 
 import           Control.Monad                    hiding (fmap)
 import qualified Data.Map                         as Map
 import           Data.Monoid                      (Last (..))
 import           Data.Text                        (Text, pack)
+import           Data.Void                        (Void)
 import           Ledger                           hiding (singleton)
 import           Ledger.Constraints               as Constraints
 import           Ledger.Constraints.OnChain       as Constraints
@@ -603,9 +605,8 @@ type UniswapUserSchema =
 
 -- | Creates a Uniswap "factory". This factory will keep track of the existing liquidity pools and enforce that there will be at most one liquidity pool
 -- for any pair of tokens at any given time.
-start :: Contract (Last Uniswap) UniswapOwnerSchema Text ()
+start :: HasBlockchainActions s => Contract w s Text Uniswap
 start = do
-    ()  <- endpoint @"start"
     pkh <- pubKeyHash <$> ownPubKey
     cs  <- fmap Currency.currencySymbol $
            mapError (pack . show @Currency.CurrencyError) $
@@ -618,7 +619,7 @@ start = do
     void $ awaitTxConfirmed $ txId ledgerTx
 
     logInfo @String $ printf "started Uniswap %s at address %s" (show us) (show $ uniswapAddress us)
-    tell $ Last $ Just us
+    return us
 
 -- | Type of the Uniswap user contract state.
 data UserContractState =
@@ -936,6 +937,13 @@ findSwapA oldA oldB inA
 
 findSwapB :: Integer -> Integer -> Integer -> Integer
 findSwapB oldA oldB = findSwapA oldB oldA
+
+ownerEndpoint :: Contract (Last (Either Text Uniswap)) BlockchainActions Void ()
+ownerEndpoint = do
+    e <- runError start
+    tell $ Last $ Just $ case e of
+        Left err -> Left err
+        Right us -> Right us
 
 -- | Provides the following endpoints for users of a Uniswap instance:
 --

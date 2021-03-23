@@ -22,6 +22,7 @@ import qualified Data.Map.Strict                          as Map
 import qualified Data.Monoid                              as Monoid
 import           Data.Row
 import qualified Data.Semigroup                           as Semigroup
+import           Data.Text                                (Text)
 import           Data.Text.Extras                         (tshow)
 import           Data.Text.Prettyprint.Doc                (Pretty (..), viaShow)
 import           GHC.Generics                             (Generic)
@@ -60,10 +61,9 @@ main = void $ Simulator.runSimulationWith handlers $ do
         ada   = Uniswap.Coin adaSymbol adaToken
 
     cidStart <- Simulator.activateContract (Wallet 1) UniswapStart
-    _        <- Simulator.callEndpointOnInstance cidStart "start" ()
-    us       <- flip Simulator.waitForState cidStart $ \json -> case fromJSON json of
-                    Success (Monoid.Last (Just us)) -> Just (us :: Uniswap.Uniswap)
-                    _                               -> Nothing
+    us       <- flip Simulator.waitForState cidStart $ \json -> case (fromJSON json :: Result (Monoid.Last (Either Text Uniswap.Uniswap))) of
+                    Success (Monoid.Last (Just (Right us))) -> Just us
+                    _                                       -> Nothing
     Simulator.logString @Uniswap $ "Uniswap instance created: " ++ show us
 
     cids <- fmap Map.fromList $ forM wallets $ \w -> do
@@ -85,6 +85,8 @@ main = void $ Simulator.runSimulationWith handlers $ do
     Simulator.logString @Uniswap $ "pool created " ++ show cres
 
     let sp = Uniswap.SwapParams ada (coins Map.! "A") 1000 0
+    Simulator.logString @Uniswap $ "swapping: " ++ show (encode sp)
+{-
     _ <- Simulator.callEndpointOnInstance (cids Map.! Wallet 3) "swap" sp
     sres <- flip Simulator.waitForState (cids Map.! Wallet 3) $ \json -> case (fromJSON json :: Result (Monoid.Last Uniswap.UserContractState)) of
         Success (Monoid.Last (Just (Uniswap.Swapped ca aa cb ab))) -> Just (ca, aa, cb, ab)
@@ -98,6 +100,7 @@ main = void $ Simulator.runSimulationWith handlers $ do
                 Success (Monoid.Last (Just (Uniswap.Funds v))) -> Just v
                 _                                              -> Nothing
         Simulator.logString @Uniswap $ "funds in wallet " ++ show w ++ ": " ++ show v
+-}
 
     _ <- liftIO getLine
     shutdown
@@ -143,7 +146,7 @@ handleUniswapContract = \case
             -- (needs some instances for the Marlowe types (MarloweParams, etc))
     where
         init          = first tshow initContract
-        start         = first tshow Uniswap.start
+        start         = first tshow Uniswap.ownerEndpoint
         userEndpoints = first tshow . Uniswap.userEndpoints
 
 handlers :: SimulatorEffectHandlers Uniswap
