@@ -90,7 +90,7 @@ tttt = checkPredicate "ZCB Auto Execute Contract"
                 ))] 20 Close
 
     bobHdl <- Trace.activateContractWallet bob marlowePlutusContract
-    bobCompanionHdl <- Trace.activateContractWallet bob marloweCompanionContract
+    bobCompanionHdl <- Trace.activateContract bob marloweCompanionContract "bob companion"
     aliceHdl <- Trace.activateContractWallet alice marlowePlutusContract
 
     -- Bob will wait for the contract to appear on chain
