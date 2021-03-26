@@ -243,6 +243,11 @@ quotientInteger cpuModelR = do
 remainderInteger :: MonadR m => (SomeSEXP (Region m)) -> m (CostingFun ModelTwoArguments)
 remainderInteger = quotientInteger
 
+eqInteger :: MonadR m => (SomeSEXP (Region m)) -> m (CostingFun ModelTwoArguments)
+eqInteger cpuModelR = do
+  cpuModel <- readModelMinSize cpuModelR
+  pure $ CostingFun (ModelTwoArgumentsMinSize cpuModel) boolMemModel
+
 lessThanInteger :: MonadR m => (SomeSEXP (Region m)) -> m (CostingFun ModelTwoArguments)
 lessThanInteger cpuModelR = do
   cpuModel <- readModelMinSize cpuModelR
@@ -258,11 +263,6 @@ lessThanEqInteger cpuModelR = do
 
 greaterThanEqInteger :: MonadR m => (SomeSEXP (Region m)) -> m (CostingFun ModelTwoArguments)
 greaterThanEqInteger = lessThanEqInteger
-
-eqInteger :: MonadR m => (SomeSEXP (Region m)) -> m (CostingFun ModelTwoArguments)
-eqInteger cpuModelR = do
-  cpuModel <- readModelMinSize cpuModelR
-  pure $ CostingFun (ModelTwoArgumentsMinSize cpuModel) boolMemModel
 
 eqByteString :: MonadR m => (SomeSEXP (Region m)) -> m (CostingFun ModelTwoArguments)
 eqByteString cpuModelR = do
