@@ -760,19 +760,32 @@ printBudgetStateTally (Cek.CekExTally costs) = do
   putStrLn $ "Builtin    " ++ pbudget Cek.BBuiltin
   putStrLn ""
   putStrLn $ "AST        " ++ pbudget Cek.BAST
-  putStrLn $ "compute    " ++ printf "%-20s" (budgetToString totalComputeSteps)
+  putStrLn $ "compute    " ++ printf "%-20f" totalComputeSteps
   putStrLn $ "BuiltinApp " ++ budgetToString (mconcat (map snd builtinsAndCosts))
   putStrLn ""
   traverse_ (\(b,cost) -> putStrLn $ printf "%-20s %s" (show b) (budgetToString cost :: String)) builtinsAndCosts
+  putStrLn ""
+  let
+  --      comp::Double = getCPU $ getSpent Cek.BCompute
+      builtinExeTimes::Double = getCPU $ mconcat (map snd builtinsAndCosts)
+--      builtinAdjustment = 1.9e-3*(getCPU $ getSpent Cek.BApplyBiFinal)
+      prediction1 = 1e9*(1.894e-1 + 1.206e-4*totalComputeSteps + 4.328e-9*builtinExeTimes)  -- lower times for prime
+      prediction2 = 1e9*(7.8567e-5*totalComputeSteps + builtinExeTimes/1e8)
+      prediction3 = 1e9*(2.326e-1 + 1.186e-4 * totalComputeSteps + 4.337e-9*builtinExeTimes)
+  putStrLn $ printf "Predicted execution time 1: %s" (formatTime prediction1)
+  putStrLn $ printf "Predicted execution time 2: %s" (formatTime prediction2)
+  putStrLn $ printf "Predicted execution time 3: %s" (formatTime prediction3)
       where
-        get k =
+        getCPU b = let ExCPU b' = _exBudgetCPU b in fromIntegral b'::Double
+        getSpent k =
             case H.lookup k costs of
               Just v  -> v
               Nothing -> ExBudget 0 0
         allNodeTags = [Cek.BConst, Cek.BVar, Cek.BLamAbs, Cek.BApply, Cek.BDelay, Cek.BForce, Cek.BError, Cek.BBuiltin]
-        totalComputeSteps = mconcat $ map get allNodeTags  -- Depends on the fact that we have a unit cost for each AST node type
+        totalComputeSteps = getCPU. mconcat $ map getSpent allNodeTags
+        -- ^ Depends on the fact that we have a unit cost for each AST node type
         budgetToString (ExBudget (ExCPU cpu) (ExMemory mem)) = printf "%10d  %10d" cpu mem :: String
-        pbudget k = budgetToString $ get k
+        pbudget k = budgetToString $ getSpent k
         f l e = case e of {(Cek.BBuiltinApp b, cost)  -> (b,cost):l; _ -> l}
         builtinsAndCosts = List.foldl f [] (H.toList costs)
 
