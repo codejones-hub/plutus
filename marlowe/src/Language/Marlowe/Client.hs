@@ -29,6 +29,7 @@ import           Data.Aeson                   (FromJSON, ToJSON)
 import qualified Data.Map.Strict              as Map
 import qualified Data.Set                     as Set
 import qualified Data.Text                    as T
+import           Debug.Trace
 import           GHC.Generics                 (Generic)
 import           Language.Marlowe.Semantics   hiding (Contract)
 import qualified Language.Marlowe.Semantics   as Marlowe
@@ -508,16 +509,20 @@ marloweCompanionContract :: Contract [MarloweData] MarloweCompanionSchema Marlow
 marloweCompanionContract = contracts
   where
     contracts = do
+        traceM "Start marloweCompanionContract"
         endpoint @"contracts"
+        traceM "Endpoint called"
         pkh <- pubKeyHash <$> ownPubKey
         let ownAddress = PubKeyAddress pkh
         utxo <- utxoAt ownAddress
         let txOuts = fmap (txOutTxOut . snd) $ Map.toList utxo
+        traceM "111"
         forM_ txOuts zzz
         cont ownAddress
     cont ownAddress = do
         txns <- nextTransactionsAt ownAddress
         let txOuts = txns >>= txOutputs
+        traceM $ "TxOuts on address " <> show ownAddress <> " : " <> show txOuts
         forM_ txOuts zzz
         cont ownAddress
 
@@ -525,8 +530,10 @@ marloweCompanionContract = contracts
 zzz :: TxOut -> Contract [MarloweData] MarloweCompanionSchema MarloweError ()
 zzz txout = do
     let curSymbols = filterRoles txout
+    traceM $ "zzz: " <> show curSymbols
     forM_ curSymbols $ \cs -> do
         contracts <- asdf cs
+        traceM $ "Contracts: " <> show contracts
         tell contracts
 
 
@@ -542,6 +549,7 @@ asdf curSym = do
     let params = marloweParams curSym
     let client = mkMarloweClient params
     maybeState <- SM.getOnChainState client
+    -- traceM $ "maybeState: " <> show maybeState
     case maybeState of
         Just ((st, _), _) -> do
             let marloweData = tyTxOutData st

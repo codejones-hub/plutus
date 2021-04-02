@@ -24,7 +24,7 @@ import           Language.Marlowe.Semantics
 import           Language.Marlowe.Util
 import           System.IO.Unsafe                      (unsafePerformIO)
 
-import           Data.Aeson                            (decode, encode)
+import           Data.Aeson                            (decode, encode, toJSON)
 import           Data.Aeson.Text                       (encodeToLazyText)
 import qualified Data.ByteString                       as BS
 import           Data.Either                           (isRight)
@@ -41,6 +41,7 @@ import qualified Plutus.Trace.Emulator                 as Trace
 import qualified PlutusTx.AssocMap                     as AssocMap
 import           PlutusTx.Lattice
 
+import           Debug.Trace
 import           Ledger                                hiding (Value)
 import qualified Ledger
 import           Ledger.Ada                            (lovelaceValueOf)
@@ -92,20 +93,18 @@ tttt = checkPredicate "ZCB Auto Execute Contract"
     bobHdl <- Trace.activateContractWallet bob marlowePlutusContract
     bobCompanionHdl <- Trace.activateContract bob marloweCompanionContract "bob companion"
     aliceHdl <- Trace.activateContractWallet alice marlowePlutusContract
+    -- Trace.callEndpoint @"contracts" bobCompanionHdl ()
 
     -- Bob will wait for the contract to appear on chain
 
     -- Init a contract
     Trace.callEndpoint @"create" aliceHdl (AssocMap.fromList [("bob", pubKeyHash $ walletPubKey bob)], zeroCouponBond)
     Trace.waitNSlots 1
-
-    -- Trace.callEndpoint @"auto" aliceHdl (params, alicePk, contractLifespan)
     Trace.waitNSlots 1
-
-    -- Return money to Alice
-    -- Trace.payToWallet carol alice defaultLovelaceAmount
     Trace.waitNSlots 1
     Trace.callEndpoint @"contracts" bobCompanionHdl ()
+    asdf <- Trace.getContractState bobCompanionHdl
+    traceM $ "getContractState " <> show (toJSON asdf)
 
     -- Now Alice should be able to retry and pay to Bob
     void $ Trace.waitNSlots 1
