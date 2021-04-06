@@ -46,6 +46,8 @@ import           Ledger                                hiding (Value)
 import qualified Ledger
 import           Ledger.Ada                            (lovelaceValueOf)
 import           Ledger.Typed.Scripts                  (scriptHash, validatorScript)
+import           Plutus.Contract.Types                 (_observableState)
+import           Plutus.Trace.Emulator.Types           (instContractState)
 import qualified PlutusTx.Prelude                      as P
 import           Spec.Marlowe.Common
 import           Test.Tasty
@@ -103,7 +105,8 @@ tttt = checkPredicate "ZCB Auto Execute Contract"
     Trace.waitNSlots 1
     Trace.waitNSlots 1
     Trace.callEndpoint @"contracts" bobCompanionHdl ()
-    asdf <- Trace.getContractState bobCompanionHdl
+    Trace.waitNSlots 1
+    asdf <- _observableState . instContractState <$> Trace.getContractState bobCompanionHdl
     traceM $ "getContractState " <> show (toJSON asdf)
 
     -- Now Alice should be able to retry and pay to Bob
