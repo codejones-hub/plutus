@@ -56,7 +56,6 @@ type CostModel = CostModelBase CostingFun
    in TestCostModel.hs so that Haskell and R results agree (which is why
    `toCostUnit` is exported).
 -}
-
 toCostUnit :: Double -> Integer
 toCostUnit x = ceiling (10000 * x)
 
@@ -218,7 +217,7 @@ runTwoArgumentModel
     (ModelTwoArgumentsConstantCost c) _ _ = toCostUnit c
 runTwoArgumentModel
     (ModelTwoArgumentsAddedSizes (ModelAddedSizes intercept slope)) (ExMemory size1) (ExMemory size2) =
-        toCostUnit $ (fromInteger (size1 + size2)) * slope + intercept -- TODO is this even correct? If not, adjust the other implementations too.
+        toCostUnit $ (fromInteger (size1 + size2)) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsSubtractedSizes (ModelSubtractedSizes intercept slope minSize)) (ExMemory size1) (ExMemory size2) =
         toCostUnit $ (max minSize (fromInteger (size1 - size2))) * slope + intercept

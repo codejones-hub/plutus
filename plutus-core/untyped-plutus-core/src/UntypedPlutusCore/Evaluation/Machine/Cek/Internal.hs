@@ -112,6 +112,12 @@ data ExBudgetCategory fun
     | BError
     | BBuiltin         -- Cost of evaluating a Builtin AST node
     | BBuiltinApp fun  -- Cost of evaluating a fully applied builtin function
+    | BAppLam
+    | BAppBI_nonfinal
+    | BAppBI_final
+    | BForceDelay
+    | BForceBI_nonfinal
+    | BForceBI_final
     | BAST
     deriving stock (Show, Eq, Ord, Generic)
     deriving anyclass (NFData, Hashable)
@@ -477,7 +483,7 @@ instead of lists.
 forceEvaluate
     :: Ix fun
     => Context uni fun -> CekValue uni fun -> CekM cost uni fun s (Term Name uni fun ())
-forceEvaluate ctx (VDelay _ body env) = computeCek ctx env body
+forceEvaluate ctx (VDelay _ body env) = spendBudget BForceDelay astNodeCost >> computeCek ctx env body
 forceEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) =
     case arity of
       []             ->
@@ -490,8 +496,10 @@ forceEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) =
                         where val' = VBuiltin ex bn arity0 arity (forces + 1) args -- reconstruct the bad application
       TypeArg:arity' ->
           case arity' of
-            [] -> applyBuiltin ctx bn args  -- Final argument is a type argument
-            _  -> returnCek ctx $ VBuiltin ex bn arity0 arity' (forces + 1) args -- More arguments expected
+            [] -> spendBudget BForceBI_final astNodeCost >>
+                  applyBuiltin ctx bn args  -- Final argument is a type argument
+            _  -> -- spendBudget BForceBI_nonfinal astNodeCost >>
+                  returnCek ctx $ VBuiltin ex bn arity0 arity' (forces + 1) args -- More arguments expected
 forceEvaluate _ val =
         throwingDischarged _MachineError NonPolymorphicInstantiationMachineError val
 
@@ -507,7 +515,7 @@ applyEvaluate
     -> CekValue uni fun   -- lhs of application
     -> CekValue uni fun   -- rhs of application
     -> CekM cost uni fun s (Term Name uni fun ())
-applyEvaluate ctx (VLamAbs _ name body env) arg =
+applyEvaluate ctx (VLamAbs _ name body env) arg = spendBudget BAppLam astNodeCost >>
     computeCek ctx (extendEnv name arg env) body
 applyEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) arg = do
     case arity of
@@ -518,8 +526,10 @@ applyEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) arg = do
       TermArg:arity' -> do
           let args' = args ++ [arg]
           case arity' of
-            [] -> applyBuiltin ctx bn args' -- 'arg' was the final argument
-            _  -> returnCek ctx $ VBuiltin ex bn arity0 arity' forces args'  -- More arguments expected
+            [] -> spendBudget BAppBI_final astNodeCost >>
+                  applyBuiltin ctx bn args' -- 'arg' was the final argument
+            _  -> -- spendBudget BAppBI_nonfinal astNodeCost >>
+                  returnCek ctx $ VBuiltin ex bn arity0 arity' forces args'  -- More arguments expected
 applyEvaluate _ val _ = throwingDischarged _MachineError NonFunctionalApplicationMachineError val
 
 -- | Apply a builtin to a list of CekValue arguments
