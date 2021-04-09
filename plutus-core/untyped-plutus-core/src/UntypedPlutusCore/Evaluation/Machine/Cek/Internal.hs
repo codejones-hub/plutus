@@ -411,7 +411,7 @@ computeCek ctx env (Apply _ fun arg) = do
 -- s ; ρ ▻ builtin bn  ↦  s ◅ builtin bn arity arity [] [] ρ
 computeCek ctx _ (Builtin ex bn) = do
     spendBudget BBuiltin astNodeCost
-    BuiltinRuntime _ arity _ _ <- asksM $ lookupBuiltin bn . cekEnvRuntime
+    BuiltinRuntime sch arity f exF <- asksM $ lookupBuiltin bn . cekEnvRuntime
     returnCek ctx (VBuiltin ex bn arity arity 0 [])
 -- s ; ρ ▻ error A  ↦  <> A
 computeCek _ _ (Error _) = do
@@ -491,7 +491,7 @@ returnCek (FrameApplyFun  val@(VBuiltin ex bn arity0 arity forces args) : ctx) a
             [] -> do
                 let dischargeError = hoist $ withExceptT $ mapCauseInMachineException $ void . dischargeCekValue
                 BuiltinRuntime sch _ f exF <- asksM $ lookupBuiltin bn . cekEnvRuntime
-                result <- dischargeError $ applyTypeSchemed bn sch f exF args
+                result <- dischargeError $ applyTypeSchemed bn sch f exF args'
                 returnCek ctx result
             _  -> returnCek ctx $ VBuiltin ex bn arity0 arity' forces args'  -- More arguments expected
 returnCek _ _ =
