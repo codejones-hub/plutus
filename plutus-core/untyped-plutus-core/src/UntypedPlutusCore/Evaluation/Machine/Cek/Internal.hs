@@ -461,18 +461,12 @@ returnCek (FrameForce : ctx) val@(VBuiltin ex bn arity0 arity forces args) =
                         where val' = VBuiltin ex bn arity0 arity (forces + 1) args -- reconstruct the bad application
       TypeArg:arity' ->
           case arity' of
-            []        -> throwingDischarged _MachineError EmptyBuiltinArityMachineError val
-      -- Should be impossible: see forceEvaluate.
-            TypeArg:_ -> throwingDischarged _MachineError UnexpectedBuiltinTermArgumentMachineError val'
-                where val' = VBuiltin ex bn arity0 arity' (forces + 1) args -- reconstruct the bad application
-            TermArg:arity'' ->
-                case arity'' of
-                  [] -> do
-                        let dischargeError = hoist $ withExceptT $ mapCauseInMachineException $ void . dischargeCekValue
-                        BuiltinRuntime sch _ f exF <- asksM $ lookupBuiltin bn . cekEnvRuntime
-                        result <- dischargeError $ applyTypeSchemed bn sch f exF args
-                        returnCek ctx result
-                  _ -> returnCek ctx $ VBuiltin ex bn arity0 arity'' (forces + 1) args -- More arguments expected
+          [] -> do
+                 let dischargeError = hoist $ withExceptT $ mapCauseInMachineException $ void . dischargeCekValue
+                 BuiltinRuntime sch _ f exF <- asksM $ lookupBuiltin bn . cekEnvRuntime
+                 result <- dischargeError $ applyTypeSchemed bn sch f exF args
+                 returnCek ctx result
+          _ -> returnCek ctx $ VBuiltin ex bn arity0 arity' (forces + 1) args -- More arguments expected
 returnCek (FrameApplyArg argVarEnv arg : ctx) fun =
     computeCek (FrameApplyFun fun : ctx) argVarEnv arg
 -- s , [(lam x (M,ρ)) _] ◅ V  ↦  s ; ρ [ x  ↦  V ] ▻ M
