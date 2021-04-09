@@ -446,14 +446,56 @@ returnCek
 -- . ◅ V           ↦  [] V
 returnCek [] val = pure $ void $ dischargeCekValue val
 -- s , {_ A} ◅ abs α M  ↦  s ; ρ ▻ M [ α / A ]*
-returnCek (FrameForce : ctx) fun = forceEvaluate ctx fun
+returnCek (FrameForce : ctx) (VDelay _ body env) =
+    computeCek ctx env body
 -- s , [_ (M,ρ)] ◅ V  ↦  s , [V _] ; ρ ▻ M
-returnCek (FrameApplyArg argVarEnv arg : ctx) fun = do
+returnCek (FrameForce : ctx) val@(VBuiltin ex bn arity0 arity forces args) =
+    case arity of
+      []             ->
+          throwingDischarged _MachineError EmptyBuiltinArityMachineError val
+      TermArg:_      ->
+      {- This should be impossible if we don't have zero-arity builtins:
+         we will have found this case in an earlier call to forceEvaluate
+         or applyEvaluate and called applyBuiltin. -}
+          throwingDischarged _MachineError BuiltinTermArgumentExpectedMachineError val'
+                        where val' = VBuiltin ex bn arity0 arity (forces + 1) args -- reconstruct the bad application
+      TypeArg:arity' ->
+          case arity' of
+            []        -> throwingDischarged _MachineError EmptyBuiltinArityMachineError val
+      -- Should be impossible: see forceEvaluate.
+            TypeArg:_ -> throwingDischarged _MachineError UnexpectedBuiltinTermArgumentMachineError val'
+                where val' = VBuiltin ex bn arity0 arity' (forces + 1) args -- reconstruct the bad application
+            TermArg:arity'' ->
+                case arity'' of
+                  [] -> do
+                        let dischargeError = hoist $ withExceptT $ mapCauseInMachineException $ void . dischargeCekValue
+                        BuiltinRuntime sch _ f exF <- asksM $ lookupBuiltin bn . cekEnvRuntime
+                        result <- dischargeError $ applyTypeSchemed bn sch f exF args
+                        returnCek ctx result
+                  _ -> returnCek ctx $ VBuiltin ex bn arity0 arity'' (forces + 1) args -- More arguments expected
+returnCek (FrameApplyArg argVarEnv arg : ctx) fun =
     computeCek (FrameApplyFun fun : ctx) argVarEnv arg
 -- s , [(lam x (M,ρ)) _] ◅ V  ↦  s ; ρ [ x  ↦  V ] ▻ M
 -- FIXME: add rule for VBuiltin once it's in the specification.
-returnCek (FrameApplyFun fun : ctx) arg = do
-    applyEvaluate ctx fun arg
+returnCek (FrameApplyFun (VLamAbs _ name body env) : ctx) arg =
+    computeCek ctx (extendEnv name arg env) body
+returnCek (FrameApplyFun  val@(VBuiltin ex bn arity0 arity forces args) : ctx) arg = do
+  case arity of
+      []        -> throwingDischarged _MachineError EmptyBuiltinArityMachineError val
+                -- Should be impossible: see forceEvaluate.
+      TypeArg:_ -> throwingDischarged _MachineError UnexpectedBuiltinTermArgumentMachineError val'
+                   where val' = VBuiltin ex bn arity0 arity forces (args++[arg]) -- reconstruct the bad application
+      TermArg:arity' -> do
+          let args' = args ++ [arg]
+          case arity' of
+            [] -> do
+                let dischargeError = hoist $ withExceptT $ mapCauseInMachineException $ void . dischargeCekValue
+                BuiltinRuntime sch _ f exF <- asksM $ lookupBuiltin bn . cekEnvRuntime
+                result <- dischargeError $ applyTypeSchemed bn sch f exF args
+                returnCek ctx result
+            _  -> returnCek ctx $ VBuiltin ex bn arity0 arity' forces args'  -- More arguments expected
+returnCek _ _ =
+        throwingDischarged _MachineError NonPolymorphicInstantiationMachineError undefined  -- FIXME: this is wrong now
 
 {- Note [Accumulating arguments].  The VBuiltin value contains lists of type and
 term arguments which grow as new arguments are encountered.  In the code below
@@ -474,26 +516,6 @@ instead of lists.
 -- either apply the builtin to its arguments and return the result,
 -- or extend the value with @force@ and call returnCek;
 -- if v is anything else, fail.
-forceEvaluate
-    :: Ix fun
-    => Context uni fun -> CekValue uni fun -> CekM cost uni fun s (Term Name uni fun ())
-forceEvaluate ctx (VDelay _ body env) = computeCek ctx env body
-forceEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) =
-    case arity of
-      []             ->
-          throwingDischarged _MachineError EmptyBuiltinArityMachineError val
-      TermArg:_      ->
-      {- This should be impossible if we don't have zero-arity builtins:
-         we will have found this case in an earlier call to forceEvaluate
-         or applyEvaluate and called applyBuiltin. -}
-          throwingDischarged _MachineError BuiltinTermArgumentExpectedMachineError val'
-                        where val' = VBuiltin ex bn arity0 arity (forces + 1) args -- reconstruct the bad application
-      TypeArg:arity' ->
-          case arity' of
-            [] -> applyBuiltin ctx bn args  -- Final argument is a type argument
-            _  -> returnCek ctx $ VBuiltin ex bn arity0 arity' (forces + 1) args -- More arguments expected
-forceEvaluate _ val =
-        throwingDischarged _MachineError NonPolymorphicInstantiationMachineError val
 
 -- | Apply a function to an argument and proceed.
 -- If the function is a lambda 'lam x ty body' then extend the environment with a binding of @v@
@@ -501,41 +523,10 @@ forceEvaluate _ val =
 -- If the function is a builtin application then check that it's expecting a term argument, and if
 -- it's the final argument then apply the builtin to its arguments, return the result, or extend
 -- the value with the new argument and call 'returnCek'. If v is anything else, fail.
-applyEvaluate
-    :: Ix fun
-    => Context uni fun
-    -> CekValue uni fun   -- lhs of application
-    -> CekValue uni fun   -- rhs of application
-    -> CekM cost uni fun s (Term Name uni fun ())
-applyEvaluate ctx (VLamAbs _ name body env) arg =
-    computeCek ctx (extendEnv name arg env) body
-applyEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) arg = do
-    case arity of
-      []        -> throwingDischarged _MachineError EmptyBuiltinArityMachineError val
-                -- Should be impossible: see forceEvaluate.
-      TypeArg:_ -> throwingDischarged _MachineError UnexpectedBuiltinTermArgumentMachineError val'
-                   where val' = VBuiltin ex bn arity0 arity forces (args++[arg]) -- reconstruct the bad application
-      TermArg:arity' -> do
-          let args' = args ++ [arg]
-          case arity' of
-            [] -> applyBuiltin ctx bn args' -- 'arg' was the final argument
-            _  -> returnCek ctx $ VBuiltin ex bn arity0 arity' forces args'  -- More arguments expected
-applyEvaluate _ val _ = throwingDischarged _MachineError NonFunctionalApplicationMachineError val
 
 -- | Apply a builtin to a list of CekValue arguments
-applyBuiltin
-    :: Ix fun
-    => Context uni fun
-    -> fun
-    -> [CekValue uni fun]
-    -> CekM cost uni fun s (Term Name uni fun ())
-applyBuiltin ctx bn args = do
   -- Turn the cause of a possible failure, being a 'CekValue', into a 'Term'.
   -- See Note [Being generic over @term@ in 'CekM'].
-  let dischargeError = hoist $ withExceptT $ mapCauseInMachineException $ void . dischargeCekValue
-  BuiltinRuntime sch _ f exF <- asksM $ lookupBuiltin bn . cekEnvRuntime
-  result <- dischargeError $ applyTypeSchemed bn sch f exF args
-  returnCek ctx result
 
 -- See Note [Compilation peculiarities].
 -- | Evaluate a term using the CEK machine and keep track of costing, logging is optional.
