@@ -24,7 +24,7 @@ let
 
   # Get a `buildMachine` function that wraps a `mkMachine` call with the fake deployment option
   # in a `pkgs.nixos` call to build the machine outside of morph.
-  mkMachine = pkgs.callPackage ./mk-machine.nix { inherit plutus;inherit (tfinfo) rootSshKeys; extraImports = [ fakeDeploymentOption ]; };
+  mkMachine = pkgs.callPackage ./mk-machine.nix { inherit plutus tfinfo; extraImports = [ fakeDeploymentOption ]; };
   buildMachine = { config, name }: pkgs.nixos (mkMachine { inherit config name; });
 in
 import ./machines.nix {
