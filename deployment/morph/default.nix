@@ -1,7 +1,5 @@
+{ pkgs, plutus }:
 let
-  plutus = import ../../. { };
-  pkgs = plutus.pkgs;
-
   # Dummy definition of what is usually read from
   # the terraform local resource `machines.json`.
   # The attributes in below are read in `machines.nix`
