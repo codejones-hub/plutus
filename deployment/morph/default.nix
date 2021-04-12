@@ -5,12 +5,16 @@ let
   # The attributes in below are read in `machines.nix`
   tfinfo = {
     rootSshKeys = [ ];
+    rev = "dev";
     marloweDashA.dns = "marlowe-dash-a";
     marloweDashB.dns = "marlowe-dash-b";
     playgroundsA.dns = "playgrounds-a";
     playgroundsB.dns = "playgrounds-b";
     webghcA.dns = "webghc-a";
     webghcB.dns = "webghc-b";
+    environment = "alpha";
+    plutusTld = "plutus.iohkdev.io";
+    marloweTld = "marlowe.iohkdev.io";
   };
 
   # Fake `deployment` option definition so `pkgs.nixos` does not
