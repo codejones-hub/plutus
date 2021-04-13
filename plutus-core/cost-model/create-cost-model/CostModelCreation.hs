@@ -30,6 +30,8 @@ import           Foreign.R
 import           H.Prelude                                 (MonadR, Region, r)
 import           Language.R
 
+import           Debug.Trace
+
 {- See Note [Creation of the Cost Model]
 -}
 
@@ -141,7 +143,8 @@ unsafeReadModelFromR formula rmodel = do
         model     <- Data.Csv.decode HasHeader $ BSL.fromStrict $ T.encodeUtf8 $ (fromSomeSEXP j :: Text)
         intercept <- linearModelRawEstimate <$> findInRaw "(Intercept)" model
         slope     <- linearModelRawEstimate <$> findInRaw formula model
-        pure $ (intercept, slope)
+        trace ("Found intercept " Prelude.++ show intercept) $
+          pure $ (intercept, slope)
   case m of
     Left err -> throwM (TypeError err)
     Right x  -> pure x
