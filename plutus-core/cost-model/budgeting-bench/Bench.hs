@@ -275,8 +275,11 @@ main = do
   if csvExists then renameFile csvFile backupFile else pure ()
 
   defaultMainWith (defaultConfig { C.csvFile = Just csvFile })
-                      $  (benchTwoIntegers gen <$> [ Nop2]) <> (benchSameTwoIntegers gen <$> [Nop2])
-{-                                           AddInteger
+                      $  (benchTwoByteStrings <$> [Nop2b])
+                      <> (benchBytestringOperations <$> [Nop2ib])
+                      <> (benchHashOperations <$> [Nop1b])
+                    -- (benchTwoIntegers gen <$> [ Nop2]) <> (benchSameTwoIntegers gen <$> [Nop2])
+{-                                           (AddInteger
                                                    , SubtractInteger
                                                    , MultiplyInteger
                                                    , DivideInteger
@@ -290,11 +293,9 @@ main = do
                                                        , LessThanEqInteger
                                                        , GreaterThanEqInteger
                                                        ])
-                      <> (benchTwoByteStrings <$> [Concatenate])
-                      <> (benchBytestringOperations <$> [DropByteString, TakeByteString])
-                      <> (benchHashOperations <$> [SHA2, SHA3])
                       <> (benchSameTwoByteStrings <$> [ EqByteString
                                                       , LtByteString
                                                       , GtByteString
                                                       ])
-                      <> [benchVerifySignature] -}
+                      <> [benchVerifySignature]
+-}

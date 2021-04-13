@@ -76,7 +76,11 @@ data DefaultFun
     | CharToString
     | Append
     | Trace
-    | Nop2
+    | Nop1i
+    | Nop2i
+    | Nop1b
+    | Nop2b
+    | Nop2ib
     deriving (Show, Eq, Ord, Enum, Bounded, Generic, NFData, Hashable, Ix, PrettyBy PrettyConfigPlc)
 
 -- TODO: do we really want function names to be pretty-printed differently to what they are named as
@@ -107,7 +111,11 @@ instance Pretty DefaultFun where
     pretty CharToString         = "charToString"
     pretty Append               = "append"
     pretty Trace                = "trace"
-    pretty Nop2                 = "nop2"
+    pretty Nop1i                = "nop1i"
+    pretty Nop2i                = "nop2i"
+    pretty Nop1b                = "nop1b"
+    pretty Nop2b                = "nop2b"
+    pretty Nop2ib               = "nop2ib"
 
 instance ExMemoryUsage DefaultFun where
     memoryUsage _ = 1
@@ -224,9 +232,25 @@ instance (GShow uni, GEq uni, DefaultUni <: uni) => ToBuiltinMeaning uni Default
         makeBuiltinMeaning
             (emit :: String -> Emitter ())
             mempty  -- TODO: budget.
-    toBuiltinMeaning Nop2 =
+    toBuiltinMeaning Nop1i =
+        makeBuiltinMeaning
+            (\(_::Integer) -> ())
+            mempty  -- TODO: budget.
+    toBuiltinMeaning Nop2i =
         makeBuiltinMeaning
             (\(_::Integer) (_::Integer) -> ())
+            mempty  -- TODO: budget.
+    toBuiltinMeaning Nop1b =
+        makeBuiltinMeaning
+            (\(_::BS.ByteString) -> ())
+            mempty  -- TODO: budget.
+    toBuiltinMeaning Nop2b =
+        makeBuiltinMeaning
+            (\(_::BS.ByteString) (_::BS.ByteString) -> ())
+            mempty  -- TODO: budget.
+    toBuiltinMeaning Nop2ib =
+        makeBuiltinMeaning
+            (\(_::Integer) (_::BS.ByteString) -> ())
             mempty  -- TODO: budget.
 
 -- See Note [Stable encoding of PLC]
