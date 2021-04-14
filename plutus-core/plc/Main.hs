@@ -788,9 +788,9 @@ printBudgetStateTally (Cek.CekExTally costs) = do
                         (-6.525e-02)*(getCPU $ getSpent Cek.BConst) +
                         (-4.071e-02)*(getCPU $ getSpent Cek.BDelay) +
                          1.066e-08 *builtinExeTimes)
--}
-     --  prediction4 = 1e9*(1.244e-1 + 1.436e-4*totalComputeSteps + 1.655e-9*builtinExeTimes)
-      prediction4 = 2e9*(5e-5*totalComputeSteps + 1e-8*builtinExeTimes)
+ -}
+      prediction4 = 1e9*(1.244e-1 + 1.436e-4*totalComputeSteps + 1.655e-9*builtinExeTimes)
+--      prediction4 = 1e9*(3.1e-5*totalComputeSteps
   putStrLn $ printf "Predicted execution time 1: %s" (formatTime prediction1)
   putStrLn $ printf "Predicted execution time 2: %s" (formatTime prediction2)
   putStrLn $ printf "Predicted execution time 3: %s" (formatTime prediction3)
@@ -808,6 +808,7 @@ printBudgetStateTally (Cek.CekExTally costs) = do
         pbudget k = budgetToString $ getSpent k
 --        itof n = fromIntegral n :: Double
         pc k = printf "%10.1f%%" ((getCPU $ getSpent k)/totalComputeSteps * 100)
+        bapps = getSpent Cek.BAppBI_final
         f l e = case e of {(Cek.BBuiltinApp b, cost)  -> (b,cost):l; _ -> l}
         builtinsAndCosts = List.foldl f [] (H.toList costs)
 
