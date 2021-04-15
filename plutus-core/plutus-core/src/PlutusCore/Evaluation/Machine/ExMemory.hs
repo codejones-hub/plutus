@@ -153,4 +153,5 @@ instance ExMemoryUsage String where
   memoryUsage string = ExMemory $ (toInteger $ sum $ fmap sizeOf string) `div` 8
 
 withMemory :: ExMemoryUsage (f a) => Functor f => f a -> f ExMemory
-withMemory x = fmap (const (memoryUsage x)) x
+withMemory x = fmap (const 77) x
+

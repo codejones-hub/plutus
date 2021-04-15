@@ -58,6 +58,7 @@ applyTypeSchemed name = go where
             -- otherwise (i.e. if instead of using a pure 'toExMemory' we use a function supplying
             -- an argument to 'exF' in a monadic fashion) execution time skyrockets for some reason.
             let exF' = exF $ toExMemory arg
+
             -- Apply the function to the coerced argument and proceed recursively.
             case schB of
                 (TypeSchemeResult _) -> do

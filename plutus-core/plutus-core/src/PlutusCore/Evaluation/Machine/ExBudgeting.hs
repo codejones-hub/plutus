@@ -229,6 +229,7 @@ runTwoArgumentModel
         toCostUnit $ (fromInteger (min size1 size2)) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsMaxSize (ModelMaxSize intercept slope)) (ExMemory size1) (ExMemory size2) =
+--        trace (printf "max: intercept = %f, slope = %f; size1 = %s, size2 = %s\n" intercept slope (show size1) (show size2)) $
         toCostUnit $ (fromInteger (max size1 size2)) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsSplitConstMulti (ModelSplitConst intercept slope)) (ExMemory size1) (ExMemory size2) =

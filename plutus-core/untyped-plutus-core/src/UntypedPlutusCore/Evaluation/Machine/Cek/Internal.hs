@@ -547,6 +547,20 @@ applyBuiltin ctx bn args = do
   result <- dischargeError $ applyTypeSchemed bn sch f exF args
   returnCek ctx result
 
+fixMem
+    :: (Closed uni, uni `Everywhere` ExMemoryUsage)
+    => Term Name uni fun ()
+    -> Term Name uni fun ExMemory
+fixMem t0 =
+    case t0 of
+      Constant () v    -> Constant (memoryUsage v) v
+      Builtin () b     -> Builtin 1 b
+      Var () name      -> Var 1 name
+      LamAbs () name t -> LamAbs 1 name (fixMem t)
+      Apply () t1 t2   -> Apply 1 (fixMem t1) (fixMem t2)
+      Delay () t       -> Delay 1 (fixMem t)
+      Force () t       -> Force 1 (fixMem t)
+      Error ()         -> Error 1
 -- See Note [Compilation peculiarities].
 -- | Evaluate a term using the CEK machine and keep track of costing, logging is optional.
 runCek
@@ -563,4 +577,4 @@ runCek runtime mode emitting term =
         spendBudget BAST (ExBudget 0 (termAnn memTerm))
         computeCek [] mempty memTerm
   where
-    memTerm = withMemory term
+    memTerm = fixMem term
