@@ -72,6 +72,7 @@ unfoldings = testNested "unfoldings" [
     , goldenPir "andExternal" andPlcExternal
     , goldenPir "allDirect" allPlcDirect
     , goldenPir "mutualRecursionUnfoldings" mutualRecursionUnfoldings
+    , goldenUPlcCatch "mutualRecursionUnfoldingsLocal" mutualRecursionUnfoldingsLocal
     , goldenPir "recordSelector" recordSelector
     , goldenPir "recordSelectorExternal" recordSelectorExternal
     -- We used to have problems with polymorphic let bindings where the generalization was
@@ -96,6 +97,16 @@ andPlcDirect = plc (Proxy @"andPlcDirect") (andDirect True False)
 andPlcExternal :: CompiledCode Bool
 andPlcExternal = plc (Proxy @"andPlcExternal") (andExternal True False)
 
+
+{-# INLINABLE evenDirectLocal #-}
+evenDirectLocal :: Integer -> Bool
+evenDirectLocal n = if Builtins.equalsInteger n 0 then True else oddDirectLocal (Builtins.subtractInteger n 1)
+
+{-# INLINABLE oddDirectLocal #-}
+oddDirectLocal :: Integer -> Bool
+oddDirectLocal n = if Builtins.equalsInteger n 0 then False else evenDirectLocal (Builtins.subtractInteger n 1)
+
+
 -- self-recursion
 allDirect :: (a -> Bool) -> [a] -> Bool
 allDirect p l = case l of
@@ -107,6 +118,9 @@ allPlcDirect = plc (Proxy @"andPlcDirect") (allDirect (\(x::Integer) -> Builtins
 
 mutualRecursionUnfoldings :: CompiledCode Bool
 mutualRecursionUnfoldings = plc (Proxy @"mutualRecursionUnfoldings") (evenDirect 4)
+
+mutualRecursionUnfoldingsLocal :: CompiledCode Bool
+mutualRecursionUnfoldingsLocal = plc (Proxy @"mutualRecursionUnfoldingsLocal") (evenDirectLocal 4)
 
 recordSelector :: CompiledCode (MyMonoRecord -> Integer)
 recordSelector = plc (Proxy @"recordSelector") (\(x :: MyMonoRecord) -> mrA x)
