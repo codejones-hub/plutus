@@ -73,6 +73,7 @@ import           Control.Monad.Writer
 import           Data.Bifunctor
 import           Data.ByteString.Short
 import           Data.Either
+import           Data.Proxy
 import qualified Data.Text                                         as Text
 import           Data.Text.Prettyprint.Doc
 import           Data.Tuple
@@ -181,7 +182,7 @@ evaluateScriptRestricting verbose model budget p args = swap $ runWriter @LogOut
     let (res, _, logs) =
             UPLC.runCek
                 (toBuiltinsRuntime model)
-                (UPLC.restricting $ PLC.ExRestrictingBudget budget)
+                (UPLC.restricting (Proxy @PLC.DefaultUni) (PLC.ExRestrictingBudget budget))
                 (verbose == Verbose)
                 appliedTerm
 
