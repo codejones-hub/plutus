@@ -124,8 +124,11 @@ runCostingFunOneArgument
         ExBudget (ExCPU (runOneArgumentModel cpu mem1)) (ExMemory (runOneArgumentModel mem mem1))
 
 runOneArgumentModel :: ModelOneArgument -> ExMemory -> Integer
-runOneArgumentModel (ModelOneArgumentConstantCost c) _ = toCostUnit c
+runOneArgumentModel (ModelOneArgumentConstantCost c) _ =
+ -- trace (printf "const 2: %f" c) $
+    toCostUnit c
 runOneArgumentModel (ModelOneArgumentLinearCost (ModelLinearSize intercept slope _)) (ExMemory s) =
+    -- trace (printf "Linear 1: intercept = %f, slope = %f; size = %s\n" intercept slope (show s) (show s)) $
     toCostUnit $ (fromInteger s) * slope + intercept
 
 -- | s * (x + y) + I
@@ -214,31 +217,40 @@ runCostingFunTwoArguments (CostingFun cpu mem) mem1 mem2 =
 
 runTwoArgumentModel :: ModelTwoArguments -> ExMemory -> ExMemory -> Integer
 runTwoArgumentModel
-    (ModelTwoArgumentsConstantCost c) _ _ = toCostUnit c
+    (ModelTwoArgumentsConstantCost c) _ _ =
+        -- trace (printf "const 2: %f" c) $
+        toCostUnit c
 runTwoArgumentModel
     (ModelTwoArgumentsAddedSizes (ModelAddedSizes intercept slope)) (ExMemory size1) (ExMemory size2) =
+        -- trace (printf "added: intercept = %f, slope = %f; size1 = %s, size2 = %s\n" intercept slope (show size1) (show size2)) $
         toCostUnit $ (fromInteger (size1 + size2)) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsSubtractedSizes (ModelSubtractedSizes intercept slope minSize)) (ExMemory size1) (ExMemory size2) =
+        -- trace (printf "subtracted: intercept = %f, slope = %f; size1 = %s, size2 = %s\n" intercept slope (show size1) (show size2)) $
         toCostUnit $ (max minSize (fromInteger (size1 - size2))) * slope + intercept
 runTwoArgumentModel
-    (ModelTwoArgumentsMultipliedSizes (ModelMultipliedSizes intercept slope)) (ExMemory size1) (ExMemory size2) =
+     (ModelTwoArgumentsMultipliedSizes (ModelMultipliedSizes intercept slope)) (ExMemory size1) (ExMemory size2) =
+        -- trace (printf "multiplied: intercept = %f, slope = %f; size1 = %s, size2 = %s\n" intercept slope (show size1) (show size2)) $
         toCostUnit $ (fromInteger (size1 * size2)) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsMinSize (ModelMinSize intercept slope)) (ExMemory size1) (ExMemory size2) =
+        -- trace (printf "min: intercept = %f, slope = %f; size1 = %s, size2 = %s\n" intercept slope (show size1) (show size2)) $
         toCostUnit $ (fromInteger (min size1 size2)) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsMaxSize (ModelMaxSize intercept slope)) (ExMemory size1) (ExMemory size2) =
---        trace (printf "max: intercept = %f, slope = %f; size1 = %s, size2 = %s\n" intercept slope (show size1) (show size2)) $
+        -- trace (printf "max: intercept = %f, slope = %f; size1 = %s, size2 = %s\n" intercept slope (show size1) (show size2)) $
         toCostUnit $ (fromInteger (max size1 size2)) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsSplitConstMulti (ModelSplitConst intercept slope)) (ExMemory size1) (ExMemory size2) =
+        -- trace (printf "multi: intercept = %f, slope = %f; size1 = %s, size2 = %s\n" intercept slope (show size1) (show size2)) $
         toCostUnit $ (if (size1 > size2) then (fromInteger size1) * (fromInteger size2) else 0) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsLinearSize (ModelLinearSize intercept slope ModelOrientationX)) (ExMemory size1) (ExMemory _) =
+        -- trace (printf "linear X: intercept = %f, slope = %f; size1 = %s\n" intercept slope (show size1)) $
         toCostUnit $ (fromInteger size1) * slope + intercept
 runTwoArgumentModel
     (ModelTwoArgumentsLinearSize (ModelLinearSize intercept slope ModelOrientationY)) (ExMemory _) (ExMemory size2) =
+        -- trace (printf "linear Y: intercept = %f, slope = %f; size1 = %s\n" intercept slope (show size2)) $
         toCostUnit $ (fromInteger size2) * slope + intercept
 
 data ModelThreeArguments =
@@ -246,14 +258,18 @@ data ModelThreeArguments =
   | ModelThreeArgumentsAddedSizes ModelAddedSizes
     deriving (Show, Eq, Generic, Lift, NFData)
     deriving (FromJSON, ToJSON) via CustomJSON
-        '[SumTaggedObject "type" "arguments", ConstructorTagModifier (StripPrefix "ModelThreeArguments", CamelToSnake)] ModelThreeArguments
+    '[SumTaggedObject "type" "arguments", ConstructorTagModifier (StripPrefix "ModelThreeArguments", CamelToSnake)] ModelThreeArguments
 
 instance Default ModelThreeArguments where
     def = ModelThreeArgumentsConstantCost 1.0
 
 runThreeArgumentModel :: ModelThreeArguments -> ExMemory -> ExMemory -> ExMemory -> Integer
-runThreeArgumentModel (ModelThreeArgumentsConstantCost c) _ _ _ = toCostUnit c
+runThreeArgumentModel (ModelThreeArgumentsConstantCost c) _ _ _ =
+    -- trace (printf "const 3: %f" c) $
+    toCostUnit c
 runThreeArgumentModel (ModelThreeArgumentsAddedSizes (ModelAddedSizes intercept slope)) (ExMemory size1) (ExMemory size2) (ExMemory size3) =
+    -- trace (printf "added 3: intercept = %f, slope = %f; size1 = %s, size1 = %s, size1 = %s\n"
+    --                   intercept slope (show size1) (show size2) (show size3) )$
     toCostUnit $ (fromInteger (size1 + size2 + size3)) * slope + intercept
 
 runCostingFunThreeArguments :: CostingFun ModelThreeArguments -> ExMemory -> ExMemory -> ExMemory -> ExBudget
