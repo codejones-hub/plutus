@@ -62,9 +62,7 @@ allow one to specify an 'ExBudgetMode'. I.e. such functions are only for fully e
 
 -- | Evaluate a term using the CEK machine with logging disabled and keep track of costing.
 runCekNoEmit
-    :: ( Closed uni, uni `Everywhere` ExMemoryUsage
-       , Ix fun, ExMemoryUsage fun
-       )
+    :: ( Closed uni, uni `Everywhere` ExMemoryUsage, Ix fun)
     => BuiltinsRuntime fun (CekValue uni fun)
     -> ExBudgetMode cost uni fun
     -> Term Name uni fun ()
@@ -78,7 +76,7 @@ runCekNoEmit runtime mode term =
 unsafeRunCekNoEmit
     :: ( GShow uni, Typeable uni
        , Closed uni, uni `EverywhereAll` '[ExMemoryUsage, PrettyConst]
-       , Ix fun, Pretty fun, Typeable fun, ExMemoryUsage fun
+       , Ix fun, Pretty fun, Typeable fun
        )
     => BuiltinsRuntime fun (CekValue uni fun)
     -> ExBudgetMode cost uni fun
@@ -89,9 +87,7 @@ unsafeRunCekNoEmit runtime mode =
 
 -- | Evaluate a term using the CEK machine with logging enabled.
 evaluateCek
-    :: ( Closed uni, uni `Everywhere` ExMemoryUsage
-       , Ix fun, ExMemoryUsage fun
-       )
+    :: ( Closed uni, uni `Everywhere` ExMemoryUsage, Ix fun)
     => BuiltinsRuntime fun (CekValue uni fun)
     -> Term Name uni fun ()
     -> (Either (CekEvaluationException uni fun) (Term Name uni fun ()), [String])
@@ -101,9 +97,7 @@ evaluateCek runtime term =
 
 -- | Evaluate a term using the CEK machine with logging disabled.
 evaluateCekNoEmit
-    :: ( Closed uni, uni `Everywhere` ExMemoryUsage
-       , Ix fun, ExMemoryUsage fun
-       )
+    :: ( Closed uni, uni `Everywhere` ExMemoryUsage, Ix fun)
     => BuiltinsRuntime fun (CekValue uni fun)
     -> Term Name uni fun ()
     -> Either (CekEvaluationException uni fun) (Term Name uni fun ())
@@ -113,7 +107,7 @@ evaluateCekNoEmit runtime = fst . runCekNoEmit runtime restrictingEnormous
 unsafeEvaluateCek
     :: ( GShow uni, Typeable uni
        , Closed uni, uni `EverywhereAll` '[ExMemoryUsage, PrettyConst]
-       , Ix fun, Pretty fun, Typeable fun, ExMemoryUsage fun
+       , Ix fun, Pretty fun, Typeable fun
        )
     => BuiltinsRuntime fun (CekValue uni fun)
     -> Term Name uni fun ()
@@ -124,7 +118,7 @@ unsafeEvaluateCek runtime = first unsafeExtractEvaluationResult . evaluateCek ru
 unsafeEvaluateCekNoEmit
     :: ( GShow uni, Typeable uni
        , Closed uni, uni `EverywhereAll` '[ExMemoryUsage, PrettyConst]
-       , Ix fun, Pretty fun, Typeable fun, ExMemoryUsage fun
+       , Ix fun, Pretty fun, Typeable fun
        )
     => BuiltinsRuntime fun (CekValue uni fun)
     -> Term Name uni fun ()
@@ -135,7 +129,7 @@ unsafeEvaluateCekNoEmit runtime = unsafeExtractEvaluationResult . evaluateCekNoE
 readKnownCek
     :: ( Closed uni, uni `Everywhere` ExMemoryUsage
        , KnownType (Term Name uni fun ()) a
-       , Ix fun, ExMemoryUsage fun
+       , Ix fun
        )
     => BuiltinsRuntime fun (CekValue uni fun)
     -> Term Name uni fun ()

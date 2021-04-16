@@ -565,11 +565,11 @@ runCek runtime mode emitting term =
     memTerm = withMemory term
     withMemory =
         \case
-         Constant () v    -> Constant (memoryUsage v) v
-         Builtin () b     -> Builtin 1 b
-         Var () name      -> Var 1 name
-         LamAbs () name t -> LamAbs 1 name (withMemory t)
-         Apply () t1 t2   -> Apply 1 (withMemory t1) (withMemory t2)
-         Delay () t       -> Delay 1 (withMemory t)
-         Force () t       -> Force 1 (withMemory t)
-         Error ()         -> Error 1
+         Constant () v      -> Constant (memoryUsage v) v
+         Builtin  () b      -> Builtin  1 b
+         Var      () name   -> Var      1 name
+         LamAbs   () name t -> LamAbs   1 name (withMemory t)
+         Apply    () t1 t2  -> Apply    1 (withMemory t1) (withMemory t2)
+         Delay    () t      -> Delay    1 (withMemory t)
+         Force    () t      -> Force    1 (withMemory t)
+         Error    ()        -> Error    1
