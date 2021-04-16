@@ -1,4 +1,9 @@
 { pkgs, config, lib, tfinfo, ... }:
+let
+  marlowe-playground = pkgs.hello;
+  plutus-playground = pkgs.hello;
+  plutus-docs = pkgs.hello;
+in
 {
 
   imports = [
@@ -15,7 +20,7 @@
     enable = true;
     port = 4001;
     frontendURL = "https://${tfinfo.environment}.${tfinfo.marloweTld}";
-    playground-server-package = pkgs.marlowe-playground.server;
+    playground-server-package = marlowe-playground;
   };
 
   services.plutus-playground = {
@@ -23,7 +28,7 @@
     port = 4000;
     webghcURL = "http://${tfinfo.environment}.${tfinfo.plutusTld}";
     frontendURL = "https://${tfinfo.environment}.${tfinfo.plutusTld}";
-    playground-server-package = pkgs.plutus-playground.server;
+    playground-server-package = plutus-playground;
   };
 
   services.nginx =
@@ -69,14 +74,14 @@
               proxyPass = "http://plutus-playground";
             };
             "/" = {
-              root = "${pkgs.plutus-playground.client}";
+              root = "${plutus-playground}";
               extraConfig = ''
                 ${staticFileCacheControl}
                 error_page 404 = @fallback;
               '';
             };
             "^~ /doc/" = {
-              alias = "${pkgs.plutus-docs.site}/";
+              alias = "${plutus-docs}/";
               extraConfig = ''
                 error_page 404 = @fallback;
               '';
@@ -100,14 +105,14 @@
               proxyPass = "http://marlowe-playground";
             };
             "/" = {
-              root = "${pkgs.marlowe-playground.client}";
+              root = "${marlowe-playground}";
               extraConfig = ''
                 ${staticFileCacheControl}
                 error_page 404 = @fallback;
               '';
             };
             "^~ /doc/" = {
-              alias = "${pkgs.plutus-docs.site}/";
+              alias = "${plutus-docs}/";
               extraConfig = ''
                 error_page 404 = @fallback;
               '';

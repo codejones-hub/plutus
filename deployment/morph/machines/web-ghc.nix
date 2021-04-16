@@ -1,4 +1,7 @@
 { pkgs, config, lib, tfinfo, ... }:
+let
+  web-ghc = pkgs.hello;
+in
 {
 
   imports = [
@@ -14,7 +17,7 @@
     web-ghc = {
       enable = true;
       port = 80;
-      web-ghc-package = pkgs.web-ghc;
+      web-ghc-package = web-ghc;
     };
   };
 

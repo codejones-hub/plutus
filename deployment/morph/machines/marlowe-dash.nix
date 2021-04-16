@@ -1,4 +1,10 @@
 { pkgs, config, lib, tfinfo, ... }:
+let
+  marlowe-app = pkgs.hello;
+  marlowe-companion-app = pkgs.hello;
+  plutus-pab = pkgs.hello;
+  marlowe-dashboard = pkgs.hello;
+in
 {
   imports = [
     ./std.nix
@@ -11,9 +17,9 @@
 
   services.pab = {
     enable = true;
-    pab-package = pkgs.plutus-pab.pab-exes.plutus-pab;
-    contracts = [ "${pkgs.marlowe-app}/bin/marlowe-app" "${pkgs.marlowe-companion-app}/bin/marlowe-companion-app" ];
-    staticContent = pkgs.marlowe-dashboard.client;
+    pab-package = plutus-pab;
+    contracts = [ "${marlowe-app}/bin/marlowe-app" "${marlowe-companion-app}/bin/marlowe-companion-app" ];
+    staticContent = marlowe-dashboard;
     dbFile = "/var/lib/pab/pab-core.db";
     defaultWallet = 1;
     webserverPort = 9080;
