@@ -1,7 +1,8 @@
 -- | The API to the CEK machine.
 
-{-# LANGUAGE DataKinds     #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DataKinds        #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators    #-}
 
 module UntypedPlutusCore.Evaluation.Machine.Cek
     ( EvaluationResult(..)
@@ -89,7 +90,8 @@ unsafeRunCekNoEmit runtime mode =
 
 -- | Evaluate a term using the CEK machine with logging enabled.
 evaluateCek
-    :: ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
+    :: forall uni fun
+    . ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
     => BuiltinsRuntime fun (CekValue uni fun)
     -> Term Name uni fun ()
     -> (Either (CekEvaluationException uni fun) (Term Name uni fun ()), [String])
@@ -99,7 +101,8 @@ evaluateCek runtime term =
 
 -- | Evaluate a term using the CEK machine with logging disabled.
 evaluateCekNoEmit
-    :: ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
+    :: forall uni fun
+    . ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
     => BuiltinsRuntime fun (CekValue uni fun)
     -> Term Name uni fun ()
     -> Either (CekEvaluationException uni fun) (Term Name uni fun ())
