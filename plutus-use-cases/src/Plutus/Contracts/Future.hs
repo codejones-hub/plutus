@@ -19,7 +19,7 @@
 {-# OPTIONS_GHC -fno-strictness #-}
 {-# OPTIONS_GHC -fno-ignore-interface-pragmas #-}
 {-# OPTIONS_GHC -fno-omit-interface-pragmas #-}
-{-# OPTIONS -fplugin-opt PlutusTx.Plugin:debug-context #-}
+{-# OPTIONS_GHC -fplugin-opt PlutusTx.Plugin:debug-context #-}
 module Plutus.Contracts.Future(
     -- $future
       Future(..)
@@ -50,6 +50,7 @@ import           Control.Monad.Error.Lens         (throwing)
 import qualified Control.Monad.Freer              as Freer
 import qualified Control.Monad.Freer.Error        as Freer
 import           Data.Aeson                       (FromJSON, ToJSON)
+import           Data.Default                     (Default (..))
 import           GHC.Generics                     (Generic)
 import           Ledger                           (Address, Datum (..), PubKey, Slot (..), Validator, ValidatorHash,
                                                    pubKeyHash)
@@ -633,7 +634,7 @@ testAccounts =
         $ Freer.runError @Folds.EmulatorFoldErr
         $ Stream.foldEmulatorStreamM fld
         $ Stream.takeUntilSlot 10
-        $ Trace.runEmulatorStream Trace.defaultEmulatorConfig setupTokensTrace
+        $ Trace.runEmulatorStream def setupTokensTrace
 
 setupTokensTrace :: Trace.EmulatorTrace ()
 setupTokensTrace = do

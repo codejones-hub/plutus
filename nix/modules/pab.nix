@@ -29,6 +29,7 @@ let
       mscSocketPath = "/tmp/node-server.sock";
       mscSlotLength = 5;
       mscRandomTxInterval = 20000000;
+      mscKeptBlocks = 100000;
       mscBlockReaper = {
         brcInterval = 6000000;
         brcBlocksToKeep = 100000;
@@ -107,7 +108,7 @@ in
 
     webserverPort = mkOption {
       type = types.port;
-      default = 8080;
+      default = 9080;
       description = ''
         Port of the pab 'webserver' component.
       '';
