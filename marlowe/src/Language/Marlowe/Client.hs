@@ -115,6 +115,7 @@ marloweFollowContract = follow
   where
     follow = do
         params <- endpoint @"follow"
+        logError @String "Here"
         tell ["Params: " <> show params]
         let go timeout = do
                 wr <- SM.waitForUpdateUntil (mkMarloweClient params) timeout
