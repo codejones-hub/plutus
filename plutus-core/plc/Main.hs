@@ -762,12 +762,12 @@ printBudgetStateTally (Cek.CekExTally costs) = do
   putStrLn ""
   putStrLn $ "AST        " ++ pbudget Cek.BAST
   putStrLn $ "BuiltinApp " ++ budgetToString (mconcat (map snd builtinsAndCosts))
-  putStrLn $ "AppLam     " ++ pbudget Cek.BAppLam
-  putStrLn $ "AppBI_1    " ++ pbudget Cek.BAppBI_nonfinal
-  putStrLn $ "AppBI_2    " ++ pbudget Cek.BAppBI_final
-  putStrLn $ "ForceDelay " ++ pbudget Cek.BForceDelay
-  putStrLn $ "ForceBI_1  " ++ pbudget Cek.BForceBI_nonfinal
-  putStrLn $ "ForceBI_2  " ++ pbudget Cek.BForceBI_final
+--  putStrLn $ "AppLam     " ++ pbudget Cek.BAppLam
+--  putStrLn $ "AppBI_1    " ++ pbudget Cek.BAppBI_nonfinal
+--  putStrLn $ "AppBI_2    " ++ pbudget Cek.BAppBI_final
+--  putStrLn $ "ForceDelay " ++ pbudget Cek.BForceDelay
+--  putStrLn $ "ForceBI_1  " ++ pbudget Cek.BForceBI_nonfinal
+--  putStrLn $ "ForceBI_2  " ++ pbudget Cek.BForceBI_final
   putStrLn ""
   traverse_ (\(b,cost) -> putStrLn $ printf "%-20s %s" (show b) (budgetToString cost :: String)) builtinsAndCosts
   putStrLn ""
@@ -808,7 +808,7 @@ printBudgetStateTally (Cek.CekExTally costs) = do
         pbudget k = budgetToString $ getSpent k
 --        itof n = fromIntegral n :: Double
         pc k = printf "%10.1f%%" ((getCPU $ getSpent k)/totalComputeSteps * 100)
-        bapps = getSpent Cek.BAppBI_final
+--        bapps = getSpent Cek.BAppBI_final
         f l e = case e of {(Cek.BBuiltinApp b, cost)  -> (b,cost):l; _ -> l}
         builtinsAndCosts = List.foldl f [] (H.toList costs)
 
