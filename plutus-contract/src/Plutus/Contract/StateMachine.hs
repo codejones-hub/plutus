@@ -185,7 +185,8 @@ data WaitingResult a
     = Timeout Slot
     | ContractEnded
     | WaitingResult a
-  deriving (Show)
+  deriving (Show,Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 
 -- | Wait for the on-chain state of the state machine instance to change until timeoutSlot,

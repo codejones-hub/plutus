@@ -26,7 +26,7 @@ module Language.Marlowe.Client where
 import           Control.Lens
 import           Control.Monad                (forM_)
 import           Control.Monad.Error.Lens     (catching, throwing)
-import           Data.Aeson                   (FromJSON, ToJSON, parseJSON, toJSON)
+import           Data.Aeson                   (FromJSON, ToJSON, encode, parseJSON, toJSON)
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as Map
 import qualified Data.Set                     as Set
@@ -63,13 +63,15 @@ type MarloweSchema =
     BlockchainActions
         .\/ Endpoint "create" (AssocMap.Map Val.TokenName PubKeyHash, Marlowe.Contract)
         .\/ Endpoint "apply-inputs" (MarloweParams, Maybe SlotInterval, [Input])
-        .\/ Endpoint "wait" MarloweParams
         .\/ Endpoint "auto" (MarloweParams, Party, Slot)
         .\/ Endpoint "redeem" (MarloweParams, TokenName, PubKeyHash)
         .\/ Endpoint "close" ()
 
 
 type MarloweCompanionSchema = BlockchainActions
+type MarloweFollowSchema =
+        BlockchainActions
+            .\/ Endpoint "follow" MarloweParams
 
 
 data MarloweError =
@@ -106,11 +108,34 @@ data PartyAction
 
 type RoleOwners = AssocMap.Map Val.TokenName PubKeyHash
 
-type MarloweContractState = ()
+type MarloweContractState = [MarloweData]
+
+marloweFollowContract :: Contract [String] MarloweFollowSchema MarloweError ()
+marloweFollowContract = follow
+  where
+    follow = do
+        params <- endpoint @"follow"
+        tell ["Params: " <> show params]
+        let go timeout = do
+                wr <- SM.waitForUpdateUntil (mkMarloweClient params) timeout
+                tell ["State " <> show (encode wr)]
+                case wr of
+                    ContractEnded -> do
+                        tell ["Contract Ended"]
+                        pure ()
+                    Timeout _ -> do
+                        tell ["Contract Timeout"]
+                        go (timeout + 5)
+                    WaitingResult marloweData -> do
+                        tell [show marloweData]
+                        go (timeout + 5)
+        go 5
+
+
 
 marlowePlutusContract :: Contract MarloweContractState MarloweSchema MarloweError ()
 marlowePlutusContract = do
-    create `select` apply `select` wait `select` auto `select` redeem `select` close
+    create `select` apply `select` auto `select` redeem `select` close
   where
     create = do
         (owners, contract) <- endpoint @"create"
@@ -126,10 +151,6 @@ marlowePlutusContract = do
         let lookups = Constraints.scriptInstanceLookups validatorInstance
         utx <- either (throwing _ConstraintResolutionError) pure (Constraints.mkTx lookups tx)
         submitTxConfirmed utx
-        marlowePlutusContract
-    wait = do
-        params <- endpoint @"wait"
-        _ <- SM.waitForUpdate (mkMarloweClient params)
         marlowePlutusContract
     apply = do
         (params, slotInterval, inputs) <- endpoint @"apply-inputs"
