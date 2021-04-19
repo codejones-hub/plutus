@@ -37,6 +37,7 @@ common lang
 
 library
     import: lang
+    ghc-options: -O2
     exposed-modules:
         PlutusCore
         PlutusCore.Quote
