@@ -393,12 +393,10 @@ instance MonadEmitter (CekM cost uni fun s) where
             Nothing      -> pure ()
             Just logsRef -> liftCekST $ modifySTRef logsRef (`DList.snoc` str)
 
--- We only need the @Eq fun@ constraint here and not anywhere else, because in other places we have
--- @Ix fun@ which implies @Ord fun@ which implies @Eq fun@.
-instance SpendBudget (CekM cost uni fun s) fun (ExBudgetCategory fun) where
-    spendBudget key budgetToSpend = do
-        ExBudgetInfo (CekBudgetSpender spend) _ <- asks cekEnvExBudgetInfo
-        spend key budgetToSpend
+spendBudgetCek :: ExBudgetCategory fun -> ExBudget -> CekM cost uni fun s ()
+spendBudgetCek key budgetToSpend = do
+    ExBudgetInfo (CekBudgetSpender spend) _ <- asks cekEnvExBudgetInfo
+    spend key budgetToSpend
 
 data Frame uni fun
     = FrameApplyFun (CekValue uni fun)                         -- ^ @[V _]@
@@ -469,37 +467,37 @@ enterComputeCek = computeCek where
         -> CekM cost uni fun s (Term Name uni fun ())
     -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
     computeCek ctx env (Var _ varName) = do
-        spendBudget BVar astNodeCost
+        spendBudgetCek BVar astNodeCost
         val <- lookupVarName varName env
         returnCek ctx val
     computeCek ctx _ (Constant ex val) = do
-        spendBudget BConst astNodeCost
+        spendBudgetCek BConst astNodeCost
         returnCek ctx (VCon ex val)
     computeCek ctx env (LamAbs ex name body) = do
-        spendBudget BLamAbs astNodeCost
+        spendBudgetCek BLamAbs astNodeCost
         returnCek ctx (VLamAbs ex name body env)
     computeCek ctx env (Delay ex body) = do
-        spendBudget BDelay astNodeCost
+        spendBudgetCek BDelay astNodeCost
         returnCek ctx (VDelay ex body env)
     -- s ; ρ ▻ lam x L  ↦  s ◅ lam x (L , ρ)
     computeCek ctx env (Force _ body) = do
-        spendBudget BForce astNodeCost
+        spendBudgetCek BForce astNodeCost
         computeCek (FrameForce : ctx) env body
     -- s ; ρ ▻ [L M]  ↦  s , [_ (M,ρ)]  ; ρ ▻ L
     computeCek ctx env (Apply _ fun arg) = do
-        spendBudget BApply astNodeCost
+        spendBudgetCek BApply astNodeCost
         computeCek (FrameApplyArg env arg : ctx) env fun
     -- s ; ρ ▻ abs α L  ↦  s ◅ abs α (L , ρ)
     -- s ; ρ ▻ con c  ↦  s ◅ con c
     -- s ; ρ ▻ builtin bn  ↦  s ◅ builtin bn arity arity [] [] ρ
     computeCek ctx _ (Builtin ex bn) = do
-        spendBudget BBuiltin astNodeCost
+        spendBudgetCek BBuiltin astNodeCost
         rt <- asks cekEnvRuntime
         BuiltinRuntime _ arity _ _ <- lookupBuiltinExc (Proxy @(CekEvaluationException uni fun)) bn rt
         returnCek ctx (VBuiltin ex bn arity arity 0 [])
     -- s ; ρ ▻ error A  ↦  <> A
     computeCek _ _ (Error _) = do
-        spendBudget BError astNodeCost
+        spendBudgetCek BError astNodeCost
         throwingCek _EvaluationFailure ()
 
     {- | The returning phase of the CEK machine.
@@ -605,10 +603,13 @@ enterComputeCek = computeCek where
       rt <- asks cekEnvRuntime
       BuiltinRuntime sch _ f exF <- lookupBuiltinExc (Proxy @(CekEvaluationException uni fun)) bn rt
 
+      let
+          spender :: fun -> ExBudget -> ExceptT e (CekM cost uni fun s) ()
+          spender key b = lift $ spendBudgetCek (exBudgetBuiltin key) b
       -- ''applyTypeSchemed' doesn't throw exceptions so that we can easily catch them here and
       -- post-process them.
       -- See Note [Being generic over @term@ in 'CekM'].
-      resultOrErr <- runExceptT $ applyTypeSchemed bn sch f exF args
+      resultOrErr <- runExceptT $ applyTypeSchemed spender bn sch f exF args
       case resultOrErr of
           -- Turn the cause of a possible failure, being a 'CekValue', into a 'Term'.
           Left e       -> throwCek $ mapCauseInMachineException (void . dischargeCekValue) e
@@ -625,7 +626,7 @@ runCek
     -> (Either (CekEvaluationException uni fun) (Term Name uni fun ()), cost, [String])
 runCek runtime mode emitting term =
     runCekM runtime mode emitting $ do
-        spendBudget BAST (ExBudget 0 (termAnn memTerm))
+        spendBudgetCek BAST (ExBudget 0 (termAnn memTerm))
         enterComputeCek [] mempty memTerm
   where
     memTerm = withMemory term
