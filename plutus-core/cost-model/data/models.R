@@ -57,6 +57,7 @@ benchData <- function(path) {
     
     mutated <- numbers %>% mutate_at(numbercols, function(x) { as.numeric(as.character(x))}) %>% mutate_at(c("BuiltinName"), as.character)
     cbind(dat, mutated) %>%
+        mutate_at(c("Mean", "MeanLB", "MeanUB", "Stddev", "StddevLB", "StddevUB"), function(x) { x - 1.33e-6 }) %>%  # Remove CEK/CAM overhead (from Nops)
         mutate_at(c("Mean", "MeanLB", "MeanUB", "Stddev", "StddevLB", "StddevUB"), function(x) { x * 1000 * 1000 })
 }
 

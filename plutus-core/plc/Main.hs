@@ -761,7 +761,7 @@ printBudgetStateTally (Cek.CekExTally costs) = do
   putStrLn $ "Builtin    " ++ pbudget Cek.BBuiltin    ++ pc Cek.BBuiltin
   putStrLn ""
   putStrLn $ "AST        " ++ pbudget Cek.BAST
-  putStrLn $ "BuiltinApp " ++ budgetToString (mconcat (map snd builtinsAndCosts))
+  putStrLn $ "BuiltinApp " ++ budgetToString2 (mconcat (map snd builtinsAndCosts))
 --  putStrLn $ "AppLam     " ++ pbudget Cek.BAppLam
 --  putStrLn $ "AppBI_1    " ++ pbudget Cek.BAppBI_nonfinal
 --  putStrLn $ "AppBI_2    " ++ pbudget Cek.BAppBI_final
@@ -769,32 +769,15 @@ printBudgetStateTally (Cek.CekExTally costs) = do
 --  putStrLn $ "ForceBI_1  " ++ pbudget Cek.BForceBI_nonfinal
 --  putStrLn $ "ForceBI_2  " ++ pbudget Cek.BForceBI_final
   putStrLn ""
-  traverse_ (\(b,cost) -> putStrLn $ printf "%-20s %s" (show b) (budgetToString cost :: String)) builtinsAndCosts
+  traverse_ (\(b,cost) -> putStrLn $ printf "%-20s %s" (show b) (budgetToString2 cost :: String)) builtinsAndCosts
   putStrLn ""
   let
-  --      comp::Double = getCPU $ getSpent Cek.BCompute
       builtinExeTimes::Double = getCPU $ mconcat (map snd builtinsAndCosts)
---      builtinAdjustment = 1.9e-3*(getCPU $ getSpent Cek.BApplyBiFinal)
-      prediction1 = 1e9*(1.894e-1 + 1.206e-4*totalComputeSteps + 4.328e-9*builtinExeTimes)  -- lower times for prime
+--      prediction1 = 1e9*(3.619e-1 + 1.056e-4*totalComputeSteps)
+      prediction1 = 1e9*(3.762e-1 + 1.076e-4*totalComputeSteps)
       prediction2 = 1e9*(7.8567e-5*totalComputeSteps + builtinExeTimes/1e8)
---      prediction3 = 1e9*(2.326e-1 + 1.186e-4 * totalComputeSteps + 4.337e-9*builtinExeTimes)
---      prediction3 = 1e9*(3.007e-4 + 7.5e-5*totalComputeSteps + 1e-7*builtinExeTimes)
-      prediction3 = 1e9*(1.244e-1 + 1.436e-4*totalComputeSteps + 1.655e-9*builtinExeTimes)
-{-      prediction4 = 1e9*(-3.920e-01 +
-                         2.901e-02*totalComputeSteps +
-                        (-3.978e-02)*(getCPU $ getSpent Cek.BVar) +
-                        (-2.852e-02)*(getCPU $ getSpent Cek.BLamAbs) +
-                        (-2.522e-02)*(getCPU $ getSpent Cek.BApply) +
-                        (-6.525e-02)*(getCPU $ getSpent Cek.BConst) +
-                        (-4.071e-02)*(getCPU $ getSpent Cek.BDelay) +
-                         1.066e-08 *builtinExeTimes)
- -}
-      prediction4 = 1e9*(1.244e-1 + 1.436e-4*totalComputeSteps + 1.655e-9*builtinExeTimes)
---      prediction4 = 1e9*(3.1e-5*totalComputeSteps
   putStrLn $ printf "Predicted execution time 1: %s" (formatTime prediction1)
   putStrLn $ printf "Predicted execution time 2: %s" (formatTime prediction2)
-  putStrLn $ printf "Predicted execution time 3: %s" (formatTime prediction3)
-  putStrLn $ printf "Predicted execution time 4: %s" (formatTime prediction4)
       where
         getCPU b = let ExCPU b' = _exBudgetCPU b in fromIntegral b'::Double
         getSpent k =
@@ -805,6 +788,8 @@ printBudgetStateTally (Cek.CekExTally costs) = do
         totalComputeSteps = getCPU. mconcat $ map getSpent allNodeTags
         -- ^ Depends on the fact that we have a unit cost for each AST node type
         budgetToString (ExBudget (ExCPU cpu) (ExMemory mem)) = printf "%10d  %10d" cpu mem :: String
+        budgetToString2 (ExBudget (ExCPU cpu) (ExMemory mem)) =
+            printf "%10f μs  %10d" ((fromIntegral cpu :: Double) / 10000) (mem `div` 10000) :: String
         pbudget k = budgetToString $ getSpent k
 --        itof n = fromIntegral n :: Double
         pc k = printf "%10.1f%%" ((getCPU $ getSpent k)/totalComputeSteps * 100)
