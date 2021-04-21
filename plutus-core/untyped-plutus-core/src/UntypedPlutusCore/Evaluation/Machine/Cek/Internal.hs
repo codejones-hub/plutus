@@ -632,8 +632,8 @@ runCek
     -> Term Name uni fun ()
     -> (Either (CekEvaluationException uni fun) (Term Name uni fun ()), cost, [String])
 runCek runtime mode emitting term =
+--    trace ("AST: " ++ show (size term)) $
     runCekM runtime mode emitting $ do
-        spendBudget BAST (ExBudget 0 (termAnn memTerm))
         enterComputeCek [] mempty memTerm
   where
     memTerm = withMemory term
@@ -654,3 +654,12 @@ runCek runtime mode emitting term =
          Delay    () t      -> Delay    1 (withMemory t)
          Force    () t      -> Force    1 (withMemory t)
          Error    ()        -> Error    1
+    size = \case
+         Constant () _     -> 1
+         Builtin  () _     -> 1
+         Var      () _     -> 1
+         LamAbs   () _ t   -> 1 + size t
+         Apply    () t1 t2 -> 1 + size t1 + size t2
+         Delay    () t     -> 1 + size t
+         Force    () t     -> 1 + size t
+         Error    ()       -> 1

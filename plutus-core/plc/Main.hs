@@ -777,7 +777,7 @@ printBudgetStateTally (Cek.CekExTally costs) = do
       prediction1 = 1e9*(3.762e-1 + 1.076e-4*totalComputeSteps)
 --      prediction2 = 1e9*(4.985e-1 + 6.859e-5*totalComputeSteps + builtinExeTimes/1000)
 --      prediction2 = 1e3*(7.021e-5*totalComputeSteps + builtinExeTimes/1000)
-      prediction2 = 1e6*(80*totalComputeSteps + builtinExeTimes/1000)
+      prediction2 = 1e6*(0.009 + 0.000114*totalComputeSteps + builtinExeTimes/1000)
   putStrLn $ printf "Predicted execution time 1: %s" (formatTime prediction1)
   putStrLn $ printf "Predicted execution time 2: %s" (formatTime prediction2)
       where

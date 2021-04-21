@@ -114,8 +114,8 @@
         },
         "cpu": {
             "arguments": {
-                "model_split_const_intercept": 0.494139394203015,
-                "model_split_const_slope": 5.06960096410547e-4
+                "model_split_const_slope": 2.47269e-2,
+                "model_split_const_intercept": 0.415762
             },
             "type": "split_const_multi"
         }
@@ -176,8 +176,8 @@
         },
         "cpu": {
             "arguments": {
-                "model_split_const_intercept": 0.494139394203015,
-                "model_split_const_slope": 5.06960096410547e-4
+                "model_split_const_slope": 2.47269e-2,
+                "model_split_const_intercept": 0.415762
             },
             "type": "split_const_multi"
         }
@@ -202,8 +202,8 @@
         },
         "cpu": {
             "arguments": {
-                "model_split_const_intercept": 0.494139394203015,
-                "model_split_const_slope": 5.06960096410547e-4
+                "model_split_const_slope": 2.47269e-2,
+                "model_split_const_intercept": 0.415762
             },
             "type": "split_const_multi"
         }
@@ -255,8 +255,8 @@
         },
         "cpu": {
             "arguments": {
-                "model_split_const_intercept": 0.494139394203015,
-                "model_split_const_slope": 5.06960096410547e-4
+                "model_split_const_slope": 2.47269e-2,
+                "model_split_const_intercept": 0.415762
             },
             "type": "split_const_multi"
         }
