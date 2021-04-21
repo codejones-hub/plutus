@@ -775,7 +775,9 @@ printBudgetStateTally (Cek.CekExTally costs) = do
       builtinExeTimes::Double = getCPU $ mconcat (map snd builtinsAndCosts)
 --      prediction1 = 1e9*(3.619e-1 + 1.056e-4*totalComputeSteps)
       prediction1 = 1e9*(3.762e-1 + 1.076e-4*totalComputeSteps)
-      prediction2 = 1e9*(7.8567e-5*totalComputeSteps + builtinExeTimes/1e8)
+--      prediction2 = 1e9*(4.985e-1 + 6.859e-5*totalComputeSteps + builtinExeTimes/1000)
+--      prediction2 = 1e3*(7.021e-5*totalComputeSteps + builtinExeTimes/1000)
+      prediction2 = 1e6*(80*totalComputeSteps + builtinExeTimes/1000)
   putStrLn $ printf "Predicted execution time 1: %s" (formatTime prediction1)
   putStrLn $ printf "Predicted execution time 2: %s" (formatTime prediction2)
       where
@@ -785,11 +787,12 @@ printBudgetStateTally (Cek.CekExTally costs) = do
               Just v  -> v
               Nothing -> ExBudget 0 0
         allNodeTags = [Cek.BConst, Cek.BVar, Cek.BLamAbs, Cek.BApply, Cek.BDelay, Cek.BForce, Cek.BError, Cek.BBuiltin]
-        totalComputeSteps = getCPU. mconcat $ map getSpent allNodeTags
+        totalComputeSteps = getCPU. mconcat $ map getSpent allNodeTags  -- Just dimensionless units
         -- ^ Depends on the fact that we have a unit cost for each AST node type
         budgetToString (ExBudget (ExCPU cpu) (ExMemory mem)) = printf "%10d  %10d" cpu mem :: String
-        budgetToString2 (ExBudget (ExCPU cpu) (ExMemory mem)) =
+        budgetToString2 (ExBudget (ExCPU cpu) (ExMemory mem)) = -- CPU costs in microseconds * 10000
             printf "%10f μs  %10d" ((fromIntegral cpu :: Double) / 10000) (mem `div` 10000) :: String
+        -- Our cost model relates times in seconds to const*(compute steps) + (builtin times)
         pbudget k = budgetToString $ getSpent k
 --        itof n = fromIntegral n :: Double
         pc k = printf "%10.1f%%" ((getCPU $ getSpent k)/totalComputeSteps * 100)
