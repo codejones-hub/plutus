@@ -224,6 +224,7 @@ library
         Data.Aeson.Flatten
         Data.Aeson.THReader
         Data.Functor.Foldable.Monadic
+        Data.BRAL
     build-depends:
         Stream -any,
         aeson -any,
