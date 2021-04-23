@@ -21,6 +21,7 @@ import           Control.Applicative
 import           Control.Monad.Morph
 import           CostModelCreation
 import           Data.Coerce
+import           Data.Int
 import           Hedgehog
 import qualified Hedgehog.Gen                              as Gen
 import           Hedgehog.Main
@@ -141,14 +142,14 @@ testPredictOne haskellModelFun modelFun = propertyR $ do
   modelR <- lift $ costModelsR
   modelH <- lift $ haskellModelFun $ modelFun modelR
   let
-    predictR :: MonadR m => Integer -> m Integer
+    predictR :: MonadR m => Int64 -> m Int64
     predictR x =
       let
-        xD = fromInteger x :: Double
+        xD = fromIntegral x :: Double
         model = modelFun modelR
       in
         (\t -> toCostUnit (fromSomeSEXP t :: Double)) <$> [r|predict(model_hs, data.frame(x_mem=xD_hs))[[1]]|]
-    predictH :: Integer -> Integer
+    predictH :: Int64 -> Int64
     predictH x = coerce $ _exBudgetCPU $ runCostingFunOneArgument modelH (ExMemory x)
     sizeGen = do
       x <- Gen.integral (Range.exponential 0 5000)
@@ -165,15 +166,15 @@ testPredictTwo haskellModelFun modelFun = propertyR $ do
   modelR <- lift $ costModelsR
   modelH <- lift $ haskellModelFun $ modelFun modelR
   let
-    predictR :: MonadR m => Integer -> Integer -> m Integer
+    predictR :: MonadR m => Int64 -> Int64 -> m Int64
     predictR x y =
       let
-        xD = fromInteger x :: Double
-        yD = fromInteger y :: Double
+        xD = fromIntegral x :: Double
+        yD = fromIntegral y :: Double
         model = modelFun modelR
       in
         (\t -> toCostUnit (fromSomeSEXP t :: Double)) <$> [r|predict(model_hs, data.frame(x_mem=xD_hs, y_mem=yD_hs))[[1]]|]
-    predictH :: Integer -> Integer -> Integer
+    predictH :: Int64 -> Int64 -> Int64
     predictH x y = coerce $ _exBudgetCPU $ runCostingFunTwoArguments modelH (ExMemory x) (ExMemory y)
     sizeGen = do
       y <- Gen.integral (Range.exponential 0 5000)
@@ -191,16 +192,16 @@ testPredictThree haskellModelFun modelFun = propertyR $ do
   modelR <- lift $ costModelsR
   modelH <- lift $ haskellModelFun $ modelFun modelR
   let
-    predictR :: MonadR m => Integer -> Integer -> Integer -> m Integer
+    predictR :: MonadR m => Int64 -> Int64 -> Int64 -> m Int64
     predictR x y _z =
       let
-        xD = fromInteger x :: Double
-        yD = fromInteger y :: Double
+        xD = fromIntegral x :: Double
+        yD = fromIntegral y :: Double
         -- zD = fromInteger z :: Double
         model = modelFun modelR
       in
         (\t -> toCostUnit (fromSomeSEXP t :: Double)) <$> [r|predict(model_hs, data.frame(x_mem=xD_hs, y_mem=yD_hs))[[1]]|]
-    predictH :: Integer -> Integer -> Integer -> Integer
+    predictH :: Int64 -> Int64 -> Int64 -> Int64
     predictH x y z = coerce $ _exBudgetCPU $ runCostingFunThreeArguments modelH (ExMemory x) (ExMemory y) (ExMemory z)
     sizeGen = do
       y <- Gen.integral (Range.exponential 0 5000)

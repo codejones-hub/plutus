@@ -22,6 +22,7 @@ import           PlutusPrelude
 
 import           Control.Monad.RWS.Strict
 import qualified Data.ByteString          as BS
+import           Data.Int
 import           Data.Proxy
 import qualified Data.Text                as T
 import           Foreign.Storable
@@ -42,19 +43,19 @@ abstractly specifiable. It's an implementation detail.
 -}
 
 -- | Counts size in machine words (64bit for the near future)
-newtype ExMemory = ExMemory Integer
+newtype ExMemory = ExMemory Int64
   deriving (Eq, Ord, Show)
   deriving newtype (Num, Pretty, NFData)
-  deriving (Semigroup, Monoid) via (Sum Integer)
-deriving newtype instance PrettyDefaultBy config Integer => PrettyBy config ExMemory
+  deriving (Semigroup, Monoid) via (Sum Int64)
+deriving newtype instance PrettyDefaultBy config Int64 => PrettyBy config ExMemory
 
 -- TODO: 'Integer's are not particularly fast. Should we use @Int64@?
 -- | Counts CPU units - no fixed base, proportional.
-newtype ExCPU = ExCPU Integer
+newtype ExCPU = ExCPU Int64
   deriving (Eq, Ord, Show)
   deriving newtype (Num, Pretty, NFData)
-  deriving (Semigroup, Monoid) via (Sum Integer)
-deriving newtype instance PrettyDefaultBy config Integer => PrettyBy config ExCPU
+  deriving (Semigroup, Monoid) via (Sum Int64)
+deriving newtype instance PrettyDefaultBy config Int64 => PrettyBy config ExCPU
 
 -- Based on https://github.com/ekmett/semigroups/blob/master/src/Data/Semigroup/Generic.hs
 class GExMemoryUsage f where
@@ -103,7 +104,7 @@ deriving via (GenericExMemoryUsage (Term tyname name uni fun ann)) instance
     , Closed uni, uni `Everywhere` ExMemoryUsage, ExMemoryUsage fun
     ) => ExMemoryUsage (Term tyname name uni fun ann)
 deriving newtype instance ExMemoryUsage TyName
-deriving newtype instance ExMemoryUsage ExMemory
+--deriving newtype instance ExMemoryUsage ExMemory
 deriving newtype instance ExMemoryUsage Unique
 
 -- See https://github.com/input-output-hk/plutus/issues/1861
@@ -119,10 +120,10 @@ instance ExMemoryUsage () where
   memoryUsage _ = 0 -- TODO or 1?
 
 instance ExMemoryUsage Integer where
-  memoryUsage i = ExMemory (1 + smallInteger (integerLog2# (abs i) `quotInt#` integerToInt 64)) -- assume 64bit size
+  memoryUsage i = ExMemory $ fromIntegral $ 1 + smallInteger (integerLog2# (abs i) `quotInt#` integerToInt 64) -- assume 64bit size
 
 instance ExMemoryUsage BS.ByteString where
-  memoryUsage bs = ExMemory $ (toInteger $ BS.length bs) `div` 8
+  memoryUsage bs = ExMemory $ fromIntegral $ (toInteger $ BS.length bs) `div` 8
 
 instance ExMemoryUsage T.Text where
   memoryUsage text = memoryUsage $ T.unpack text -- TODO not accurate, as Text uses UTF-16
@@ -137,4 +138,4 @@ instance ExMemoryUsage Bool where
   memoryUsage _ = 1
 
 instance ExMemoryUsage String where
-  memoryUsage string = ExMemory $ (toInteger $ sum $ fmap sizeOf string) `div` 8
+  memoryUsage string = ExMemory $ fromIntegral $ (sum $ fmap sizeOf string) `div` 8

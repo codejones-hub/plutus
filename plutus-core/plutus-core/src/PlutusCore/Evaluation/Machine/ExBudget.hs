@@ -93,6 +93,7 @@ import           PlutusCore.Core
 import           PlutusCore.Name
 
 import           Control.Monad.Except
+import           Data.Int
 import           Data.Semigroup.Generic
 import           Data.Text.Prettyprint.Doc
 import           PlutusCore.Evaluation.Machine.ExMemory
@@ -153,11 +154,11 @@ isNegativeBudget (ExRestrictingBudget (ExBudget cpu mem)) = cpu < 0 || mem < 0
 
 -- | @(-)@ on 'ExCPU'.
 minusExCPU :: ExCPU -> ExCPU -> ExCPU
-minusExCPU = coerce $ (-) @Integer
+minusExCPU = coerce $ (-) @Int64
 
 -- | @(-)@ on 'ExMemory'.
 minusExMemory :: ExMemory -> ExMemory -> ExMemory
-minusExMemory = coerce $ (-) @Integer
+minusExMemory = coerce $ (-) @Int64
 
 -- | Subtract an 'ExBudget' from an 'ExRestrictingBudget'.
 minusExBudget :: ExRestrictingBudget -> ExBudget -> ExRestrictingBudget
