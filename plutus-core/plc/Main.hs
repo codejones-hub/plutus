@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE TypeApplications          #-}
+{-# OPTIONS_GHC -Wwarn=unused-top-binds -Wwarn=unused-local-binds -Wwarn=incomplete-patterns #-}
 
 module Main (main) where
 
@@ -68,7 +69,7 @@ type UntypedProgram a = UPLC.Program PLC.Name PLC.DefaultUni PLC.DefaultFun a
 
 data Program a =
       TypedProgram (TypedProgram a)
-    | UntypedProgram (UntypedProgram a)
+    | UntypedProgram (UntypedProgramDeBruijn a)
     deriving (Functor)
 
 instance (PP.PrettyBy PP.PrettyConfigPlc (Program a)) where
@@ -396,7 +397,6 @@ toDeBruijn prog =
     Left e  -> errorWithoutStackTrace $ show e
     Right p -> return $ UPLC.programMapNames (\(UPLC.NamedDeBruijn _ ix) -> UPLC.DeBruijn ix) p
 
-
 -- | Convert an untyped de-Bruijn-indexed program to one with standard names.
 -- We have nothing to base the names on, so every variable is named "v" (but
 -- with a Unique for disambiguation).  Again, we don't support typed programs.
@@ -421,13 +421,15 @@ parsePlcInput language inp = do
     bsContents <- BSL.fromStrict . encodeUtf8 . T.pack <$> getPlcInput inp
     case language of
       TypedPLC   -> handleResult TypedProgram   $ PLC.runQuoteT $ runExceptT (PLC.parseScoped bsContents)
-      UntypedPLC -> handleResult UntypedProgram $ PLC.runQuoteT $ runExceptT (UPLC.parseScoped bsContents)
+      UntypedPLC -> handleResult UntypedProgram $ PLC.runQuoteT $ runExceptT (toDeBruijnM =<< UPLC.parseScoped bsContents)
       where handleResult wrapper =
                 \case
                   Left errCheck        -> failWith errCheck
                   Right (Left errEval) -> failWith errEval
                   Right (Right p)      -> return $ wrapper p
             failWith (err :: PlcParserError) =  errorWithoutStackTrace $ PP.displayPlcDef err
+            toDeBruijnM prog =  UPLC.programMapNames (\(UPLC.NamedDeBruijn _ ix) -> UPLC.DeBruijn ix)  <$> UPLC.deBruijnProgram prog
+
 
 -- Read a binary-encoded file (eg, CBOR- or Flat-encoded PLC)
 getBinaryInput :: Input -> IO BSL.ByteString
@@ -440,10 +442,10 @@ loadASTfromCBOR :: Language -> AstNameType -> Input -> IO (Program ())
 loadASTfromCBOR language cborMode inp =
     case (language, cborMode) of
          (TypedPLC,   Named)    -> getBinaryInput inp <&> PLC.deserialiseRestoringUnitsOrFail >>= handleResult TypedProgram
-         (UntypedPLC, Named)    -> getBinaryInput inp <&> UPLC.deserialiseRestoringUnitsOrFail >>= handleResult UntypedProgram
+         (UntypedPLC, Named)    -> getBinaryInput inp <&> UPLC.deserialiseRestoringUnitsOrFail >>= mapM toDeBruijn >>= handleResult UntypedProgram
          (TypedPLC,   DeBruijn) -> typedDeBruijnNotSupportedError
          (UntypedPLC, DeBruijn) -> getBinaryInput inp <&> UPLC.deserialiseRestoringUnitsOrFail >>=
-                                   mapM fromDeBruijn >>= handleResult UntypedProgram
+                                   handleResult UntypedProgram
     where handleResult wrapper =
               \case
                Left (DeserialiseFailure offset msg) ->
@@ -455,9 +457,9 @@ loadASTfromFlat :: Language -> AstNameType -> Input -> IO (Program ())
 loadASTfromFlat language flatMode inp =
     case (language, flatMode) of
          (TypedPLC,   Named)    -> getBinaryInput inp <&> unflat >>= handleResult TypedProgram
-         (UntypedPLC, Named)    -> getBinaryInput inp <&> unflat >>= handleResult UntypedProgram
+         (UntypedPLC, Named)    -> getBinaryInput inp <&> unflat >>= mapM toDeBruijn >>= handleResult UntypedProgram
          (TypedPLC,   DeBruijn) -> typedDeBruijnNotSupportedError
-         (UntypedPLC, DeBruijn) -> getBinaryInput inp <&> unflat >>= mapM fromDeBruijn >>= handleResult UntypedProgram
+         (UntypedPLC, DeBruijn) -> getBinaryInput inp <&> unflat >>= handleResult UntypedProgram
     where handleResult wrapper =
               \case
                Left e  -> errorWithoutStackTrace $ "Flat deserialisation failure:" ++ show e
@@ -486,7 +488,7 @@ serialiseProgramCBOR (UntypedProgram p) = UPLC.serialiseOmittingUnits p
 -- | Convert names to de Bruijn indices and then serialise
 serialiseDbProgramCBOR :: Program () -> IO (BSL.ByteString)
 serialiseDbProgramCBOR (TypedProgram _)   = typedDeBruijnNotSupportedError
-serialiseDbProgramCBOR (UntypedProgram p) = UPLC.serialiseOmittingUnits <$> toDeBruijn p
+serialiseDbProgramCBOR (UntypedProgram p) = pure $ UPLC.serialiseOmittingUnits p
 
 writeCBOR :: Output -> AstNameType -> Program a -> IO ()
 writeCBOR outp cborMode prog = do
@@ -506,7 +508,7 @@ serialiseProgramFlat (UntypedProgram p) = BSL.fromStrict $ flat p
 -- | Convert names to de Bruijn indices and then serialise
 serialiseDbProgramFlat :: Flat a => Program a -> IO (BSL.ByteString)
 serialiseDbProgramFlat (TypedProgram _)   = typedDeBruijnNotSupportedError
-serialiseDbProgramFlat (UntypedProgram p) = BSL.fromStrict . flat <$> toDeBruijn p
+serialiseDbProgramFlat (UntypedProgram p) = pure (BSL.fromStrict . flat $ p)
 
 writeFlat :: Output -> AstNameType -> Program a -> IO ()
 writeFlat outp flatMode prog = do
@@ -561,14 +563,12 @@ runPrint (PrintOptions language inp mode) =
 
 ---------------- Erasure ----------------
 
-eraseProgram :: TypedProgram a -> Program a
-eraseProgram = UntypedProgram . UPLC.eraseProgram
-
 -- | Input a program, erase the types, then output it
 runErase :: EraseOptions -> IO ()
 runErase (EraseOptions inp ifmt outp ofmt mode) = do
   TypedProgram typedProg <- getProgram TypedPLC ifmt inp
-  let untypedProg = () <$ eraseProgram typedProg
+  let untypedNameProg = () <$ UPLC.eraseProgram typedProg
+  untypedProg <- UntypedProgram <$> toDeBruijn untypedNameProg
   case ofmt of
     Plc           -> writePlc outp mode untypedProg
     Cbor cborMode -> writeCBOR outp cborMode untypedProg
@@ -828,7 +828,8 @@ runEval (EvalOptions language inp ifmt evalMode printMode budgetMode timingMode)
                           let evaluate = Cek.evaluateCekNoEmit PLC.defBuiltinsRuntime
                           case timingMode of
                             NoTiming -> evaluate body & handleResult
-                            Timing n -> timeEval n evaluate body >>= handleTimingResults
+                            -- FIXME: reenable, why it needs Unique? is it for printing?
+                            -- Timing n -> timeEval n evaluate body >>= handleTimingResults
                     Verbose bm -> do
                           let evaluate = Cek.runCekNoEmit PLC.defBuiltinsRuntime bm
                           case timingMode of
@@ -836,7 +837,8 @@ runEval (EvalOptions language inp ifmt evalMode printMode budgetMode timingMode)
                                     let (result, budget) = evaluate body
                                     printBudgetState budget
                                     handleResultSilently result  -- We just want to see the budget information
-                            Timing n -> timeEval n evaluate body >>= handleTimingResultsWithBudget
+                            -- FIXME: reenable, why it needs Unique? is it for printing?
+                            -- Timing n -> timeEval n evaluate body >>= handleTimingResultsWithBudget
 
     where handleResult result =
               case result of
