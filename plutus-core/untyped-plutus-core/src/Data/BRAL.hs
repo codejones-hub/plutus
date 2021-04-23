@@ -105,3 +105,4 @@ indexZero (Cons w t ts) i  =
            else indexTree halfSize (offset - 1 - halfSize) t2
 
 -- TODO: safeIndex
+-- TODO: add monoid instance?

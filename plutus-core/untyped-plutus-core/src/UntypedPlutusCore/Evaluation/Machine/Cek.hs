@@ -43,9 +43,9 @@ import           UntypedPlutusCore.Evaluation.Machine.Cek.ExBudgetMode
 import           UntypedPlutusCore.Evaluation.Machine.Cek.Internal
 
 import           PlutusCore.Constant
+import           PlutusCore.DeBruijn
 import           PlutusCore.Evaluation.Machine.ExMemory
 import           PlutusCore.Evaluation.Machine.Exception
-import           PlutusCore.Name
 import           PlutusCore.Pretty
 import           PlutusCore.Universe
 
@@ -67,8 +67,8 @@ runCekNoEmit
     :: ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
     => BuiltinsRuntime fun (CekValue uni fun)
     -> ExBudgetMode cost uni fun
-    -> Term Name uni fun ()
-    -> (Either (CekEvaluationException uni fun) (Term Name uni fun ()), cost)
+    -> Term DeBruijn uni fun ()
+    -> (Either (CekEvaluationException uni fun) (Term DeBruijn uni fun ()), cost)
 runCekNoEmit runtime mode term =
     case runCek runtime mode False term of
         (errOrRes, cost', _) -> (errOrRes, cost')
@@ -82,8 +82,8 @@ unsafeRunCekNoEmit
        )
     => BuiltinsRuntime fun (CekValue uni fun)
     -> ExBudgetMode cost uni fun
-    -> Term Name uni fun ()
-    -> (EvaluationResult (Term Name uni fun ()), cost)
+    -> Term DeBruijn uni fun ()
+    -> (EvaluationResult (Term DeBruijn uni fun ()), cost)
 unsafeRunCekNoEmit runtime mode =
     first unsafeExtractEvaluationResult . runCekNoEmit runtime mode
 
@@ -91,8 +91,8 @@ unsafeRunCekNoEmit runtime mode =
 evaluateCek
     :: ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
     => BuiltinsRuntime fun (CekValue uni fun)
-    -> Term Name uni fun ()
-    -> (Either (CekEvaluationException uni fun) (Term Name uni fun ()), [String])
+    -> Term DeBruijn uni fun ()
+    -> (Either (CekEvaluationException uni fun) (Term DeBruijn uni fun ()), [String])
 evaluateCek runtime term =
     case runCek runtime restrictingEnormous True term of
         (errOrRes, _, logs) -> (errOrRes, logs)
@@ -101,8 +101,8 @@ evaluateCek runtime term =
 evaluateCekNoEmit
     :: ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
     => BuiltinsRuntime fun (CekValue uni fun)
-    -> Term Name uni fun ()
-    -> Either (CekEvaluationException uni fun) (Term Name uni fun ())
+    -> Term DeBruijn uni fun ()
+    -> Either (CekEvaluationException uni fun) (Term DeBruijn uni fun ())
 evaluateCekNoEmit runtime = fst . runCekNoEmit runtime restrictingEnormous
 
 -- | Evaluate a term using the CEK machine with logging enabled. May throw a 'CekMachineException'.
@@ -112,8 +112,8 @@ unsafeEvaluateCek
        , Ix fun, Pretty fun, Typeable fun
        )
     => BuiltinsRuntime fun (CekValue uni fun)
-    -> Term Name uni fun ()
-    -> (EvaluationResult (Term Name uni fun ()), [String])
+    -> Term DeBruijn uni fun ()
+    -> (EvaluationResult (Term DeBruijn uni fun ()), [String])
 unsafeEvaluateCek runtime = first unsafeExtractEvaluationResult . evaluateCek runtime
 
 -- | Evaluate a term using the CEK machine with logging disabled. May throw a 'CekMachineException'.
@@ -123,17 +123,17 @@ unsafeEvaluateCekNoEmit
        , Ix fun, Pretty fun, Typeable fun
        )
     => BuiltinsRuntime fun (CekValue uni fun)
-    -> Term Name uni fun ()
-    -> EvaluationResult (Term Name uni fun ())
+    -> Term DeBruijn uni fun ()
+    -> EvaluationResult (Term DeBruijn uni fun ())
 unsafeEvaluateCekNoEmit runtime = unsafeExtractEvaluationResult . evaluateCekNoEmit runtime
 
 -- | Unlift a value using the CEK machine.
 readKnownCek
     :: ( uni `Everywhere` ExMemoryUsage
-       , KnownType (Term Name uni fun ()) a
+       , KnownType (Term DeBruijn uni fun ()) a
        , Ix fun, PrettyUni uni fun
        )
     => BuiltinsRuntime fun (CekValue uni fun)
-    -> Term Name uni fun ()
+    -> Term DeBruijn uni fun ()
     -> Either (CekEvaluationException uni fun) a
 readKnownCek runtime = evaluateCekNoEmit runtime >=> readKnown
