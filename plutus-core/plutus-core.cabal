@@ -135,7 +135,8 @@ library
         Common
         ErrorCode
         Data.ByteString.Hash
-        PlcTestUtils
+        --FIXME: reenable
+        --PlcTestUtils
         Crypto
         Data.Text.Prettyprint.Doc.Custom
         Data.SatInt
