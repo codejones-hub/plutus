@@ -46,10 +46,10 @@ import           UntypedPlutusCore.Evaluation.Machine.Cek.ExBudgetMode
 import           UntypedPlutusCore.Evaluation.Machine.Cek.Internal
 
 import           PlutusCore.Constant
+import           PlutusCore.DeBruijn
 import           PlutusCore.Evaluation.Machine.ExMemory
 import           PlutusCore.Evaluation.Machine.Exception
 import           PlutusCore.Evaluation.Machine.MachineParameters
-import           PlutusCore.Name
 import           PlutusCore.Pretty
 import           PlutusCore.Universe
 
@@ -71,8 +71,8 @@ runCekNoEmit
     :: ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
     => MachineParameters CekMachineCosts CekValue uni fun
     -> ExBudgetMode cost uni fun
-    -> Term Name uni fun ()
-    -> (Either (CekEvaluationException uni fun) (Term Name uni fun ()), cost)
+    -> Term DeBruijn uni fun ()
+    -> (Either (CekEvaluationException uni fun) (Term DeBruijn uni fun ()), cost)
 runCekNoEmit params mode term =
     case runCek params mode False term of
         (errOrRes, cost', _) -> (errOrRes, cost')
@@ -86,8 +86,8 @@ unsafeRunCekNoEmit
        )
     => MachineParameters CekMachineCosts CekValue uni fun
     -> ExBudgetMode cost uni fun
-    -> Term Name uni fun ()
-    -> (EvaluationResult (Term Name uni fun ()), cost)
+    -> Term DeBruijn uni fun ()
+    -> (EvaluationResult (Term DeBruijn uni fun ()), cost)
 unsafeRunCekNoEmit params mode =
     first unsafeExtractEvaluationResult . runCekNoEmit params mode
 
@@ -95,8 +95,8 @@ unsafeRunCekNoEmit params mode =
 evaluateCek
     :: ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
     => MachineParameters CekMachineCosts CekValue uni fun
-    -> Term Name uni fun ()
-    -> (Either (CekEvaluationException uni fun) (Term Name uni fun ()), [String])
+    -> Term DeBruijn uni fun ()
+    -> (Either (CekEvaluationException uni fun) (Term DeBruijn uni fun ()), [String])
 evaluateCek params term =
     case runCek params restrictingEnormous True term of
         (errOrRes, _, logs) -> (errOrRes, logs)
@@ -105,8 +105,8 @@ evaluateCek params term =
 evaluateCekNoEmit
     :: ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
     => MachineParameters CekMachineCosts CekValue uni fun
-    -> Term Name uni fun ()
-    -> Either (CekEvaluationException uni fun) (Term Name uni fun ())
+    -> Term DeBruijn uni fun ()
+    -> Either (CekEvaluationException uni fun) (Term DeBruijn uni fun ())
 evaluateCekNoEmit params = fst . runCekNoEmit params restrictingEnormous
 
 -- | Evaluate a term using the CEK machine with logging enabled. May throw a 'CekMachineException'.
@@ -116,8 +116,8 @@ unsafeEvaluateCek
        , Ix fun, Pretty fun, Typeable fun
        )
     => MachineParameters CekMachineCosts CekValue uni fun
-    -> Term Name uni fun ()
-    -> (EvaluationResult (Term Name uni fun ()), [String])
+    -> Term DeBruijn uni fun ()
+    -> (EvaluationResult (Term DeBruijn uni fun ()), [String])
 unsafeEvaluateCek params = first unsafeExtractEvaluationResult . evaluateCek params
 
 -- | Evaluate a term using the CEK machine with logging disabled. May throw a 'CekMachineException'.
@@ -127,17 +127,17 @@ unsafeEvaluateCekNoEmit
        , Ix fun, Pretty fun, Typeable fun
        )
     => MachineParameters CekMachineCosts CekValue uni fun
-    -> Term Name uni fun ()
-    -> EvaluationResult (Term Name uni fun ())
+    -> Term DeBruijn uni fun ()
+    -> EvaluationResult (Term DeBruijn uni fun ())
 unsafeEvaluateCekNoEmit params = unsafeExtractEvaluationResult . evaluateCekNoEmit params
 
 -- | Unlift a value using the CEK machine.
 readKnownCek
     :: ( uni `Everywhere` ExMemoryUsage
-       , KnownType (Term Name uni fun ()) a
+       , KnownType (Term DeBruijn uni fun ()) a
        , Ix fun, PrettyUni uni fun
        )
     => MachineParameters CekMachineCosts CekValue uni fun
-    -> Term Name uni fun ()
+    -> Term DeBruijn uni fun ()
     -> Either (CekEvaluationException uni fun) a
 readKnownCek params = evaluateCekNoEmit params >=> readKnown
