@@ -29,14 +29,14 @@ import           Text.Printf                              (printf)
   source code, along with README files explaining which scripts were involved in
   each validation during the tests.  --}
 
-type Term a    = UPLC.Term PLC.Name PLC.DefaultUni PLC.DefaultFun a
-type Program a = UPLC.Program PLC.Name PLC.DefaultUni PLC.DefaultFun a
+type Term a    = UPLC.Term UPLC.DeBruijn PLC.DefaultUni PLC.DefaultFun a
+type Program a = UPLC.Program UPLC.DeBruijn PLC.DefaultUni PLC.DefaultFun a
 type PlcParserError = PLC.Error PLC.DefaultUni PLC.DefaultFun PLC.AlexPosn
 
 loadPlcSource :: FilePath -> IO (Program ())
 loadPlcSource file = do
   contents <- BSL.readFile file
-  PLC.runQuoteT $ runExceptT (UPLC.parseScoped contents) >>= \case
+  PLC.runQuoteT $ runExceptT (UPLC.parseScoped contents >>= UPLC.deBruijnProgram) >>= \case
      Left (err::PlcParserError) -> error $ "Parser error: " ++ PP.displayPlcDef err
      Right p                    -> return $ () <$ p
 
