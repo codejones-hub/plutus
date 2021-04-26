@@ -1,4 +1,5 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE LambdaCase   #-}
 module Data.BRAL ( BList -- abstract type for now
                  , nil
                  , cons
@@ -69,7 +70,7 @@ tail _ = error "invalid blist"
 -- TODO: use arch-independent Word32 or Word64
 index :: BList a -> Word -> a
 index Nil _ = error "out of bounds"
-index (Cons w t ts) i =
+index (Cons w t ts) !i =
     if i <= w
     then indexTree w i t
     else index ts (i-w)
@@ -89,7 +90,7 @@ index (Cons w t ts) i =
 -- TODO: use arch-independent Word32 or Word64
 indexZero :: BList a -> Word -> a
 indexZero Nil _  = error "out of bounds"
-indexZero (Cons w t ts) i  =
+indexZero (Cons w t ts) !i  =
     if i < w
     then indexTree w i t
     else indexZero ts (i-w)
