@@ -282,7 +282,6 @@ library
         prettyprinter-configurable -any,
         primitive -any,
         recursion-schemes -any,
-        scientific -any,
         semigroupoids -any,
         semigroups -any,
         serialise -any,

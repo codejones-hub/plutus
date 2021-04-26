@@ -56,17 +56,17 @@ import           PlutusCore.Universe
 import           UntypedPlutusCore.Evaluation.Machine.Cek.CekMachineCosts (CekMachineCosts (..))
 
 
-import           Control.Lens                            (coerced)
+import           Control.Lens                                             (coerced)
 import           Control.Lens.Review
 import           Control.Monad.Catch
 import           Control.Monad.Except
 import           Control.Monad.ST
 import           Control.Monad.ST.Unsafe
 import           Data.Array
+import qualified Data.BRAL                                                as B
 import           Data.DList                                               (DList)
 import qualified Data.DList                                               as DList
 import           Data.Hashable                                            (Hashable)
-import qualified Data.BRAL                               as B
 import qualified Data.Kind                                                as GHC
 import           Data.Proxy
 import           Data.STRef
@@ -356,7 +356,7 @@ emitCek str =
    division by zero; the term is discarded in that case anyway (see
    Note [Ignoring context in UserEvaluationError] in Exception.hs)
 -}
-mkBuiltinApplication :: fun -> Arity -> Int -> [Term Name uni fun ()] -> Term Name uni fun ()
+mkBuiltinApplication :: fun -> Arity -> Int -> [Term DeBruijn uni fun ()] -> Term DeBruijn uni fun ()
 mkBuiltinApplication bn arity0 forces0 args0 =
   go arity0 forces0 args0 (Builtin () bn)
     where go arity forces args term =
@@ -377,10 +377,10 @@ mkBuiltinApplication bn arity0 forces0 args0 =
 -- see Note [Scoping].
 -- | Instantiate all the free variables of a term by looking them up in an environment.
 -- Mutually recursive with dischargeCekVal.
-dischargeCekValEnv :: forall uni fun. CekValEnv uni fun -> Term DeBruijn uni fun -> Term DeBruijn uni fun
+dischargeCekValEnv :: forall uni fun. CekValEnv uni fun -> Term DeBruijn uni fun () -> Term DeBruijn uni fun ()
 dischargeCekValEnv valEnv = go 0
   where
-   go :: Word -> Term DeBruijn uni fun -> Term DeBruijn uni fun
+   go :: Word -> Term DeBruijn uni fun () -> Term DeBruijn uni fun ()
    go !lvl = \case
     var@(Var _ name) -> let n = fromIntegral (name^.coerced :: Natural)
                        in if n <= lvl
@@ -394,7 +394,7 @@ dischargeCekValEnv valEnv = go 0
 
 -- Convert a CekValue into a term by replacing all bound variables with the terms
 -- they're bound to (which themselves have to be obtain by recursively discharging values).
-dischargeCekValue :: CekValue uni fun -> Term Name uni fun ()
+dischargeCekValue :: CekValue uni fun -> Term DeBruijn uni fun ()
 dischargeCekValue = \case
     VCon     val                     -> Constant () val
     VDelay   body env                -> Delay () (dischargeCekValEnv env (void body))
@@ -427,7 +427,7 @@ instance (Closed uni, uni `Everywhere` ExMemoryUsage) => ToExMemory (CekValue un
 
 data Frame uni fun
     = FrameApplyFun (CekValue uni fun)                         -- ^ @[V _]@
-    | FrameApplyArg (CekValEnv uni fun) (Term Name uni fun ()) -- ^ @[_ N]@
+    | FrameApplyArg (CekValEnv uni fun) (Term DeBruijn uni fun ()) -- ^ @[_ N]@
     | FrameForce                                               -- ^ @(force _)@
     deriving (Show)
 
