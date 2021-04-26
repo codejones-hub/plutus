@@ -2,6 +2,8 @@
 
 {-# LANGUAGE DataKinds     #-}
 {-# LANGUAGE TypeOperators #-}
+{-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-uniques -dsuppress-coercions -dsuppress-type-applications -dsuppress-unfoldings -dsuppress-idinfo -dumpdir /tmp/dumps #-}
+{-# OPTIONS_GHC -ddump-rule-firings #-}
 
 module UntypedPlutusCore.Evaluation.Machine.Cek
     ( EvaluationResult(..)
@@ -62,6 +64,7 @@ allow one to specify an 'ExBudgetMode'. I.e. such functions are only for fully e
 (and possibly returning logs). See also haddocks of 'enormousBudget'.
 -}
 
+{-# INLINE runCekNoEmit #-}
 -- | Evaluate a term using the CEK machine with logging disabled and keep track of costing.
 runCekNoEmit
     :: ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
@@ -73,6 +76,7 @@ runCekNoEmit runtime mode term =
     case runCek runtime mode False term of
         (errOrRes, cost', _) -> (errOrRes, cost')
 
+{-# INLINE unsafeRunCekNoEmit #-}
 -- | Unsafely evaluate a term using the CEK machine with logging disabled and keep track of costing.
 -- May throw a 'CekMachineException'.
 unsafeRunCekNoEmit
@@ -87,6 +91,7 @@ unsafeRunCekNoEmit
 unsafeRunCekNoEmit runtime mode =
     first unsafeExtractEvaluationResult . runCekNoEmit runtime mode
 
+{-# INLINE evaluateCek #-}
 -- | Evaluate a term using the CEK machine with logging enabled.
 evaluateCek
     :: ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
@@ -97,6 +102,7 @@ evaluateCek runtime term =
     case runCek runtime restrictingEnormous True term of
         (errOrRes, _, logs) -> (errOrRes, logs)
 
+{-# INLINE evaluateCekNoEmit #-}
 -- | Evaluate a term using the CEK machine with logging disabled.
 evaluateCekNoEmit
     :: ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
@@ -105,6 +111,7 @@ evaluateCekNoEmit
     -> Either (CekEvaluationException uni fun) (Term Name uni fun ())
 evaluateCekNoEmit runtime = fst . runCekNoEmit runtime restrictingEnormous
 
+{-# INLINE unsafeEvaluateCek #-}
 -- | Evaluate a term using the CEK machine with logging enabled. May throw a 'CekMachineException'.
 unsafeEvaluateCek
     :: ( GShow uni, Typeable uni
@@ -116,6 +123,7 @@ unsafeEvaluateCek
     -> (EvaluationResult (Term Name uni fun ()), [String])
 unsafeEvaluateCek runtime = first unsafeExtractEvaluationResult . evaluateCek runtime
 
+{-# INLINE unsafeEvaluateCekNoEmit #-}
 -- | Evaluate a term using the CEK machine with logging disabled. May throw a 'CekMachineException'.
 unsafeEvaluateCekNoEmit
     :: ( GShow uni, Typeable uni
