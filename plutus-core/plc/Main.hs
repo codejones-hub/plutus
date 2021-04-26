@@ -395,7 +395,7 @@ toDeBruijn :: UntypedProgram a -> IO (UntypedProgramDeBruijn a)
 toDeBruijn prog =
   case runExcept @UPLC.FreeVariableError (UPLC.deBruijnProgram prog) of
     Left e  -> errorWithoutStackTrace $ show e
-    Right p -> return $ UPLC.programMapNames (\(UPLC.NamedDeBruijn _ ix) -> UPLC.DeBruijn ix) p
+    Right p -> pure p
 
 -- | Convert an untyped de-Bruijn-indexed program to one with standard names.
 -- We have nothing to base the names on, so every variable is named "v" (but
@@ -421,14 +421,14 @@ parsePlcInput language inp = do
     bsContents <- BSL.fromStrict . encodeUtf8 . T.pack <$> getPlcInput inp
     case language of
       TypedPLC   -> handleResult TypedProgram   $ PLC.runQuoteT $ runExceptT (PLC.parseScoped bsContents)
-      UntypedPLC -> handleResult UntypedProgram $ PLC.runQuoteT $ runExceptT (toDeBruijnM =<< UPLC.parseScoped bsContents)
+      -- FIXME: no need for runquoteT in the following
+      UntypedPLC -> handleResult UntypedProgram $ PLC.runQuoteT $ runExceptT (UPLC.deBruijnProgram =<< UPLC.parseScoped bsContents)
       where handleResult wrapper =
                 \case
                   Left errCheck        -> failWith errCheck
                   Right (Left errEval) -> failWith errEval
                   Right (Right p)      -> return $ wrapper p
             failWith (err :: PlcParserError) =  errorWithoutStackTrace $ PP.displayPlcDef err
-            toDeBruijnM prog =  UPLC.programMapNames (\(UPLC.NamedDeBruijn _ ix) -> UPLC.DeBruijn ix)  <$> UPLC.deBruijnProgram prog
 
 
 -- Read a binary-encoded file (eg, CBOR- or Flat-encoded PLC)

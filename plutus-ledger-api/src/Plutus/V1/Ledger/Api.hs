@@ -89,7 +89,6 @@ import qualified Plutus.V1.Ledger.Scripts                          as Scripts
 import           Plutus.V1.Ledger.Slot
 import qualified PlutusCore                                        as PLC
 import           PlutusCore.Constant                               (toBuiltinsRuntime)
-import qualified PlutusCore.DeBruijn                               as PLC
 import           PlutusCore.Evaluation.Machine.ExBudget            (ExBudget (..))
 import qualified PlutusCore.Evaluation.Machine.ExBudget            as PLC
 import           PlutusCore.Evaluation.Machine.ExBudgeting         (CostModelParams, applyModelParams)
@@ -145,7 +144,8 @@ data EvaluationError =
     | IncompatibleVersionError (PLC.Version ()) -- ^ An error indicating a version tag that we don't support
     -- TODO: make this error more informative when we have more information about what went wrong
     | CostModelParameterMismatch -- ^ An error indicating that the cost model parameters didn't match what we expected
-    deriving stock (Show, Eq)
+    deriving stock (Show)
+    -- FIXME: reenable Eq
 
 instance Pretty EvaluationError where
     pretty (CekError e)      = prettyClassicDef e
@@ -155,15 +155,15 @@ instance Pretty EvaluationError where
     pretty CostModelParameterMismatch = "Cost model parameters were not as we expected"
 
 -- | Shared helper for the evaluation functions, deserializes the 'Script' , applies it to its arguments, and un-deBruijn-ifies it.
-mkTermToEvaluate :: (MonadError EvaluationError m) => Script -> [Data] -> m (UPLC.Term UPLC.Name PLC.DefaultUni PLC.DefaultFun ())
+mkTermToEvaluate :: (MonadError EvaluationError m) => Script -> [Data] -> m (UPLC.Term UPLC.DeBruijn PLC.DefaultUni PLC.DefaultFun ())
 mkTermToEvaluate bs args = do
     (Scripts.Script (UPLC.Program _ v t)) <- liftEither $ first CodecError $ Flat.unflat $ fromShort bs
     unless (v == PLC.defaultVersion ()) $ throwError $ IncompatibleVersionError v
-    let namedTerm = UPLC.termMapNames PLC.fakeNameDeBruijn t
+    let
         -- This should go away when Data is a builtin
         termArgs = fmap PlutusTx.lift args
-        applied = PLC.mkIterApp () namedTerm termArgs
-    liftEither $ first DeBruijnError $ PLC.runQuoteT $ UPLC.unDeBruijnTerm applied
+        applied = PLC.mkIterApp () t termArgs
+    pure applied
 
 -- | Evaluates a script, with a cost model and a budget that restricts how many
 -- resources it can use according to the cost model.  There's a default cost
