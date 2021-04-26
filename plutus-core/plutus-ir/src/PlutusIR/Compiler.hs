@@ -44,12 +44,12 @@ import qualified PlutusCore.Constant.Meaning        as M
 
 import           Control.Monad
 import           Control.Monad.Reader
-import           Data.Semigroup
+import           Control.Monad.State
 import           PlutusPrelude
 
 -- | The actual simplifier
-simplify :: M.ToBuiltinMeaning uni fun => Term TyName Name uni fun b -> Term TyName Name uni fun b
-simplify = DeadCode.removeDeadBindings . Inline.inline . Beta.beta
+simplify :: (MonadState Bool m, M.ToBuiltinMeaning uni fun) => Term TyName Name uni fun b -> m (Term TyName Name uni fun b)
+simplify = Beta.betaM >=> Inline.inlineM >=> DeadCode.removeDeadBindingsM
 
 -- | Perform some simplification of a 'Term'.
 simplifyTerm :: forall m e uni fun a b. Compiling m e uni fun a => Term TyName Name uni fun b -> m (Term TyName Name uni fun b)
@@ -60,9 +60,14 @@ simplifyTerm = runIfOpts $ PLC.rename >=> pure . DeadCode.removeDeadBindings >=>
         simplify' t = do
             maxIterations <- asks $ view (ccOpts . coMaxSimplifierIterations)
             pure $ simplifyNTimes maxIterations t
-        -- Run the simplifier @n@ times
+        -- Run the simplifier at most @n@ times
         simplifyNTimes :: Int -> Term TyName Name uni fun b -> Term TyName Name uni fun b
-        simplifyNTimes n = appEndo (stimes n $ Endo simplify)
+        simplifyNTimes n t | n <= 0    = t
+                           | otherwise =
+                             let (t', isModified) = runState (simplify t) False in
+                                 if isModified
+                                 then simplifyNTimes (n - 1) t'
+                                 else t'
 -- Note: There was a bug in renamer handling non-rec terms, so we need to rename
 -- again.
 -- https://jira.iohk.io/browse/SCP-2156

@@ -11,7 +11,10 @@ A simple inlining pass.
 The point of this pass is mainly to tidy up the code, not to particularly optimize performance.
 In particular, we want to get rid of "trivial" let bindings which the Plutus Tx compiler sometimes creates.
 -}
-module PlutusIR.Transform.Inline (inline) where
+module PlutusIR.Transform.Inline
+    ( inline
+    , inlineM
+    ) where
 
 import           PlutusIR
 import qualified PlutusIR.Analysis.Dependencies as Deps
@@ -93,9 +96,21 @@ data Subst tyname name uni fun a = Subst { _termEnv :: TermEnv tyname name uni f
     deriving stock (Generic)
     deriving (Semigroup, Monoid) via (GenericSemigroupMonoid (Subst tyname name uni fun a))
 
+data InlineState tyname name uni fun a = InlineState { _subst :: Subst tyname name uni fun a
+                                                     , _dirty :: Bool
+                                                     }
+
+instance Semigroup (InlineState tyname name uni fun a) where
+    InlineState s1 d1 <> InlineState s2 d2 = InlineState (s1 <> s2) (d1 || d2)
+
+instance Monoid (InlineState tyname name uni fun a) where
+    mempty = InlineState mempty False
+
+
 makeLenses ''TermEnv
 makeLenses ''TypeEnv
 makeLenses ''Subst
+makeLenses ''InlineState
 
 type ExternalConstraints tyname name uni fun =
     ( HasUnique name TermUnique
@@ -104,7 +119,7 @@ type ExternalConstraints tyname name uni fun =
     )
 
 type Inlining tyname name uni fun a m =
-    ( MonadState (Subst tyname name uni fun a) m
+    ( MonadState (InlineState tyname name uni fun a) m
     , MonadReader InlineInfo m
     , MonadQuote m
     , ExternalConstraints tyname name uni fun
@@ -114,35 +129,53 @@ data InlineInfo = InlineInfo { _strictnessMap :: Deps.StrictnessMap
                              , _usages        :: Usages.Usages
                              }
 
+-- | Record a modification during inlining.
+--
+-- NOTE that, since we modify the AST recursively, for the ease of reasoning, we
+-- are not recording the modifications whenever we are modifying AST directly,
+-- but whenever we are interacting with the substitution:
+--
+-- * extending substitution means that we are removing a let binding, and
+-- * looking up a @Just@ term or type means substituting in a variable.
+markDirty :: MonadState (InlineState tyname name uni fun a) m => m ()
+markDirty = modify' $ set dirty True
+
 lookupTerm
-    :: (HasUnique name TermUnique)
+    :: (HasUnique name TermUnique, MonadState (InlineState tyname name uni fun a) m)
     => name
-    -> Subst tyname name uni fun a
-    -> Maybe (InlineTerm tyname name uni fun a)
-lookupTerm n subst = lookupName n $ subst ^. termEnv . unTermEnv
+    -> m (Maybe (InlineTerm tyname name uni fun a))
+lookupTerm n = do
+    t <- gets (lookupName n . view (subst . termEnv . unTermEnv))
+    when (isJust t) markDirty
+    pure t
 
 extendTerm
-    :: (HasUnique name TermUnique)
+    :: (HasUnique name TermUnique, MonadState (InlineState tyname name uni fun a) m)
     => name
     -> InlineTerm tyname name uni fun a
-    -> Subst tyname name uni fun a
-    -> Subst tyname name uni fun a
-extendTerm n clos subst = subst & termEnv . unTermEnv %~ insertByName n clos
+    -> m ()
+extendTerm n clos = do
+    modify' $ over (subst . termEnv . unTermEnv) (insertByName n clos)
+    markDirty
 
 lookupType
-    :: (HasUnique tyname TypeUnique)
+    :: (HasUnique tyname TypeUnique, MonadState (InlineState tyname name uni fun a) m)
     => tyname
-    -> Subst tyname name uni fun a
-    -> Maybe (Type tyname uni a)
-lookupType tn subst = lookupName tn $ subst ^. typeEnv . unTypeEnv
+    -> m (Maybe (Type tyname uni a))
+lookupType tn = do
+    ty <- gets (lookupName tn . view (subst . typeEnv . unTypeEnv))
+    when (isJust ty) markDirty
+    pure ty
 
 extendType
-    :: (HasUnique tyname TypeUnique)
+    :: (HasUnique tyname TypeUnique, MonadState (InlineState tyname name uni fun a) m)
     => tyname
     -> Type tyname uni a
-    -> Subst tyname name uni fun a
-    -> Subst tyname name uni fun a
-extendType tn ty subst = subst &  typeEnv . unTypeEnv %~ insertByName tn ty
+    -> m ()
+extendType tn ty = do
+    modify' $ over (subst . typeEnv . unTypeEnv) (insertByName tn ty)
+    markDirty
+
 
 {- Note [Inlining and global uniqueness]
 Inlining relies on global uniqueness (we store things in a unique map), and *does* currently
@@ -156,14 +189,24 @@ and rename everything when we substitute in, which GHC considers too expensive b
 -- | Inline simple bindings. Relies on global uniqueness, and preserves it.
 -- See Note [Inlining and global uniqueness]
 inline
-    :: ExternalConstraints tyname name uni fun
+    :: forall tyname name uni fun a. (ExternalConstraints tyname name uni fun)
     => Term tyname name uni fun a
     -> Term tyname name uni fun a
-inline t = flip runReader inlineInfo $ flip evalStateT mempty $ runQuoteT $ do
+inline = flip evalState False . inlineM
+
+-- | Inline simple bindings. Relies on global uniqueness, and preserves it.
+-- See Note [Inlining and global uniqueness]
+inlineM
+    :: forall tyname name uni fun a m. (ExternalConstraints tyname name uni fun, MonadState Bool m)
+    => Term tyname name uni fun a
+    -> m (Term tyname name uni fun a)
+inlineM t = flip runReaderT inlineInfo $ recordDirty $ flip runStateT mempty $ runQuoteT $ do
     -- Ensure that we can safely rename inside that term
     markNonFreshTerm t
     processTerm t
   where
+        recordDirty :: ReaderT InlineInfo m (b, InlineState tyname name uni fun a) -> ReaderT InlineInfo m b
+        recordDirty = (=<<) $ \(a, s) -> put (view dirty s) >> pure a
         inlineInfo :: InlineInfo
         inlineInfo = InlineInfo (snd deps) usgs
         -- We actually just want the variable strictness information here!
@@ -184,8 +227,9 @@ TODO: merge them or figure out a way to share more work, especially since there'
 This might mean reinventing GHC's OccAnal...
 -}
 
+
 processTerm
-    :: forall tyname name uni fun a m. Inlining tyname name uni fun a m
+    :: forall tyname name uni fun a m. (Inlining tyname name uni fun a m)
     => Term tyname name uni fun a
     -> m (Term tyname name uni fun a)
 processTerm = handleTerm <=< traverseOf termSubtypes applyTypeSubstitution where
@@ -210,10 +254,10 @@ processTerm = handleTerm <=< traverseOf termSubtypes applyTypeSubstitution where
     applyTypeSubstitution = typeSubstTyNamesM substTyName
     -- See Note [Renaming strategy]
     substTyName :: tyname -> m (Maybe (Type tyname uni a))
-    substTyName tyname = gets (lookupType tyname) >>= traverse PLC.rename
+    substTyName tyname = lookupType tyname >>= traverse PLC.rename
     -- See Note [Renaming strategy]
     substName :: name -> m (Maybe (Term tyname name uni fun a))
-    substName name = gets (lookupTerm name) >>= traverse renameTerm
+    substName name = lookupTerm name >>= traverse renameTerm
     -- See Note [Inlining approach and 'Secrets of the GHC Inliner']
     renameTerm :: InlineTerm tyname name uni fun a -> m (Term tyname name uni fun a)
     renameTerm = \case
@@ -251,7 +295,7 @@ processSingleBinding = \case
         pure $ TermBind a s v <$> maybeRhs'
     -- See Note [Inlining various kinds of binding]
     TypeBind _ (TyVarDecl _ tn _) rhs -> do
-        modify' (extendType tn rhs)
+        extendType tn rhs
         pure Nothing
     -- Not a strict binding, just process all the subterms
     b -> Just <$> forMOf bindingSubterms b processTerm
@@ -279,7 +323,7 @@ maybeAddSubst s n rhs = do
         else pure $ Just rhs'
     where
         extendAndDrop :: forall b. InlineTerm tyname name uni fun a -> m (Maybe b)
-        extendAndDrop t = modify' (extendTerm n t) >> pure Nothing
+        extendAndDrop t = extendTerm n t >> pure Nothing
 
 preInlineUnconditional :: Inlining tyname name uni fun a m => name -> Term tyname name uni fun a -> m Bool
 preInlineUnconditional n t = do

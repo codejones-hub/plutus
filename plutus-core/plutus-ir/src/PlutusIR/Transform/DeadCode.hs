@@ -3,7 +3,10 @@
 {-# LANGUAGE LambdaCase       #-}
 {-# LANGUAGE TypeOperators    #-}
 -- | Optimization passes for removing dead code, mainly dead let bindings.
-module PlutusIR.Transform.DeadCode (removeDeadBindings) where
+module PlutusIR.Transform.DeadCode
+    ( removeDeadBindings
+    , removeDeadBindingsM
+    ) where
 
 import           PlutusIR
 import qualified PlutusIR.Analysis.Dependencies as Deps
@@ -17,6 +20,7 @@ import qualified PlutusCore.Name                as PLC
 import           Control.Lens
 import           Control.Monad
 import           Control.Monad.Reader
+import           Control.Monad.State
 
 import           Data.Coerce
 import qualified Data.Set                       as Set
@@ -31,9 +35,17 @@ removeDeadBindings
        PLC.ToBuiltinMeaning uni fun)
     => Term tyname name uni fun a
     -> Term tyname name uni fun a
-removeDeadBindings t =
+removeDeadBindings = flip evalState False . removeDeadBindingsM
+
+-- | Remove all the dead let bindings in a term and record AST modifications.
+removeDeadBindingsM
+    :: (PLC.HasUnique name PLC.TermUnique, PLC.HasUnique tyname PLC.TypeUnique,
+       PLC.ToBuiltinMeaning uni fun, MonadState Bool m)
+    => Term tyname name uni fun a
+    -> m (Term tyname name uni fun a)
+removeDeadBindingsM t =
     let tRen = PLC.runQuote $ PLC.rename t
-    in runReader (transformMOf termSubterms processTerm tRen) (calculateLiveness tRen)
+    in runReaderT (transformMOf termSubterms processTerm tRen) (calculateLiveness tRen)
 
 type Liveness = Set.Set Deps.Node
 
@@ -69,10 +81,18 @@ liveBinding =
         DatatypeBind _ (Datatype _ d _ destr constrs) -> or <$> (sequence $ [liveTyVarDecl d,  live destr] ++ fmap liveVarDecl constrs)
 
 processTerm
-    :: (MonadReader Liveness m, PLC.HasUnique name PLC.TermUnique, PLC.HasUnique tyname PLC.TypeUnique)
+    :: (MonadReader Liveness m, PLC.HasUnique name PLC.TermUnique, PLC.HasUnique tyname PLC.TypeUnique, MonadState Bool m)
     => Term tyname name uni fun a
     -> m (Term tyname name uni fun a)
 processTerm = \case
     -- throw away dead bindings
-    Let x r bs t -> mkLet x r <$> filterM liveBinding (NE.toList bs) <*> pure t
+    Let x r bs t -> mkLet x r <$> filterM liveBinding' (NE.toList bs) <*> pure t
     x            -> pure x
+    where
+        liveBinding' b = do
+              isLive <- liveBinding b
+              unless isLive markDirty
+              pure isLive
+        -- Record wether a modification to the AST has occurred.
+        markDirty :: MonadState Bool m => m ()
+        markDirty = put True
