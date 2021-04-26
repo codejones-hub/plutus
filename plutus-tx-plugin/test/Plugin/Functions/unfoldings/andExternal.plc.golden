@@ -12,25 +12,12 @@
         (vardecl True Bool) (vardecl False Bool)
       )
     )
-    (termbind
-      (strict)
-      (vardecl andExternal (fun Bool (fun Bool Bool)))
-      (lam
-        a
-        Bool
-        (lam
-          b
-          Bool
-          [
-            [
-              [ { [ Bool_match a ] (fun Unit Bool) } (lam thunk Unit b) ]
-              (lam thunk Unit False)
-            ]
-            Unit
-          ]
-        )
-      )
-    )
-    [ [ andExternal True ] False ]
+    [
+      [
+        [ { [ Bool_match True ] (fun Unit Bool) } (lam thunk Unit False) ]
+        (lam thunk Unit False)
+      ]
+      Unit
+    ]
   )
 )

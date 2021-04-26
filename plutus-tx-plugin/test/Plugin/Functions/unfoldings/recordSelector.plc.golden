@@ -11,18 +11,13 @@
         )
       )
     )
-    (termbind
-      (strict)
-      (vardecl mrA (fun MyMonoRecord (con integer)))
-      (lam
-        ds
-        MyMonoRecord
-        [
-          { [ MyMonoRecord_match ds ] (con integer) }
-          (lam ds (con integer) (lam ds (con integer) ds))
-        ]
-      )
+    (lam
+      ds
+      MyMonoRecord
+      [
+        { [ MyMonoRecord_match ds ] (con integer) }
+        (lam ds (con integer) (lam ds (con integer) ds))
+      ]
     )
-    mrA
   )
 )

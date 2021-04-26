@@ -11,22 +11,6 @@
     )
     (let
       (nonrec)
-      (termbind
-        (strict)
-        (vardecl
-          build
-          (all a (type) (fun (all b (type) (fun (fun a (fun b b)) (fun b b))) [List a]))
-        )
-        (abs
-          a
-          (type)
-          (lam
-            g
-            (all b (type) (fun (fun a (fun b b)) (fun b b)))
-            [ [ { g [List a] } { Cons a } ] { Nil a } ]
-          )
-        )
-      )
       (datatypebind
         (datatype (tyvardecl Unit (type))  Unit_match (vardecl Unit Unit))
       )
@@ -86,16 +70,23 @@
             [ (builtin addInteger) (con integer 1) ]
           ]
           [
-            { build (con integer) }
-            (abs
-              a
-              (type)
+            (let
+              (nonrec)
+              (termbind
+                (strict)
+                (vardecl
+                  c
+                  (fun (con integer) (fun [List (con integer)] [List (con integer)]))
+                )
+                { Cons (con integer) }
+              )
               (lam
-                c
-                (fun (con integer) (fun a a))
-                (lam n a [ [ c (con integer 0) ] [ [ c (con integer 1) ] n ] ])
+                n
+                [List (con integer)]
+                [ [ c (con integer 0) ] [ [ c (con integer 1) ] n ] ]
               )
             )
+            { Nil (con integer) }
           ]
         ]
       )

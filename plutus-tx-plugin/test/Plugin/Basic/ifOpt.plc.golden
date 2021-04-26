@@ -11,33 +11,29 @@
     )
     (termbind
       (strict)
-      (vardecl equalsInteger (fun (con integer) (fun (con integer) Bool)))
-      (lam
-        arg
-        (con integer)
-        (lam
-          arg
-          (con integer)
-          (let
-            (nonrec)
-            (termbind
-              (strict)
-              (vardecl b (con bool))
-              [ [ (builtin equalsInteger) arg ] arg ]
-            )
-            [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
-          )
-        )
-      )
-    )
-    (termbind
-      (strict)
       (vardecl wild Bool)
       [
-        [
-          equalsInteger
-          [ [ (builtin divideInteger) (con integer 1) ] (con integer 0) ]
-        ]
+        (let
+          (nonrec)
+          (termbind
+            (strict)
+            (vardecl arg (con integer))
+            [ [ (builtin divideInteger) (con integer 1) ] (con integer 0) ]
+          )
+          (lam
+            arg
+            (con integer)
+            (let
+              (nonrec)
+              (termbind
+                (strict)
+                (vardecl b (con bool))
+                [ [ (builtin equalsInteger) arg ] arg ]
+              )
+              [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+            )
+          )
+        )
         (con integer 0)
       ]
     )

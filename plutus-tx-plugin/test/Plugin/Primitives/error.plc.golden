@@ -4,11 +4,6 @@
     (datatypebind
       (datatype (tyvardecl Unit (type))  Unit_match (vardecl Unit Unit))
     )
-    (termbind
-      (strict)
-      (vardecl error (all a (type) (fun Unit a)))
-      (abs e (type) (lam thunk Unit (error e)))
-    )
-    { error (con integer) }
+    (lam thunk Unit (error (con integer)))
   )
 )

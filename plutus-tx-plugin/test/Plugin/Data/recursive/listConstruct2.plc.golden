@@ -9,36 +9,20 @@
         (vardecl Nil [List a]) (vardecl Cons (fun a (fun [List a] [List a])))
       )
     )
-    (let
-      (nonrec)
-      (termbind
-        (strict)
-        (vardecl
-          build
-          (all a (type) (fun (all b (type) (fun (fun a (fun b b)) (fun b b))) [List a]))
-        )
-        (abs
-          a
-          (type)
-          (lam
-            g
-            (all b (type) (fun (fun a (fun b b)) (fun b b)))
-            [ [ { g [List a] } { Cons a } ] { Nil a } ]
-          )
-        )
-      )
-      [
-        { build (con integer) }
-        (abs
-          a
-          (type)
-          (lam
+    [
+      (let
+        (nonrec)
+        (termbind
+          (strict)
+          (vardecl
             c
-            (fun (con integer) (fun a a))
-            (lam n a [ [ c (con integer 1) ] n ])
+            (fun (con integer) (fun [List (con integer)] [List (con integer)]))
           )
+          { Cons (con integer) }
         )
-      ]
-    )
+        (lam n [List (con integer)] [ [ c (con integer 1) ] n ])
+      )
+      { Nil (con integer) }
+    ]
   )
 )

@@ -2,33 +2,11 @@
   (let
     (nonrec)
     (datatypebind
-      (datatype (tyvardecl Unit (type))  Unit_match (vardecl Unit Unit))
-    )
-    (datatypebind
       (datatype
-        (tyvardecl Bool (type))
+        (tyvardecl Person (type))
 
-        Bool_match
-        (vardecl True Bool) (vardecl False Bool)
-      )
-    )
-    (termbind
-      (strict)
-      (vardecl bad_name (fun Bool (fun Bool Bool)))
-      (lam
-        l
-        Bool
-        (lam
-          r
-          Bool
-          [
-            [
-              [ { [ Bool_match l ] (fun Unit Bool) } (lam thunk Unit r) ]
-              (lam thunk Unit False)
-            ]
-            Unit
-          ]
-        )
+        Person_match
+        (vardecl Jane Person) (vardecl Jim Person)
       )
     )
     (datatypebind
@@ -37,6 +15,14 @@
 
         Animal_match
         (vardecl Cat Animal) (vardecl Dog Animal)
+      )
+    )
+    (datatypebind
+      (datatype
+        (tyvardecl Bool (type))
+
+        Bool_match
+        (vardecl True Bool) (vardecl False Bool)
       )
     )
     (datatypebind
@@ -50,145 +36,149 @@
         )
       )
     )
-    (termbind
-      (strict)
-      (vardecl age (all a (type) (fun [PersonLike a] (fun a (con integer)))))
-      (abs
-        a
-        (type)
-        (lam
-          v
-          [PersonLike a]
-          [
-            { [ { PersonLike_match a } v ] (fun a (con integer)) }
-            (lam v (fun a (con integer)) (lam v (fun a (fun Animal Bool)) v))
-          ]
-        )
-      )
+    (datatypebind
+      (datatype (tyvardecl Unit (type))  Unit_match (vardecl Unit Unit))
     )
     (termbind
-      (strict)
-      (vardecl greaterThanInteger (fun (con integer) (fun (con integer) Bool)))
-      (lam
-        arg
-        (con integer)
-        (lam
-          arg
-          (con integer)
-          (let
-            (nonrec)
-            (termbind
-              (strict)
-              (vardecl b (con bool))
-              [ [ (builtin greaterThanInteger) arg ] arg ]
-            )
-            [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
-          )
-        )
-      )
-    )
-    (termbind
-      (strict)
-      (vardecl
-        likesAnimal
-        (all a (type) (fun [PersonLike a] (fun a (fun Animal Bool))))
-      )
-      (abs
-        a
-        (type)
-        (lam
-          v
-          [PersonLike a]
-          [
-            { [ { PersonLike_match a } v ] (fun a (fun Animal Bool)) }
-            (lam v (fun a (con integer)) (lam v (fun a (fun Animal Bool)) v))
-          ]
-        )
-      )
-    )
-    (termbind
-      (strict)
-      (vardecl predicate (all p (type) (fun [PersonLike p] (fun p Bool))))
-      (abs
-        p
-        (type)
-        (lam
-          dPersonLike
-          [PersonLike p]
+      (nonstrict)
+      (vardecl fPersonLikePerson [PersonLike Person])
+      [
+        [
+          { CConsPersonLike Person }
           (lam
-            p
-            p
+            ds
+            Person
             [
-              [ bad_name [ [ [ { likesAnimal p } dPersonLike ] p ] Cat ] ]
+              [ { [ Person_match ds ] (con integer) } (con integer 35) ]
+              (con integer 30)
+            ]
+          )
+        ]
+        (lam
+          ds
+          Person
+          (lam
+            ds
+            Animal
+            [
               [
-                [ greaterThanInteger [ [ { age p } dPersonLike ] p ] ]
-                (con integer 30)
+                [
+                  { [ Person_match ds ] (fun Unit Bool) }
+                  (lam
+                    thunk
+                    Unit
+                    [
+                      [
+                        [
+                          { [ Animal_match ds ] (fun Unit Bool) }
+                          (lam thunk Unit True)
+                        ]
+                        (lam thunk Unit False)
+                      ]
+                      Unit
+                    ]
+                  )
+                ]
+                (lam thunk Unit False)
               ]
+              Unit
             ]
           )
         )
-      )
+      ]
     )
-    (datatypebind
-      (datatype
-        (tyvardecl Person (type))
-
-        Person_match
-        (vardecl Jane Person) (vardecl Jim Person)
-      )
-    )
-    (termbind
-      (strict)
-      (vardecl cage (fun Person (con integer)))
-      (lam
-        ds
-        Person
-        [
-          [ { [ Person_match ds ] (con integer) } (con integer 35) ]
-          (con integer 30)
-        ]
-      )
-    )
-    (termbind
-      (strict)
-      (vardecl clikesAnimal (fun Person (fun Animal Bool)))
-      (lam
-        ds
-        Person
-        (lam
-          ds
-          Animal
-          [
+    (lam
+      ds
+      Person
+      [
+        (let
+          (nonrec)
+          (termbind
+            (strict) (vardecl dPersonLike [PersonLike Person]) fPersonLikePerson
+          )
+          (lam
+            p
+            Person
             [
-              [
-                { [ Person_match ds ] (fun Unit Bool) }
-                (lam
-                  thunk
-                  Unit
+              (let
+                (nonrec)
+                (termbind
+                  (strict)
+                  (vardecl l Bool)
                   [
                     [
                       [
-                        { [ Animal_match ds ] (fun Unit Bool) }
-                        (lam thunk Unit True)
+                        {
+                          [ { PersonLike_match Person } dPersonLike ]
+                          (fun Person (fun Animal Bool))
+                        }
+                        (lam
+                          v
+                          (fun Person (con integer))
+                          (lam v (fun Person (fun Animal Bool)) v)
+                        )
+                      ]
+                      p
+                    ]
+                    Cat
+                  ]
+                )
+                (lam
+                  r
+                  Bool
+                  [
+                    [
+                      [
+                        { [ Bool_match l ] (fun Unit Bool) } (lam thunk Unit r)
                       ]
                       (lam thunk Unit False)
                     ]
                     Unit
                   ]
                 )
+              )
+              [
+                (let
+                  (nonrec)
+                  (termbind
+                    (strict)
+                    (vardecl arg (con integer))
+                    [
+                      [
+                        {
+                          [ { PersonLike_match Person } dPersonLike ]
+                          (fun Person (con integer))
+                        }
+                        (lam
+                          v
+                          (fun Person (con integer))
+                          (lam v (fun Person (fun Animal Bool)) v)
+                        )
+                      ]
+                      p
+                    ]
+                  )
+                  (lam
+                    arg
+                    (con integer)
+                    (let
+                      (nonrec)
+                      (termbind
+                        (strict)
+                        (vardecl b (con bool))
+                        [ [ (builtin greaterThanInteger) arg ] arg ]
+                      )
+                      [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+                    )
+                  )
+                )
+                (con integer 30)
               ]
-              (lam thunk Unit False)
             ]
-            Unit
-          ]
+          )
         )
-      )
+        ds
+      ]
     )
-    (termbind
-      (nonstrict)
-      (vardecl fPersonLikePerson [PersonLike Person])
-      [ [ { CConsPersonLike Person } cage ] clikesAnimal ]
-    )
-    (lam ds Person [ [ { predicate Person } fPersonLikePerson ] ds ])
   )
 )

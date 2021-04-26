@@ -44,19 +44,8 @@
         )
       )
     )
-    (termbind
-      (strict)
-      (vardecl andDirect (fun Bool (fun Bool Bool)))
-      (lam
-        ds
-        Bool
-        (lam
-          ds
-          Bool
-          [ [ nandDirect [ [ nandDirect ds ] ds ] ] [ [ nandDirect ds ] ds ] ]
-        )
-      )
-    )
-    [ [ andDirect True ] False ]
+    [
+      [ nandDirect [ [ nandDirect True ] False ] ] [ [ nandDirect True ] False ]
+    ]
   )
 )

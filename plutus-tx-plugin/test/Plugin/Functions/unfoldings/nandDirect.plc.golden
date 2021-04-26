@@ -12,38 +12,24 @@
         (vardecl True Bool) (vardecl False Bool)
       )
     )
-    (termbind
-      (strict)
-      (vardecl nandDirect (fun Bool (fun Bool Bool)))
-      (lam
-        ds
-        Bool
+    [
+      [
+        [ { [ Bool_match True ] (fun Unit Bool) } (lam thunk Unit False) ]
         (lam
-          ds
-          Bool
+          thunk
+          Unit
           [
             [
-              [ { [ Bool_match ds ] (fun Unit Bool) } (lam thunk Unit False) ]
-              (lam
-                thunk
-                Unit
-                [
-                  [
-                    [
-                      { [ Bool_match ds ] (fun Unit Bool) }
-                      (lam thunk Unit False)
-                    ]
-                    (lam thunk Unit True)
-                  ]
-                  Unit
-                ]
-              )
+              [
+                { [ Bool_match False ] (fun Unit Bool) } (lam thunk Unit False)
+              ]
+              (lam thunk Unit True)
             ]
             Unit
           ]
         )
-      )
-    )
-    [ [ nandDirect True ] False ]
+      ]
+      Unit
+    ]
   )
 )

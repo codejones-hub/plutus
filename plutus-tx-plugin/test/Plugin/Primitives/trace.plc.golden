@@ -4,19 +4,14 @@
     (datatypebind
       (datatype (tyvardecl Unit (type))  Unit_match (vardecl Unit Unit))
     )
-    (termbind
-      (strict)
-      (vardecl trace (fun (con string) Unit))
-      (lam
-        arg
-        (con string)
-        (let
-          (nonrec)
-          (termbind (strict) (vardecl b (con unit)) [ (builtin trace) arg ])
-          Unit
-        )
+    (lam
+      ds
+      (con string)
+      (let
+        (nonrec)
+        (termbind (strict) (vardecl b (con unit)) [ (builtin trace) ds ])
+        Unit
       )
     )
-    (lam ds (con string) [ trace ds ])
   )
 )

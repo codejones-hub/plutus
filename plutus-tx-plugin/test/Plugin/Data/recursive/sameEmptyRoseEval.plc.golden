@@ -1,47 +1,47 @@
 (delay
   (lam
-    case_EmptyRose_29
+    case_EmptyRose_7
     [
-      case_EmptyRose_29
+      case_EmptyRose_7
       (delay
         (lam
-          case_Nil_35
+          case_Nil_21
           (lam
-            case_Cons_36
+            case_Cons_22
             [
               [
-                case_Cons_36
+                case_Cons_22
                 (delay
                   (lam
-                    case_EmptyRose_29
+                    case_EmptyRose_7
                     [
-                      case_EmptyRose_29
-                      (delay (lam case_Nil_31 (lam case_Cons_32 case_Nil_31)))
+                      case_EmptyRose_7
+                      (delay (lam case_Nil_14 (lam case_Cons_15 case_Nil_14)))
                     ]
                   )
                 )
               ]
               (delay
                 (lam
-                  case_Nil_35
+                  case_Nil_21
                   (lam
-                    case_Cons_36
+                    case_Cons_22
                     [
                       [
-                        case_Cons_36
+                        case_Cons_22
                         (delay
                           (lam
-                            case_EmptyRose_29
+                            case_EmptyRose_7
                             [
-                              case_EmptyRose_29
+                              case_EmptyRose_7
                               (delay
-                                (lam case_Nil_31 (lam case_Cons_32 case_Nil_31))
+                                (lam case_Nil_14 (lam case_Cons_15 case_Nil_14))
                               )
                             ]
                           )
                         )
                       ]
-                      (delay (lam case_Nil_31 (lam case_Cons_32 case_Nil_31)))
+                      (delay (lam case_Nil_14 (lam case_Cons_15 case_Nil_14)))
                     ]
                   )
                 )

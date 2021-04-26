@@ -4,12 +4,7 @@
     (datatypebind
       (datatype (tyvardecl Unit (type))  Unit_match (vardecl Unit Unit))
     )
-    (termbind
-      (strict)
-      (vardecl error (all a (type) (fun Unit a)))
-      (abs e (type) (lam thunk Unit (error e)))
-    )
-    (termbind (nonstrict) (vardecl joinError Unit) [ { error Unit } Unit ])
+    (termbind (nonstrict) (vardecl joinError Unit) (error Unit))
     (datatypebind
       (datatype
         (tyvardecl Bool (type))
@@ -18,41 +13,36 @@
         (vardecl True Bool) (vardecl False Bool)
       )
     )
-    (termbind
-      (strict)
-      (vardecl joinError (fun Bool (fun Bool Unit)))
+    (lam
+      x
+      Bool
       (lam
-        x
+        y
         Bool
-        (lam
-          y
-          Bool
+        [
           [
             [
-              [
-                { [ Bool_match x ] (fun Unit Unit) }
-                (lam
-                  thunk
-                  Unit
+              { [ Bool_match x ] (fun Unit Unit) }
+              (lam
+                thunk
+                Unit
+                [
                   [
                     [
-                      [
-                        { [ Bool_match y ] (fun Unit Unit) }
-                        (lam thunk Unit joinError)
-                      ]
-                      (lam thunk Unit Unit)
+                      { [ Bool_match y ] (fun Unit Unit) }
+                      (lam thunk Unit joinError)
                     ]
-                    Unit
+                    (lam thunk Unit Unit)
                   ]
-                )
-              ]
-              (lam thunk Unit Unit)
+                  Unit
+                ]
+              )
             ]
-            Unit
+            (lam thunk Unit Unit)
           ]
-        )
+          Unit
+        ]
       )
     )
-    joinError
   )
 )
