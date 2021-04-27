@@ -49,6 +49,7 @@ import qualified Data.HashMap.Strict                    as HM
 import           Data.Hashable
 import qualified Data.Kind                              as Kind
 import qualified Data.Map                               as Map
+import           Data.Ratio
 import           Data.SatInt
 import qualified Data.Scientific                        as S
 import qualified Data.Text                              as Text
@@ -70,8 +71,8 @@ type CostModel = CostModelBase CostingFun
    `toCostUnit` is exported).
 -}
 
-toCostUnit :: Double -> SatInt
-toCostUnit x = ceiling (10000 * x)
+toCostUnit :: Ratio SatInt -> Ratio SatInt
+toCostUnit x = (10000 * x)
 
 -- | The main model which contains all data required to predict the cost of builtin functions. See Note [Creation of the Cost Model] for how this is generated. Calibrated for the CeK machine.
 data CostModelBase f =
@@ -199,15 +200,18 @@ data ModelOneArgument =
 instance Default ModelOneArgument where
     def = ModelOneArgumentConstantCost 1.0
 
+dtr :: Double -> Ratio SatInt
+dtr = fromRational . toRational
+
 runCostingFunOneArgument :: CostingFun ModelOneArgument -> ExMemory -> ExBudget
 runCostingFunOneArgument
     (CostingFun cpu mem) mem1 =
         ExBudget (ExCPU $ runOneArgumentModel cpu mem1) (ExMemory $ runOneArgumentModel mem mem1)
 
-runOneArgumentModel :: ModelOneArgument -> ExMemory -> SatInt
-runOneArgumentModel (ModelOneArgumentConstantCost c) _ = toCostUnit c
+runOneArgumentModel :: ModelOneArgument -> ExMemory -> Ratio SatInt
+runOneArgumentModel (ModelOneArgumentConstantCost c) _ = toCostUnit $ dtr c
 runOneArgumentModel (ModelOneArgumentLinearCost (ModelLinearSize intercept slope _)) (ExMemory s) =
-    toCostUnit $ (fromIntegral s) * slope + intercept
+    toCostUnit $ s * dtr slope + dtr intercept
 
 -- | s * (x + y) + I
 data ModelAddedSizes = ModelAddedSizes
@@ -293,33 +297,33 @@ runCostingFunTwoArguments :: CostingFun ModelTwoArguments -> ExMemory -> ExMemor
 runCostingFunTwoArguments (CostingFun cpu mem) mem1 mem2 =
     ExBudget (ExCPU (runTwoArgumentModel cpu mem1 mem2)) (ExMemory (runTwoArgumentModel mem mem1 mem2))
 
-runTwoArgumentModel :: ModelTwoArguments -> ExMemory -> ExMemory -> SatInt
+runTwoArgumentModel :: ModelTwoArguments -> ExMemory -> ExMemory -> Ratio SatInt
 runTwoArgumentModel
-    (ModelTwoArgumentsConstantCost c) _ _ = toCostUnit c
+    (ModelTwoArgumentsConstantCost c) _ _ = toCostUnit $ dtr c
 runTwoArgumentModel
     (ModelTwoArgumentsAddedSizes (ModelAddedSizes intercept slope)) (ExMemory size1) (ExMemory size2) =
-        toCostUnit $ (fromIntegral (size1 + size2)) * slope + intercept -- TODO is this even correct? If not, adjust the other implementations too.
+        toCostUnit $ (size1 + size2) * dtr slope + dtr intercept -- TODO is this even correct? If not, adjust the other implementations too.
 runTwoArgumentModel
     (ModelTwoArgumentsSubtractedSizes (ModelSubtractedSizes intercept slope minSize)) (ExMemory size1) (ExMemory size2) =
-        toCostUnit $ (max minSize (fromIntegral (size1 - size2))) * slope + intercept
+        toCostUnit $ max (dtr minSize) (size1 - size2) * dtr slope + dtr intercept
 runTwoArgumentModel
     (ModelTwoArgumentsMultipliedSizes (ModelMultipliedSizes intercept slope)) (ExMemory size1) (ExMemory size2) =
-        toCostUnit $ (fromIntegral (size1 * size2)) * slope + intercept
+        toCostUnit $ size1 * size2 * dtr slope + dtr intercept
 runTwoArgumentModel
     (ModelTwoArgumentsMinSize (ModelMinSize intercept slope)) (ExMemory size1) (ExMemory size2) =
-        toCostUnit $ (fromIntegral (min size1 size2)) * slope + intercept
+        toCostUnit $ (min size1 size2) * dtr slope + dtr intercept
 runTwoArgumentModel
     (ModelTwoArgumentsMaxSize (ModelMaxSize intercept slope)) (ExMemory size1) (ExMemory size2) =
-        toCostUnit $ (fromIntegral (max size1 size2)) * slope + intercept
+        toCostUnit $ (max size1 size2) * dtr slope + dtr intercept
 runTwoArgumentModel
     (ModelTwoArgumentsSplitConstMulti (ModelSplitConst intercept slope)) (ExMemory size1) (ExMemory size2) =
-        toCostUnit $ (if (size1 > size2) then (fromIntegral size1) * (fromIntegral size2) else 0) * slope + intercept
+        toCostUnit $ (if (size1 > size2) then size1 * size2 else 0) * dtr slope + dtr intercept
 runTwoArgumentModel
     (ModelTwoArgumentsLinearSize (ModelLinearSize intercept slope ModelOrientationX)) (ExMemory size1) (ExMemory _) =
-        toCostUnit $ (fromIntegral size1) * slope + intercept
+        toCostUnit $ size1 * dtr slope + dtr intercept
 runTwoArgumentModel
     (ModelTwoArgumentsLinearSize (ModelLinearSize intercept slope ModelOrientationY)) (ExMemory _) (ExMemory size2) =
-        toCostUnit $ (fromIntegral size2) * slope + intercept
+        toCostUnit $ size2 * dtr slope + dtr intercept
 
 data ModelThreeArguments =
     ModelThreeArgumentsConstantCost Double
@@ -331,10 +335,10 @@ data ModelThreeArguments =
 instance Default ModelThreeArguments where
     def = ModelThreeArgumentsConstantCost 1.0
 
-runThreeArgumentModel :: ModelThreeArguments -> ExMemory -> ExMemory -> ExMemory -> SatInt
-runThreeArgumentModel (ModelThreeArgumentsConstantCost c) _ _ _ = toCostUnit c
+runThreeArgumentModel :: ModelThreeArguments -> ExMemory -> ExMemory -> ExMemory -> Ratio SatInt
+runThreeArgumentModel (ModelThreeArgumentsConstantCost c) _ _ _ = toCostUnit $ dtr c
 runThreeArgumentModel (ModelThreeArgumentsAddedSizes (ModelAddedSizes intercept slope)) (ExMemory size1) (ExMemory size2) (ExMemory size3) =
-    toCostUnit $ (fromIntegral (size1 + size2 + size3)) * slope + intercept
+    toCostUnit $ size1 + size2 + size3 * dtr slope + dtr intercept
 
 runCostingFunThreeArguments :: CostingFun ModelThreeArguments -> ExMemory -> ExMemory -> ExMemory -> ExBudget
 runCostingFunThreeArguments (CostingFun cpu mem) mem1 mem2 mem3 =

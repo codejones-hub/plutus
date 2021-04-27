@@ -23,6 +23,7 @@ import           PlutusPrelude
 import           Control.Monad.RWS.Strict
 import qualified Data.ByteString          as BS
 import           Data.Proxy
+import           Data.Ratio
 import           Data.SatInt
 import qualified Data.Text                as T
 import           Foreign.Storable
@@ -76,22 +77,22 @@ never going to need to worry about the possibility of saturating for 'Int32' but
 -}
 
 -- | Counts size in machine words (64bit for the near future)
-newtype ExMemory = ExMemory SatInt
+newtype ExMemory = ExMemory (Ratio SatInt)
   deriving (Eq, Ord, Show)
   deriving newtype (Num, NFData)
-  deriving (Semigroup, Monoid) via (Sum SatInt)
+  deriving (Semigroup, Monoid) via (Sum (Ratio SatInt))
 instance Pretty ExMemory where
-    pretty (ExMemory i) = pretty (toInteger i)
+    pretty (ExMemory i) = pretty (fromSat $ numerator i) <> "%" <> pretty (fromSat $ denominator i)
 instance PrettyBy config ExMemory where
     prettyBy _ m = pretty m
 
 -- | Counts CPU units - no fixed base, proportional.
-newtype ExCPU = ExCPU SatInt
+newtype ExCPU = ExCPU (Ratio SatInt)
   deriving (Eq, Ord, Show)
   deriving newtype (Num, NFData)
-  deriving (Semigroup, Monoid) via (Sum SatInt)
+  deriving (Semigroup, Monoid) via (Sum (Ratio SatInt))
 instance Pretty ExCPU where
-    pretty (ExCPU i) = pretty (toInteger i)
+    pretty (ExCPU i) = pretty (fromSat $ numerator i) <> "%" <> pretty (fromSat $ denominator i)
 instance PrettyBy config ExCPU where
     prettyBy _ m = pretty m
 
@@ -143,6 +144,8 @@ deriving via (GenericExMemoryUsage (Term tyname name uni fun ann)) instance
     ) => ExMemoryUsage (Term tyname name uni fun ann)
 deriving newtype instance ExMemoryUsage TyName
 deriving newtype instance ExMemoryUsage SatInt
+instance ExMemoryUsage a => ExMemoryUsage (Ratio a) where
+  memoryUsage a = memoryUsage (numerator a) + memoryUsage (denominator a)
 deriving newtype instance ExMemoryUsage ExMemory
 deriving newtype instance ExMemoryUsage Unique
 
