@@ -748,8 +748,8 @@ printBudgetStateBudget b = do
   putStrLn $ "CPU budget:    " ++ show cpu
   putStrLn $ "Memory budget: " ++ show mem
 
-printBudgetStateTally :: (Eq fun, Cek.Hashable fun, Show fun) => Cek.CekExTally fun -> IO ()
-printBudgetStateTally (Cek.CekExTally costs) = do
+printBudgetStateTally :: (Eq fun, Cek.Hashable fun, Show fun) => Double -> Cek.CekExTally fun -> IO ()
+printBudgetStateTally nnodes (Cek.CekExTally costs) = do
   putStrLn $ "compute    " ++ printf "%10.0f" totalComputeSteps
   putStrLn $ "Const      " ++ pbudget Cek.BConst      ++ pc Cek.BConst
   putStrLn $ "Var        " ++ pbudget Cek.BVar        ++ pc Cek.BVar
@@ -760,7 +760,7 @@ printBudgetStateTally (Cek.CekExTally costs) = do
   putStrLn $ "Error      " ++ pbudget Cek.BError      ++ pc Cek.BError
   putStrLn $ "Builtin    " ++ pbudget Cek.BBuiltin    ++ pc Cek.BBuiltin
   putStrLn ""
-  putStrLn $ "AST        " ++ pbudget Cek.BAST
+  putStrLn $ "AST size   " ++ printf "%.0f" nnodes
   putStrLn $ "BuiltinApp " ++ budgetToString2 (mconcat (map snd builtinsAndCosts))
 --  putStrLn $ "AppLam     " ++ pbudget Cek.BAppLam
 --  putStrLn $ "AppBI_1    " ++ pbudget Cek.BAppBI_nonfinal
@@ -772,14 +772,15 @@ printBudgetStateTally (Cek.CekExTally costs) = do
   traverse_ (\(b,cost) -> putStrLn $ printf "%-20s %s" (show b) (budgetToString2 cost :: String)) builtinsAndCosts
   putStrLn ""
   let
-      builtinExeTimes::Double = getCPU $ mconcat (map snd builtinsAndCosts)
---      prediction1 = 1e9*(3.619e-1 + 1.056e-4*totalComputeSteps)
-      prediction1 = 1e9*(3.762e-1 + 1.076e-4*totalComputeSteps)
---      prediction2 = 1e9*(4.985e-1 + 6.859e-5*totalComputeSteps + builtinExeTimes/1000)
---      prediction2 = 1e3*(7.021e-5*totalComputeSteps + builtinExeTimes/1000)
-      prediction2 = 1e6*(0.009 + 0.000114*totalComputeSteps + builtinExeTimes/1000)
-  putStrLn $ printf "Predicted execution time 1: %s" (formatTime prediction1)
-  putStrLn $ printf "Predicted execution time 2: %s" (formatTime prediction2)
+      builtinExeTimes::Double = (getCPU $ mconcat (map snd builtinsAndCosts))/10000
+      prediction1 = 1e9*(0.3762 + 0.0001076 *totalComputeSteps)
+      -- prediction2 = 1e9*(0.009  * nnodes/481  + 0.000114  * totalComputeSteps + builtinExeTimes/1000)
+      -- prediction3 = 1e9*(0.200  * nnodes/2181 + 0.0000725 * totalComputeSteps + builtinExeTimes/1000)
+      prediction2 = 1e9*(0.009  + 0.000114  * totalComputeSteps + builtinExeTimes/1000)
+      prediction3 = 1e9*(0.200  + 0.0000725 * totalComputeSteps + builtinExeTimes/1000)
+  putStrLn $ printf "Predicted execution time (wrong): %s" (formatTime prediction1)
+  putStrLn $ printf "Predicted execution time (arith): %s" (formatTime prediction2)
+  putStrLn $ printf "Predicted execution time (prime): %s" (formatTime prediction3)
       where
         getCPU b = let ExCPU b' = _exBudgetCPU b in fromIntegral b'::Double
         getSpent k =
@@ -801,19 +802,19 @@ printBudgetStateTally (Cek.CekExTally costs) = do
         builtinsAndCosts = List.foldl f [] (H.toList costs)
 
 class PrintBudgetState cost where
-    printBudgetState :: cost -> IO ()
+    printBudgetState :: Double -> cost -> IO ()
 
 instance PrintBudgetState Cek.CountingSt where
-    printBudgetState (Cek.CountingSt budget) = printBudgetStateBudget budget
+    printBudgetState _ (Cek.CountingSt budget) = printBudgetStateBudget budget
 
 instance (Eq fun, Cek.Hashable fun, Show fun) => PrintBudgetState (Cek.TallyingSt fun) where
-    printBudgetState (Cek.TallyingSt tally budget) = do
+    printBudgetState nnodes (Cek.TallyingSt tally budget) = do
         printBudgetStateBudget budget
         putStrLn ""
-        printBudgetStateTally tally
+        printBudgetStateTally nnodes tally
 
 instance PrintBudgetState Cek.RestrictingSt where
-    printBudgetState (Cek.RestrictingSt (ExRestrictingBudget budget)) =
+    printBudgetState _ (Cek.RestrictingSt (ExRestrictingBudget budget)) =
         printBudgetStateBudget budget
 
 
@@ -858,9 +859,9 @@ runEval (EvalOptions language inp ifmt evalMode printMode budgetMode timingMode)
                           case timingMode of
                             NoTiming -> do
                                     let (result, budget) = evaluate body
-                                    printBudgetState budget
+                                    printBudgetState (astSize body) budget
                                     handleResultSilently result  -- We just want to see the budget information
-                            Timing n -> timeEval n evaluate body >>= handleTimingResultsWithBudget
+                            Timing n -> timeEval n evaluate body >>= handleTimingResultsWithBudget body
 
     where handleResult result =
               case result of
@@ -874,19 +875,28 @@ runEval (EvalOptions language inp ifmt evalMode printMode budgetMode timingMode)
                 [Right _]  -> exitSuccess -- We don't want to see the result here
                 [Left err] -> print err >> exitFailure
                 _          -> error "Timing evaluations returned inconsistent results" -- Should never happen
-          handleTimingResultsWithBudget results =
+          handleTimingResultsWithBudget body results =
               case nub results of
                 [(Right _, budget)] -> do
                     putStrLn ""
-                    printBudgetState budget
+                    printBudgetState (astSize body) budget
                     exitSuccess
                 [(Left err,   budget)] -> do
                     putStrLn ""
                     print err
-                    printBudgetState budget
+                    printBudgetState (astSize body) budget
                     exitFailure
                 _                                   -> error "Timing evaluations returned inconsistent results"
 
+          astSize = \case
+                 UPLC.Constant () _     -> 1::Double
+                 UPLC.Builtin  () _     -> 1
+                 UPLC.Var      () _     -> 1
+                 UPLC.LamAbs   () _ t   -> 1 + astSize t
+                 UPLC.Apply    () t1 t2 -> 1 + astSize t1 + astSize t2
+                 UPLC.Delay    () t     -> 1 + astSize t
+                 UPLC.Force    () t     -> 1 + astSize t
+                 UPLC.Error    ()       -> 1
 
 ---------------- Driver ----------------
 
