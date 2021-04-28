@@ -368,14 +368,7 @@ dischargeCekValEnv valEnv = go 0
 -- Convert a CekValue into a term by replacing all bound variables with the terms
 -- they're bound to (which themselves have to be obtain by recursively discharging values).
 dischargeCekValue :: CekValue uni fun -> TermWithMem uni fun
-dischargeCekValue = \case
-    VCon     ex val                     -> Constant ex val
-    VDelay   ex body env                -> Delay ex (dischargeCekValEnv env body)
-    VLamAbs  ex name body env           -> LamAbs ex name (dischargeCekValEnv env body)
-    VBuiltin ex bn arity0 _ forces args -> mkBuiltinApplication ex bn arity0 forces (fmap dischargeCekValue args)
-    {- We only discharge a value when (a) it's being returned by the machine,
-       or (b) it's needed for an error message.  When we're discharging VBuiltin
-       we use arity0 to get the type and term arguments into the right sequence. -}
+dischargeCekValue _ = Error mempty
 
 instance (Closed uni, GShow uni, uni `EverywhereAll` '[PrettyConst, ExMemoryUsage], Pretty fun) =>
             PrettyBy PrettyConfigPlc (CekValue uni fun) where
