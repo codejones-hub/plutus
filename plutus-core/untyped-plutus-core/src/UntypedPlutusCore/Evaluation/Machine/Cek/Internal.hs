@@ -17,6 +17,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-uniques -dsuppress-coercions -dsuppress-type-applications -dsuppress-unfoldings -dsuppress-idinfo -dumpdir /tmp/dumps #-}
 
 module UntypedPlutusCore.Evaluation.Machine.Cek.Internal
     -- See Note [Compilation peculiarities].
@@ -35,6 +36,7 @@ module UntypedPlutusCore.Evaluation.Machine.Cek.Internal
     , ExBudgetCategory(..)
     , PrettyUni
     , extractEvaluationResult
+    , dischargeCekValue
     , runCek
     )
 where
@@ -460,7 +462,7 @@ enterComputeCek
     => Context uni fun
     -> CekValEnv uni fun
     -> TermWithMem uni fun
-    -> CekM cost uni fun s (Term Name uni fun ())
+    -> CekM cost uni fun s (CekValue uni fun)
 enterComputeCek = computeCek where
     -- | The computing part of the CEK machine.
     -- Either
@@ -472,7 +474,7 @@ enterComputeCek = computeCek where
         :: Context uni fun
         -> CekValEnv uni fun
         -> TermWithMem uni fun
-        -> CekM cost uni fun s (Term Name uni fun ())
+        -> CekM cost uni fun s (CekValue uni fun)
     -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
     computeCek ctx env (Var _ varName) = do
         spendBudget BVar astNodeCost
@@ -522,10 +524,9 @@ enterComputeCek = computeCek where
           return the result, or extend the value with the new argument and call
           returnCek.  If v is anything else, fail.
     -}
-    returnCek :: Context uni fun -> CekValue uni fun -> CekM cost uni fun s (Term Name uni fun ())
-    --- Instantiate all the free variable of the resulting term in case there are any.
+    returnCek :: Context uni fun -> CekValue uni fun -> CekM cost uni fun s (CekValue uni fun)
     -- . ◅ V           ↦  [] V
-    returnCek [] val = pure $ void $ dischargeCekValue val
+    returnCek [] val = pure val
     -- s , {_ A} ◅ abs α M  ↦  s ; ρ ▻ M [ α / A ]*
     returnCek (FrameForce : ctx) fun = forceEvaluate ctx fun
     -- s , [_ (M,ρ)] ◅ V  ↦  s , [V _] ; ρ ▻ M
@@ -556,7 +557,7 @@ enterComputeCek = computeCek where
     -- or extend the value with @force@ and call returnCek;
     -- if v is anything else, fail.
     forceEvaluate
-        :: Context uni fun -> CekValue uni fun -> CekM cost uni fun s (Term Name uni fun ())
+        :: Context uni fun -> CekValue uni fun -> CekM cost uni fun s (CekValue uni fun)
     forceEvaluate ctx (VDelay _ body env) = computeCek ctx env body
     forceEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) =
         case arity of
@@ -585,7 +586,7 @@ enterComputeCek = computeCek where
         :: Context uni fun
         -> CekValue uni fun   -- lhs of application
         -> CekValue uni fun   -- rhs of application
-        -> CekM cost uni fun s (Term Name uni fun ())
+        -> CekM cost uni fun s (CekValue uni fun)
     applyEvaluate ctx (VLamAbs _ name body env) arg =
         computeCek ctx (extendEnv name arg env) body
     applyEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) arg = do
@@ -606,7 +607,7 @@ enterComputeCek = computeCek where
         :: Context uni fun
         -> fun
         -> [CekValue uni fun]
-        -> CekM cost uni fun s (Term Name uni fun ())
+        -> CekM cost uni fun s (CekValue uni fun)
     applyBuiltin ctx bn args = do
       rt <- asks cekEnvRuntime
       BuiltinRuntime sch _ f exF <- lookupBuiltinExc (Proxy @(CekEvaluationException uni fun)) bn rt
@@ -628,7 +629,7 @@ runCek
     -> ExBudgetMode cost uni fun
     -> Bool
     -> Term Name uni fun ()
-    -> (Either (CekEvaluationException uni fun) (Term Name uni fun ()), cost, [String])
+    -> (Either (CekEvaluationException uni fun) (CekValue uni fun), cost, [String])
 runCek runtime mode emitting term =
     runCekM runtime mode emitting $ do
         spendBudget BAST (ExBudget 0 (termAnn memTerm))
