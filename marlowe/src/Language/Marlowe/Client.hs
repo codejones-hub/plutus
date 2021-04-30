@@ -66,16 +66,16 @@ type MarloweInput = (MarloweSlotRange, [Input])
 type MarloweSchema =
     BlockchainActions
         .\/ Endpoint "create" (AssocMap.Map Val.TokenName PubKeyHash, Marlowe.Contract)
-        .\/ Endpoint "apply-inputs" (MarloweParams, Maybe SlotInterval, [Input])
-        .\/ Endpoint "auto" (MarloweParams, Party, Slot)
-        .\/ Endpoint "redeem" (MarloweParams, TokenName, PubKeyHash)
+        .\/ Endpoint "apply-inputs" (CurrencySymbol, Maybe SlotInterval, [Input])
+        .\/ Endpoint "auto" (CurrencySymbol, Party, Slot)
+        .\/ Endpoint "redeem" (CurrencySymbol, TokenName, PubKeyHash)
         .\/ Endpoint "close" ()
 
 
 type MarloweCompanionSchema = BlockchainActions
 type MarloweFollowSchema =
         BlockchainActions
-            .\/ Endpoint "follow" MarloweParams
+            .\/ Endpoint "follow" CurrencySymbol
 
 
 data MarloweError =
@@ -144,7 +144,8 @@ instance Monoid ContractProgress where
 
 marloweFollowContract :: Contract ContractHistory MarloweFollowSchema MarloweError ()
 marloweFollowContract = do
-    params <- endpoint @"follow"
+    rolesCurrency <- endpoint @"follow"
+    let params = marloweParams rolesCurrency
     slot <- currentSlot
     logDebug @String "Getting contract history"
     follow 0 slot params
@@ -238,11 +239,12 @@ marlowePlutusContract = do
         submitTxConfirmed utx
         marlowePlutusContract
     apply = do
-        (params, slotInterval, inputs) <- endpoint @"apply-inputs"
+        (rolesCurrency, slotInterval, inputs) <- endpoint @"apply-inputs"
+        let params = marloweParams rolesCurrency
         _ <- applyInputs params slotInterval inputs
         marlowePlutusContract
     redeem = mapError (review _MarloweError) $ do
-        (MarloweParams{rolesCurrency}, role, pkh) <-
+        (rolesCurrency, role, pkh) <-
             endpoint @"redeem"
         let address = scriptHashAddress (mkRolePayoutValidatorHash rolesCurrency)
         utxos <- utxoAt address
@@ -270,7 +272,8 @@ marlowePlutusContract = do
         _ <- submitUnbalancedTx tx
         marlowePlutusContract
     auto = do
-        (params, party, untilSlot) <- endpoint @"auto"
+        (rolesCurrency, party, untilSlot) <- endpoint @"auto"
+        let params = marloweParams rolesCurrency
         let theClient = mkMarloweClient params
         let continueWith :: MarloweData -> Contract MarloweContractState MarloweSchema MarloweError ()
             continueWith md@MarloweData{marloweContract} =

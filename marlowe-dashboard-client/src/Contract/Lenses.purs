@@ -9,6 +9,8 @@ module Contract.Lenses
   , _participants
   , _userParties
   , _namedActions
+  , _rolePayoutValidatorHash
+  , _rolesCurrency
   ) where
 
 import Contract.Types (PreviousStep, State, Tab)
@@ -20,8 +22,9 @@ import Data.Set (Set)
 import Data.Symbol (SProxy(..))
 import Marlowe.Execution (ExecutionState, NamedAction)
 import Marlowe.Extended.Metadata (MetaData)
-import Marlowe.PAB (PlutusAppId, MarloweParams)
+import Marlowe.PAB (PlutusAppId, MarloweParams, ValidatorHash)
 import Marlowe.Semantics as Semantic
+import Plutus.V1.Ledger.Value (CurrencySymbol)
 import WalletData.Types (WalletNickname)
 
 _tab :: Lens' State Tab
@@ -53,3 +56,10 @@ _userParties = prop (SProxy :: SProxy "userParties")
 
 _namedActions :: Lens' State (Array NamedAction)
 _namedActions = prop (SProxy :: SProxy "namedActions")
+
+----------
+_rolePayoutValidatorHash :: Lens' MarloweParams ValidatorHash
+_rolePayoutValidatorHash = prop (SProxy :: SProxy "rolePayoutValidatorHash")
+
+_rolesCurrency :: Lens' MarloweParams CurrencySymbol
+_rolesCurrency = prop (SProxy :: SProxy "rolesCurrency")
