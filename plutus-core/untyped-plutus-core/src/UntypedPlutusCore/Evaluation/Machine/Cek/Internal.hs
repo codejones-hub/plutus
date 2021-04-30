@@ -23,6 +23,7 @@ module UntypedPlutusCore.Evaluation.Machine.Cek.Internal
     ( EvaluationResult(..)
     , CekValue(..)
     , CekUserError(..)
+    , TermOrValue (..)
     , CekEvaluationException
     , CekBudgetSpender(..)
     , ExBudgetInfo(..)
@@ -244,8 +245,13 @@ type CekM cost uni fun s =
     ReaderT (CekEnv cost uni fun s)
         (ST s)
 
+data TermOrValue uni fun = TTerm (Term Name uni fun ()) | VValue (CekValue uni fun)
+instance (PrettyBy config (Term Name uni fun ()), PrettyBy config (CekValue uni fun)) => PrettyBy config (TermOrValue uni fun) where
+    prettyBy config (TTerm t)  = prettyBy config t
+    prettyBy config (VValue v) = prettyBy config v
+
 -- | The CEK machine-specific 'EvaluationException'.
-type CekEvaluationException uni fun = EvaluationException CekUserError (MachineError fun (Term Name uni fun ())) (Term Name uni fun ())
+type CekEvaluationException uni fun = EvaluationException CekUserError (MachineError fun (TermOrValue uni fun)) (TermOrValue uni fun)
 
 -- | The set of constraints we need to be able to print things in universes, which we need in order to throw exceptions.
 type PrettyUni uni fun = (GShow uni, Closed uni, Pretty fun, Typeable uni, Typeable fun, Everywhere uni PrettyConst)
@@ -287,12 +293,12 @@ throwCek = throwM
 throwingCek :: (PrettyUni uni fun) => AReview (CekEvaluationException uni fun) t -> t -> CekM cost uni fun s x
 throwingCek l = reviews l throwM
 
--- | Call 'dischargeCekValue' over the received 'CekVal' and feed the resulting 'Term' to
--- 'throwingWithCause' as the cause of the failure.
-throwingDischarged
-    :: (PrettyUni uni fun)
-    => AReview (EvaluationError CekUserError (MachineError fun (Term Name uni fun ()))) t -> t -> CekValue uni fun -> CekM cost uni fun s x
-throwingDischarged l t = throwingWithCauseExc l t . Just . void . dischargeCekValue
+-- | Throw with a 'CekValue' as the cause of the failure.
+throwingWithVal
+    :: forall uni fun t cost s x
+    . (PrettyUni uni fun)
+    => AReview (EvaluationError CekUserError (MachineError fun (TermOrValue uni fun))) t -> t -> CekValue uni fun -> CekM cost uni fun s x
+throwingWithVal l t v = throwingWithCauseExc l t $ Just $ VValue v
 
 instance AsEvaluationFailure CekUserError where
     _EvaluationFailure = _EvaluationFailureVia CekEvaluationFailure
@@ -366,7 +372,7 @@ dischargeCekValue = \case
        or (b) it's needed for an error message.  When we're discharging VBuiltin
        we use arity0 to get the type and term arguments into the right sequence. -}
 
-instance (Closed uni, GShow uni, uni `EverywhereAll` '[PrettyConst, ExMemoryUsage], Pretty fun) =>
+instance (Closed uni, GShow uni, uni `EverywhereAll` '[PrettyConst], Pretty fun) =>
             PrettyBy PrettyConfigPlc (CekValue uni fun) where
     prettyBy cfg = prettyBy cfg . dischargeCekValue
 
@@ -432,10 +438,10 @@ extendEnv :: Name -> CekValue uni fun -> CekValEnv uni fun -> CekValEnv uni fun
 extendEnv = insertByName
 
 -- | Look up a variable name in the environment.
-lookupVarName :: forall uni fun cost s . (PrettyUni uni fun) => Name -> CekValEnv uni fun -> CekM cost uni fun s (CekValue uni fun)
+lookupVarName :: forall uni fun cost s . PrettyUni uni fun => Name -> CekValEnv uni fun -> CekM cost uni fun s (CekValue uni fun)
 lookupVarName varName varEnv = do
     case lookupName varName varEnv of
-        Nothing  -> throwingWithCauseExc @(CekEvaluationException uni fun) _MachineError OpenTermEvaluatedMachineError $ Just var where
+        Nothing  -> throwingWithCauseExc @(CekEvaluationException uni fun) _MachineError OpenTermEvaluatedMachineError $ Just $ TTerm var where
             var = Var () varName
         Just val -> pure val
 
@@ -555,19 +561,19 @@ enterComputeCek = computeCek where
     forceEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) =
         case arity of
           []             ->
-              throwingDischarged _MachineError EmptyBuiltinArityMachineError val
+              throwingWithVal _MachineError EmptyBuiltinArityMachineError val
           TermArg:_      ->
           {- This should be impossible if we don't have zero-arity builtins:
              we will have found this case in an earlier call to forceEvaluate
              or applyEvaluate and called applyBuiltin. -}
-              throwingDischarged _MachineError BuiltinTermArgumentExpectedMachineError val'
+              throwingWithVal _MachineError BuiltinTermArgumentExpectedMachineError val'
                             where val' = VBuiltin ex bn arity0 arity (forces + 1) args -- reconstruct the bad application
           TypeArg:arity' ->
               case arity' of
                 [] -> applyBuiltin ctx bn args  -- Final argument is a type argument
                 _  -> returnCek ctx $ VBuiltin ex bn arity0 arity' (forces + 1) args -- More arguments expected
     forceEvaluate _ val =
-            throwingDischarged _MachineError NonPolymorphicInstantiationMachineError val
+            throwingWithVal _MachineError NonPolymorphicInstantiationMachineError val
 
     -- | Apply a function to an argument and proceed.
     -- If the function is a lambda 'lam x ty body' then extend the environment with a binding of @v@
@@ -584,16 +590,16 @@ enterComputeCek = computeCek where
         computeCek ctx (extendEnv name arg env) body
     applyEvaluate ctx val@(VBuiltin ex bn arity0 arity forces args) arg = do
         case arity of
-          []        -> throwingDischarged _MachineError EmptyBuiltinArityMachineError val
+          []        -> throwingWithVal _MachineError EmptyBuiltinArityMachineError val
                     -- Should be impossible: see forceEvaluate.
-          TypeArg:_ -> throwingDischarged _MachineError UnexpectedBuiltinTermArgumentMachineError val'
+          TypeArg:_ -> throwingWithVal _MachineError UnexpectedBuiltinTermArgumentMachineError val'
                        where val' = VBuiltin ex bn arity0 arity forces (args++[arg]) -- reconstruct the bad application
           TermArg:arity' -> do
               let args' = args ++ [arg]
               case arity' of
                 [] -> applyBuiltin ctx bn args' -- 'arg' was the final argument
                 _  -> returnCek ctx $ VBuiltin ex bn arity0 arity' forces args'  -- More arguments expected
-    applyEvaluate _ val _ = throwingDischarged _MachineError NonFunctionalApplicationMachineError val
+    applyEvaluate _ val _ = throwingWithVal _MachineError NonFunctionalApplicationMachineError val
 
     -- | Apply a builtin to a list of CekValue arguments
     applyBuiltin
@@ -611,13 +617,13 @@ enterComputeCek = computeCek where
       resultOrErr <- runExceptT $ applyTypeSchemed bn sch f exF args
       case resultOrErr of
           -- Turn the cause of a possible failure, being a 'CekValue', into a 'Term'.
-          Left e       -> throwCek $ mapCauseInMachineException (void . dischargeCekValue) e
+          Left e       -> throwCek $ mapCauseInMachineException VValue e
           Right result -> returnCek ctx result
 
 -- See Note [Compilation peculiarities].
 -- | Evaluate a term using the CEK machine and keep track of costing, logging is optional.
 runCek
-    :: ( uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
+    :: (uni `Everywhere` ExMemoryUsage, Ix fun, PrettyUni uni fun)
     => BuiltinsRuntime fun (CekValue uni fun)
     -> ExBudgetMode cost uni fun
     -> Bool

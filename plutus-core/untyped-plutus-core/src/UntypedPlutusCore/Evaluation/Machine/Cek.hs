@@ -136,4 +136,4 @@ readKnownCek
     => BuiltinsRuntime fun (CekValue uni fun)
     -> Term Name uni fun ()
     -> Either (CekEvaluationException uni fun) a
-readKnownCek runtime = evaluateCekNoEmit runtime >=> readKnown
+readKnownCek runtime = evaluateCekNoEmit runtime >=> (first (mapCauseInMachineException TTerm) . readKnown)

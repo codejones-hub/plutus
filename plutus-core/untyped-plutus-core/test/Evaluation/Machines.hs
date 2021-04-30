@@ -40,10 +40,10 @@ import           Test.Tasty
 import           Test.Tasty.Hedgehog
 
 testMachine
-    :: (uni ~ DefaultUni, fun ~ DefaultFun, PrettyPlc internal)
+    :: (uni ~ DefaultUni, fun ~ DefaultFun, PrettyPlc internal, PrettyPlc term)
     => String
     -> (Term Name uni fun () ->
-           Either (EvaluationException user internal (Term Name uni fun ())) (Term Name uni fun ()))
+           Either (EvaluationException user internal term) (Term Name uni fun ()))
     -> TestTree
 testMachine machine eval =
     testGroup machine $ fromInterestingTermGens $ \name genTermOfTbv ->
