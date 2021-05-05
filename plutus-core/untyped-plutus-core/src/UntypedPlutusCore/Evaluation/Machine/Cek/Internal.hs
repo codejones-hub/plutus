@@ -64,6 +64,7 @@ import qualified Data.DList                              as DList
 import           Data.Hashable                           (Hashable)
 import           Data.Kind
 import           Data.Proxy
+import           Data.Reflection
 import           Data.STRef
 import           Data.Text.Prettyprint.Doc
 
@@ -592,13 +593,18 @@ enterComputeCek = computeCek where
 
       -- TODO: make less ugly
       let
-          spender :: fun -> ExBudget -> ExceptT e (WithEmitterT (CekM s)) ()
-          spender key b = lift $ lift $ spendBudgetCek (exBudgetBuiltin key) b
+          --spender :: fun -> ExBudget -> ExceptT e (WithEmitterT (CekM s)) ()
+          spender key b = lift  $ lift $ spendBudgetCek (exBudgetBuiltin key) b
+          res :: forall rs m
+              . (m ~ ExceptT (EvaluationException CekUserError (MachineError fun (CekValue uni fun)) (CekValue uni fun)) (ST s),
+                  Reifies rs (ReifiedEmitter m))
+              => ReflectedEmitter rs m (CekValue uni fun)
+          res = applyTypeSchemed spender bn sch f exF args
 
       -- ''applyTypeSchemed' doesn't throw exceptions so that we can easily catch them here and
       -- post-process them.
       -- See Note [Being generic over @term@ in 'CekM'].
-      resultOrErr <- flip unWithEmitterT emitCek $ runExceptT $ applyTypeSchemed spender bn sch f exF args
+      resultOrErr <- runExceptT $ reify (ReifiedEmitter (\s -> lift $ emitCek s)) (unreflectedEmitter res)
 
       case resultOrErr of
           -- Turn the cause of a possible failure, being a 'CekValue', into a 'Term'.

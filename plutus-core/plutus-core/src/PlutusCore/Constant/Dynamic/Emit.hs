@@ -1,16 +1,22 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes           #-}
 
+{-# LANGUAGE UndecidableInstances #-}
 module PlutusCore.Constant.Dynamic.Emit
     ( MonadEmitter (..)
     , Emitter (..)
     , NoEmitterT (..)
     , WithEmitterT (..)
+    , ReifiedEmitter (..)
+    , ReflectedEmitter (..)
+    , unreflectedEmitter
     ) where
 
 import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Control.Monad.Trans.Identity
+import           Data.Proxy
+import           Data.Reflection
 
 -- | A class for emitting 'String's in a monadic context (basically, for logging).
 class Monad m => MonadEmitter m where
@@ -50,6 +56,20 @@ instance Monad m => MonadEmitter (WithEmitterT m) where
 
 instance MonadTrans WithEmitterT where
     lift a = WithEmitterT $ \_ -> a
+
+newtype ReifiedEmitter m = ReifiedEmitter { unReifiedEmitter :: String -> m () }
+
+newtype ReflectedEmitter s m a = ReflectedEmitter { unReflectedEmitter :: m a }
+    deriving newtype (Functor, Applicative, Monad, MonadError e, MonadState st)
+
+instance MonadTrans (ReflectedEmitter s) where
+    lift a = ReflectedEmitter a
+
+unreflectedEmitter :: ReflectedEmitter s m a -> proxy s -> m a
+unreflectedEmitter (ReflectedEmitter ma) _ = ma
+
+instance (Monad m, Reifies s (ReifiedEmitter m)) => MonadEmitter (ReflectedEmitter s m) where
+    emit str = ReflectedEmitter $ (unReifiedEmitter $ reflect (Proxy :: Proxy s)) str
 
 -- | A newtype wrapper for via-deriving a vacuous 'MonadEmitter' instance for a monad.
 newtype NoEmitterT m a = NoEmitterT
