@@ -18,6 +18,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-uniques -dsuppress-coercions -dsuppress-type-applications -dsuppress-unfoldings -dsuppress-idinfo -dumpdir /tmp/dumps #-}
 
 module UntypedPlutusCore.Evaluation.Machine.Cek.Internal
     -- See Note [Compilation peculiarities].
@@ -64,7 +65,6 @@ import qualified Data.DList                              as DList
 import           Data.Hashable                           (Hashable)
 import           Data.Kind
 import           Data.Proxy
-import           Data.Reflection
 import           Data.STRef
 import           Data.Text.Prettyprint.Doc
 

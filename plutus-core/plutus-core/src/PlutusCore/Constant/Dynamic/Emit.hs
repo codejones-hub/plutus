@@ -1,6 +1,9 @@
-{-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE RankNTypes             #-}
 
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE UndecidableInstances   #-}
 module PlutusCore.Constant.Dynamic.Emit
     ( MonadEmitter (..)
     , Emitter (..)
@@ -9,14 +12,51 @@ module PlutusCore.Constant.Dynamic.Emit
     , ReifiedEmitter (..)
     , ReflectedEmitter (..)
     , unreflectedEmitter
+    , Reifies (..)
+    , reify
     ) where
 
 import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Control.Monad.Trans.Identity
+import           Data.Kind
 import           Data.Proxy
-import           Data.Reflection
+import           Unsafe.Coerce                (unsafeCoerce)
+--import           Data.Reflection
+
+newtype Tagged s a = Tagged { unTagged :: a }
+
+-- | Convert from a 'Tagged' representation to a representation
+-- based on a 'Proxy'.
+proxy :: Tagged s a -> proxy s -> a
+proxy (Tagged x) _ = x
+{-# INLINE proxy #-}
+
+-- | Convert from a representation based on a 'Proxy' to a 'Tagged'
+-- representation.
+unproxy :: (Proxy s -> a) -> Tagged s a
+unproxy f = Tagged (f Proxy)
+{-# INLINE unproxy #-}
+
+class Reifies s a | s -> a where
+  reflect' :: Tagged s a
+
+data Skolem = Skolem
+
+newtype Magic a r = Magic (Reifies Skolem a => Tagged Skolem r)
+
+reify' :: forall a r . a -> (forall (s :: Type) . Reifies s a => Tagged s r) -> r
+reify' a k = unsafeCoerce (Magic k :: Magic a r) a
+{-# INLINE reify' #-}
+
+reflect :: Reifies s a => proxy s -> a
+reflect = proxy reflect'
+{-# INLINE reflect #-}
+
+reify :: forall a r . a -> (forall (s :: Type) . Reifies s a => Proxy s -> r) -> r
+reify a k = reify' a (unproxy k)
+{-# INLINE reify #-}
 
 -- | A class for emitting 'String's in a monadic context (basically, for logging).
 class Monad m => MonadEmitter m where
