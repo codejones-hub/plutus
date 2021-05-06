@@ -58,7 +58,7 @@ import           GHC.Generics                             (Generic)
 
 import           Data.Text                                (Text)
 import           Plutus.Contract                          (HasAwaitSlot, HasTxConfirmation, HasUtxoAt, HasWatchAddress,
-                                                           HasWriteTx)
+                                                           HasWriteBalancedTx, HasWriteTx, HasWriteUnbalancedTx)
 import           Plutus.Contract.Schema                   (Event (..), Handlers (..))
 
 import qualified Plutus.Contract.Effects.AwaitSlot        as AwaitSlot
@@ -143,7 +143,8 @@ handleBlockchainQueries ::
     )
     => RequestHandler (Reader ContractInstanceId ': ContractRuntimeEffect ': EmulatedWalletEffects) (Handlers s) (Event s)
 handleBlockchainQueries =
-    handlePendingTransactions
+    handleUnbalancedTransactions
+    <> handlePendingTransactions
     <> handleUtxoQueries
     <> handleTxConfirmedQueries
     <> handleOwnPubKeyQueries
@@ -152,11 +153,9 @@ handleBlockchainQueries =
     <> handleContractNotifications
     <> handleSlotNotifications
 
--- | Submit the wallet's pending transactions to the blockchain
---   and inform all wallets about new transactions and respond to
---   UTXO queries
-handlePendingTransactions ::
-    ( HasWriteTx s
+-- | Balance the wallet's unbalanced transactions
+handleUnbalancedTransactions ::
+    ( HasWriteUnbalancedTx s
     , Member (LogObserve (LogMessage Text)) effs
     , Member (LogMsg RequestHandlerLogMsg) effs
     , Member WalletEffect effs
@@ -164,10 +163,26 @@ handlePendingTransactions ::
     , Member (LogMsg TxBalanceMsg) effs
     )
     => RequestHandler effs (Handlers s) (Event s)
+handleUnbalancedTransactions =
+    maybeToHandler WriteTx.unbalancedTransaction
+    >>> RequestHandler.handleUnbalancedTransactions
+    >>^ WriteTx.unbalancedEvent . view (from WriteTx.writeTxResponse)
+
+-- | Submit the wallet's pending transactions to the blockchain
+--   and inform all wallets about new transactions and respond to
+--   UTXO queries
+handlePendingTransactions ::
+    ( HasWriteBalancedTx s
+    , Member (LogObserve (LogMessage Text)) effs
+    , Member (LogMsg RequestHandlerLogMsg) effs
+    , Member WalletEffect effs
+    , Member ChainIndexEffect effs
+    )
+    => RequestHandler effs (Handlers s) (Event s)
 handlePendingTransactions =
     maybeToHandler WriteTx.pendingTransaction
     >>> RequestHandler.handlePendingTransactions
-    >>^ WriteTx.event . view (from WriteTx.writeTxResponse)
+    >>^ WriteTx.balancedEvent . view (from WriteTx.writeTxResponse)
 
 -- | Look at the "utxo-at" requests of the contract and respond to all of them
 --   with the current UTXO set at the given address.

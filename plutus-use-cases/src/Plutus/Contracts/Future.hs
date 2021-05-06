@@ -310,7 +310,7 @@ futureStateMachine
     :: Future
     -> FutureAccounts
     -> StateMachine FutureState FutureAction
-futureStateMachine ft fos = SM.mkStateMachine Nothing (transition ft fos) isFinal where
+futureStateMachine ft fos = SM.mkStateMachine (transition ft fos) isFinal where
     isFinal Finished = True
     isFinal _        = False
 
@@ -322,7 +322,7 @@ scriptInstance future ftos =
                 `PlutusTx.applyCode`
                     PlutusTx.liftCode ftos
         validatorParam f g = SM.mkValidator (futureStateMachine f g)
-        wrap = Scripts.wrapValidator @FutureState @FutureAction
+        wrap = Scripts.wrapValidator
 
     in Scripts.validator @(SM.StateMachine FutureState FutureAction)
         val
@@ -335,7 +335,7 @@ machineClient
     -> SM.StateMachineClient FutureState FutureAction
 machineClient inst future ftos =
     let machine = futureStateMachine future ftos
-    in SM.mkStateMachineClient (SM.StateMachineInstance machine inst)
+    in SM.mkStateMachineClient undefined (SM.StateMachineInstance machine inst)
 
 validator :: Future -> FutureAccounts -> Validator
 validator ft fos = Scripts.validatorScript (scriptInstance ft fos)

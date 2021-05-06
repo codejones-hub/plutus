@@ -23,7 +23,6 @@ module Plutus.Contract.StateMachine.OnChain(
     , mkStateMachine
     , machineAddress
     , mkValidator
-    , threadTokenValue
     ) where
 
 import           Data.Aeson                       (FromJSON, ToJSON)
@@ -52,45 +51,34 @@ data State s = State { stateData :: s, stateValue :: Value }
 -- of the transition in the context of the current transaction.
 data StateMachine s i = StateMachine {
       -- | The transition function of the state machine. 'Nothing' indicates an invalid transition from the current state.
-      smTransition  :: State s -> i -> Maybe (TxConstraints Void Void, State s),
+      smTransition :: State s -> i -> Maybe (TxConstraints Void Void, State s),
 
       -- | Check whether a state is the final state
-      smFinal       :: s -> Bool,
+      smFinal      :: s -> Bool,
 
       -- | The condition checking function. Can be used to perform
       --   checks on the pending transaction that aren't covered by the
       --   constraints. 'smCheck' is always run in addition to checking the
       --   constraints, so the default implementation always returns true.
-      smCheck       :: s -> i -> ScriptContext -> Bool,
-
-      -- | The 'AssetClass' of the thread token that identifies the contract
-      --   instance.
-      smThreadToken :: Maybe AssetClass
+      smCheck      :: s -> i -> ScriptContext -> Bool
     }
-
-{-# INLINABLE threadTokenValue #-}
--- | The 'Value' containing exactly the thread token, if one has been specified.
-threadTokenValue :: StateMachine s i -> Value
-threadTokenValue StateMachine{smThreadToken} = maybe mempty (\c -> Value.assetClassValue c 1) smThreadToken
 
 -- | A state machine that does not perform any additional checks on the
 --   'ScriptContext' (beyond enforcing the constraints)
 mkStateMachine
-    :: Maybe AssetClass
-    -> (State s -> i -> Maybe (TxConstraints Void Void, State s))
+    :: (State s -> i -> Maybe (TxConstraints Void Void, State s))
     -> (s -> Bool)
     -> StateMachine s i
-mkStateMachine smThreadToken smTransition smFinal =
+mkStateMachine smTransition smFinal =
     StateMachine
         { smTransition
         , smFinal
         , smCheck = \_ _ _ -> True
-        , smThreadToken
         }
 
 instance ScriptType (StateMachine s i) where
     type instance RedeemerType (StateMachine s i) = i
-    type instance DatumType (StateMachine s i) = s
+    type instance DatumType (StateMachine s i) = (s, AssetClass)
 
 data StateMachineInstance s i = StateMachineInstance {
     -- | The state machine specification.
@@ -105,8 +93,8 @@ machineAddress = scriptAddress . validatorInstance
 {-# INLINABLE mkValidator #-}
 -- | Turn a state machine into a validator script.
 mkValidator :: forall s i. (PlutusTx.IsData s) => StateMachine s i -> ValidatorType (StateMachine s i)
-mkValidator sm@(StateMachine step isFinal check _) currentState input ptx =
-    let vl = maybe (error ()) (txOutValue . txInInfoResolved) (findOwnInput ptx)
+mkValidator (StateMachine step isFinal check) (currentState, threadToken) input ptx =
+    let vl = maybe (error ()) (txOutValue . txInInfoResolved) (findOwnInput ptx) <> Value.assetClassValue threadToken (-1)
         checkOk = traceIfFalse "State transition invalid - checks failed" (check currentState input ptx)
         oldState = State{stateData=currentState, stateValue=vl}
         stateAndOutputsOk = case step oldState input of
@@ -120,7 +108,7 @@ mkValidator sm@(StateMachine step isFinal check _) currentState input ptx =
                                 { txOwnOutputs=
                                     [ OutputConstraint
                                         { ocDatum = newData
-                                        , ocValue = newValue <> threadTokenValue sm
+                                        , ocValue = newValue <> Value.assetClassValue threadToken 1
                                         }
                                     ]
                                 }

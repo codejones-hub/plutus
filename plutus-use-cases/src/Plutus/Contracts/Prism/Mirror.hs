@@ -28,8 +28,8 @@ import           Ledger.Crypto                       (PubKeyHash, pubKeyHash)
 import qualified Ledger.Typed.Scripts                as Scripts
 import           Ledger.Value                        (TokenName)
 import           Plutus.Contract
-import           Plutus.Contract.StateMachine        (AsSMContractError (..), SMContractError,
-                                                      StateMachineTransition (..), mkStep, runInitialise)
+import           Plutus.Contract.StateMachine        (AsSMContractError (..), SMContractError, SMOutput,
+                                                      StateMachineTransition (..), mkStep, runInitialise, scInstance)
 import           Plutus.Contracts.Prism.Credential   (Credential (..), CredentialAuthority (..))
 import qualified Plutus.Contracts.Prism.Credential   as Credential
 import           Plutus.Contracts.Prism.StateMachine as StateMachine
@@ -58,17 +58,17 @@ mirror ::
     , HasEndpoint "revoke" CredentialOwnerReference s
     , HasEndpoint "issue" CredentialOwnerReference s
     )
-    => Contract w s MirrorError ()
+    => Contract SMOutput s MirrorError ()
 mirror = do
     authority <- mapError SetupError $ CredentialAuthority . pubKeyHash <$> ownPubKey
-    forever $ (createTokens authority `select` revokeToken authority)
+    forever $ createTokens authority `select` revokeToken authority
 
 createTokens ::
     ( HasEndpoint "issue" CredentialOwnerReference s
     , HasBlockchainActions s
     )
     => CredentialAuthority
-    -> Contract w s MirrorError ()
+    -> Contract SMOutput s MirrorError ()
 createTokens authority = do
     CredentialOwnerReference{coTokenName, coOwner} <- mapError IssueEndpointError $ endpoint @"issue"
     let pk      = Credential.unCredentialAuthority authority
@@ -83,7 +83,7 @@ createTokens authority = do
             tx <- submitTxConstraintsWith @Scripts.Any lookups constraints
             awaitTxConfirmed (txId tx)
     let stateMachine = StateMachine.mkMachineClient authority (pubKeyHash $ walletPubKey coOwner) coTokenName
-    void $ mapError StateMachineError $ runInitialise stateMachine Active theToken
+    void $ mapError StateMachineError $ runInitialise (scInstance stateMachine) Active theToken
 
 revokeToken ::
     ( HasBlockchainActions s

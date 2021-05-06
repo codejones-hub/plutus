@@ -18,13 +18,15 @@
 -- | A basic governance contract in Plutus.
 module Plutus.Contracts.Governance (
     -- $governance
-      contract
+      initContract
+    , votingContract
     , proposalContract
     , Params(..)
     , Proposal(..)
     , Schema
     , mkTokenName
     , scriptInstance
+    , smInstance
     , mkValidator
     , GovState(..)
     , Voting(..)
@@ -126,10 +128,11 @@ instance AsSMContractError GovError where
     _SMContractError = _GovStateMachineError
 
 type GovernanceMachine = StateMachine GovState GovInput
+type GovernanceClient = SM.StateMachineClient GovState GovInput
 
 {-# INLINABLE machine #-}
 machine :: Params -> GovernanceMachine
-machine params = SM.mkStateMachine Nothing (transition params) isFinal where
+machine params = SM.mkStateMachine (transition params) isFinal where
     {-# INLINABLE isFinal #-}
     isFinal _ = False
 
@@ -144,8 +147,8 @@ scriptInstance = Scripts.validatorParam @GovernanceMachine
     where
         wrap = Scripts.wrapValidator
 
-client :: Params -> SM.StateMachineClient GovState GovInput
-client params = SM.mkStateMachineClient $ SM.StateMachineInstance (machine params) (scriptInstance params)
+smInstance :: Params -> SM.StateMachineInstance GovState GovInput
+smInstance params = SM.StateMachineInstance (machine params) (scriptInstance params)
 
 -- | Generate a voting token name by tagging on a number after the base token name.
 mkTokenName :: TokenName -> Integer -> TokenName
@@ -186,42 +189,40 @@ transition Params{..} State{ stateData = s, stateValue} i = case (s, i) of
 
     _ -> Nothing
 
--- | The main contract for creating a new law and for voting on proposals.
-contract ::
+initContract ::
     AsGovError e
     => Params
+    -> Contract SM.SMOutput Schema e ()
+initContract params = mapError (review _GovError) $ do
+    bsLaw <- endpoint @"new-law"
+    let mph = Scripts.monetaryPolicyHash (scriptInstance params)
+    client <- SM.runInitialise (smInstance params) (GovState bsLaw mph Nothing) mempty
+    let tokens = zipWith (const (mkTokenName (baseTokenName params))) (initialHolders params) [1..]
+    void $ SM.runStep client $ ForgeTokens tokens
+
+votingContract ::
+    AsGovError e
+    => GovernanceClient
     -> Contract () Schema e ()
-contract params = forever $ mapError (review _GovError) endpoints where
-    theClient = client params
-    endpoints = initLaw `select` addVote
-
-    addVote = do
-        (tokenName, vote) <- endpoint @"add-vote"
-        SM.runStep theClient (AddVote tokenName vote)
-
-    initLaw = do
-        bsLaw <- endpoint @"new-law"
-        let mph = Scripts.monetaryPolicyHash (scriptInstance params)
-        void $ SM.runInitialise theClient (GovState bsLaw mph Nothing) mempty
-        let tokens = zipWith (const (mkTokenName (baseTokenName params))) (initialHolders params) [1..]
-        SM.runStep theClient $ ForgeTokens tokens
+votingContract client = mapError (review _GovError) $ forever $ do
+    (tokenName, vote) <- endpoint @"add-vote"
+    SM.runStep client (AddVote tokenName vote)
 
 -- | The contract for proposing changes to a law.
 proposalContract ::
     AsGovError e
-    => Params
+    => GovernanceClient
     -> Proposal
     -> Contract () BlockchainActions e ()
-proposalContract params proposal = mapError (review _GovError) propose where
-    theClient = client params
+proposalContract client proposal = mapError (review _GovError) propose where
     propose = do
-        void $ SM.runStep theClient (ProposeChange proposal)
+        void $ SM.runStep client (ProposeChange proposal)
 
         logInfo @Text "Voting started. Waiting for the voting deadline to count the votes."
         void $ awaitSlot (votingDeadline proposal)
 
         logInfo @Text "Voting finished. Counting the votes."
-        void $ SM.runStep theClient FinishVoting
+        void $ SM.runStep client FinishVoting
 
 PlutusTx.makeLift ''Params
 PlutusTx.unstableMakeIsData ''Proposal

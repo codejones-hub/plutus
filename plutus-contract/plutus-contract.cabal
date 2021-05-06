@@ -47,6 +47,8 @@ library
         Plutus.Contract.Request
         Plutus.Contract.Checkpoint
         Plutus.Contract.Constraints
+        Plutus.Contract.Currency
+        Plutus.Contract.PubKey
         Plutus.Contract.State
         Plutus.Contract.Schema
         Plutus.Contract.Trace
@@ -100,6 +102,7 @@ library
         plutus-ledger -any,
         plutus-ledger-api -any,
         plutus-tx -any,
+        plutus-tx-plugin -any,
         freer-extras -any,
     build-depends:
         aeson >= 1.5.2,

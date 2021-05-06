@@ -5,10 +5,12 @@
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MonoLocalBinds         #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE NamedFieldPuns         #-}
+{-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TypeApplications       #-}
 module Plutus.Contract.StateMachine(
@@ -24,11 +26,14 @@ module Plutus.Contract.StateMachine(
     , WaitingResult(..)
     , InvalidTransition(..)
     , TransitionResult(..)
+    , SMOutput
     -- * Constructing the machine instance
     , SM.mkValidator
     , SM.mkStateMachine
     -- * Constructing the state machine client
     , mkStateMachineClient
+    , getStateMachineClient
+    , extractAssetClass
     , defaultChooser
     , getStates
     -- * Running the state machine
@@ -51,6 +56,9 @@ import           Data.Aeson                           (FromJSON, ToJSON)
 import           Data.Either                          (rights)
 import           Data.Map                             (Map)
 import qualified Data.Map                             as Map
+import           Data.Monoid                          (Last (..))
+import qualified Data.Row.Internal                    as V
+import qualified Data.Set                             as Set
 import           Data.Text                            (Text)
 import qualified Data.Text                            as Text
 import           Data.Void                            (Void, absurd)
@@ -58,7 +66,8 @@ import           GHC.Generics                         (Generic)
 import           Ledger                               (Slot, Value)
 import qualified Ledger
 import           Ledger.AddressMap                    (UtxoMap, outputsMapFromTxForAddress)
-import           Ledger.Constraints                   (ScriptLookups, TxConstraints (..), mustPayToTheScript)
+import           Ledger.Constraints                   (ScriptLookups, TxConstraints (..), mustForgeValue,
+                                                       mustPayToTheScript)
 import           Ledger.Constraints.OffChain          (UnbalancedTx)
 import qualified Ledger.Constraints.OffChain          as Constraints
 import           Ledger.Constraints.TxConstraints     (InputConstraint (..), OutputConstraint (..))
@@ -70,9 +79,15 @@ import qualified Ledger.Typed.Tx                      as Typed
 import           Ledger.Value                         (AssetClass)
 import qualified Ledger.Value                         as Value
 import           Plutus.Contract
-import           Plutus.Contract.StateMachine.OnChain (State (..), StateMachine (..), StateMachineInstance (..))
+import qualified Plutus.Contract.Currency             as Currency
+import qualified Plutus.Contract.Schema               as Schema
+import           Plutus.Contract.StateMachine.OnChain (State (..), StateMachine (..), StateMachineInstance (..),
+                                                       machineAddress)
 import qualified Plutus.Contract.StateMachine.OnChain as SM
+import qualified Plutus.Trace.Emulator                as Trace
 import qualified PlutusTx                             as PlutusTx
+
+import           Debug.Trace
 
 -- $statemachine
 -- To write your contract as a state machine you need
@@ -168,14 +183,39 @@ threadTokenChooser cur states =
 -- | A state machine client with the 'defaultChooser' function
 mkStateMachineClient ::
     forall state input
-    . SM.StateMachineInstance state input
+    . AssetClass
+    -> SM.StateMachineInstance state input
     -> StateMachineClient state input
-mkStateMachineClient inst =
-    let scChooser = maybe defaultChooser threadTokenChooser $ SM.smThreadToken $ SM.stateMachine inst in
+mkStateMachineClient cur inst =
     StateMachineClient
         { scInstance = inst
-        , scChooser
+        , scChooser = threadTokenChooser cur
         }
+
+type SMOutput = Last AssetClass
+
+getStateMachineClient ::
+    ( Trace.ContractConstraints s
+    , V.AllUniqueLabels (Schema.Output s)
+    , FromJSON e)
+    => Trace.ContractHandle SMOutput s e
+    -> SM.StateMachineInstance state input
+    -> Trace.EmulatorTrace (StateMachineClient state input)
+getStateMachineClient handle inst = do
+    cur <- extractAssetClass handle
+    pure $ mkStateMachineClient cur inst
+
+extractAssetClass ::
+    ( Trace.ContractConstraints s
+    , V.AllUniqueLabels (Schema.Output s)
+    , FromJSON e)
+    => Trace.ContractHandle SMOutput s e
+    -> Trace.EmulatorTrace AssetClass
+extractAssetClass handle = do
+    t <- Trace.observableState handle
+    case t of
+        Last (Just currency) -> pure currency
+        _                    -> Trace.throwError (Trace.GenericError "currency not found")
 
 {-| Get the current on-chain state of the state machine instance.
     Return Nothing if there is no state on chain.
@@ -240,7 +280,7 @@ waitForUpdateUntil StateMachineClient{scInstance, scChooser} timeoutSlot = do
         [] | slot >= timeoutSlot -> pure $ Timeout timeoutSlot
         xs -> case scChooser xs of
                 Left err         -> throwing _SMContractError err
-                Right (state, _) -> pure $ WaitingResult (tyTxOutData state)
+                Right (state, _) -> pure $ WaitingResult (fst $ tyTxOutData state)
 
 
 -- | Wait until the on-chain state of the state machine instance has changed,
@@ -316,27 +356,45 @@ runStep smc input =
 
 -- | Initialise a state machine
 runInitialise ::
-    forall w e state schema input.
+    forall e state schema input.
     ( PlutusTx.IsData state
     , PlutusTx.IsData input
     , HasTxConfirmation schema
     , HasWriteTx schema
     , AsSMContractError e
     )
-    => StateMachineClient state input
+    => StateMachineInstance state input
     -- ^ The state machine
+    -- ^ The validator
     -> state
     -- ^ The initial state
     -> Value
     -- ^ The value locked by the contract at the beginning
-    -> Contract w schema e state
-runInitialise StateMachineClient{scInstance} initialState initialValue = mapError (review _SMContractError) $ do
-    let StateMachineInstance{validatorInstance, stateMachine} = scInstance
-        tx = mustPayToTheScript initialState (initialValue <> SM.threadTokenValue stateMachine)
+    -> Contract (Last AssetClass) schema e (StateMachineClient state input)
+runInitialise sm@StateMachineInstance{validatorInstance} initialState initialValue = mapError (review _SMContractError) $ do
     let lookups = Constraints.scriptInstanceLookups validatorInstance
-    utx <- either (throwing _ConstraintResolutionError) pure (Constraints.mkTx lookups tx)
-    submitTxConfirmed utx
-    pure initialState
+        tokenName = "thread token"
+        constraints = mustPayToTheScript (initialState, Value.assetClass (Value.CurrencySymbol "") tokenName) initialValue
+    utx <- either (throwing _ConstraintResolutionError) pure (Constraints.mkTx lookups constraints)
+    tx <- balanceTx utx
+    let cur = case Set.lookupMin (Tx.txInputs tx) of
+            Just inp -> Currency.mkCurrency (txInRef inp) [(tokenName, 1)]
+            Nothing  -> error "Balanced transaction has no inputs" -- TODO
+    let monPol = Currency.curPolicy cur
+        threadToken = Value.assetClass (Ledger.scriptCurrencySymbol monPol) tokenName
+        tokenValue = Value.assetClassValue threadToken 1
+        -- tx' = tx <> mempty { txForgeScripts = Set.singleton monPol, txForge = tokenValue }
+        -- tx'' = tx' { txOutputs = map addToken (txOutputs tx') }
+        -- addToken o@TxOut{txOutAddress,txOutValue}
+        --     | txOutAddress == machineAddress sm = o { txOutValue = txOutValue <> tokenValue }
+        --     | otherwise = o
+        -- utx' = Constraints.UnbalancedTx tx'' mempty
+        constraints' = mustForgeValue tokenValue
+                    <> mustPayToTheScript (initialState, threadToken) (initialValue <> tokenValue)
+    utx' <- either (throwing _ConstraintResolutionError) pure (Constraints.mkTx (lookups <> Constraints.monetaryPolicy monPol) constraints')
+    tell $ Last (Just threadToken)
+    submitTxConfirmed utx'
+    pure $ mkStateMachineClient threadToken sm
 
 -- | Constraints & lookups needed to transition a state machine instance
 data StateMachineTransition state input =
@@ -366,8 +424,8 @@ mkStep client@StateMachineClient{scInstance} input = do
     case maybeState of
         Nothing -> pure $ Left $ InvalidTransition Nothing input
         Just (onChainState, utxo) -> do
-            let (TypedScriptTxOut{tyTxOutData=currentState, tyTxOutTxOut}, txOutRef) = onChainState
-                oldState = State{stateData = currentState, stateValue = Ledger.txOutValue tyTxOutTxOut}
+            let (TypedScriptTxOut{tyTxOutData=(currentState, threadToken), tyTxOutTxOut}, txOutRef) = onChainState
+                oldState = State{stateData = currentState, stateValue = Ledger.txOutValue tyTxOutTxOut <> Value.assetClassValue threadToken (-1) }
                 inputConstraints = [InputConstraint{icRedeemer=input, icTxOutRef = Typed.tyTxOutRefRef txOutRef }]
 
             case smTransition oldState input of
@@ -378,7 +436,8 @@ mkStep client@StateMachineClient{scInstance} input = do
                         outputConstraints =
                             if smFinal (SM.stateMachine scInstance) (stateData newState)
                                 then []
-                                else [OutputConstraint{ocDatum = stateData newState, ocValue = stateValue newState <> SM.threadTokenValue stateMachine }]
+                                else [OutputConstraint{ ocDatum = (stateData newState, threadToken)
+                                                      , ocValue = stateValue newState <> Value.assetClassValue threadToken 1 }]
                     in pure
                         $ Right
                         $ StateMachineTransition

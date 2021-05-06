@@ -330,7 +330,7 @@ data TxOut = TxOut {
 
 instance Pretty TxOut where
     pretty TxOut{txOutAddress, txOutValue} =
-                hang 2 $ vsep ["-" <+> pretty txOutValue <+> "addressed to", pretty txOutAddress]
+                hang 2 $ vsep ["-" <+> pretty txOutValue, pretty txOutAddress]
 
 instance PlutusTx.Eq TxOut where
     l == r =

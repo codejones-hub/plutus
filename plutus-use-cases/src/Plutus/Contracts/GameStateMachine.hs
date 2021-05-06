@@ -23,17 +23,20 @@
 
 module Plutus.Contracts.GameStateMachine(
     contract
+    , lock
     , scriptInstance
+    , smInstance
     , GameToken
     , mkValidator
     , monetaryPolicy
     , LockArgs(..)
     , GuessArgs(..)
+    , GameStateMachineClient
     , GameStateMachineSchema, GameError
     , token
     ) where
 
-import           Control.Monad                (void)
+import           Control.Monad                (forever, void)
 import           Data.Aeson                   (FromJSON, ToJSON)
 import           GHC.Generics                 (Generic)
 import           Ledger                       hiding (to)
@@ -103,8 +106,8 @@ data GameError =
     deriving anyclass (ToJSON, FromJSON)
 
 -- | Top-level contract, exposing both endpoints.
-contract :: Contract () GameStateMachineSchema GameError ()
-contract = (lock `select` guess) >> contract
+contract :: GameStateMachineClient -> Contract SM.SMOutput GameStateMachineSchema GameError ()
+contract client = forever $ guess client
 
 -- | The token that represents the right to make a guess
 newtype GameToken = GameToken { unGameToken :: Value }
@@ -167,10 +170,11 @@ transition State{stateData=oldData, stateValue=oldValue} input = case (oldData, 
     _ -> Nothing
 
 type GameStateMachine = SM.StateMachine GameState GameInput
+type GameStateMachineClient = SM.StateMachineClient GameState GameInput
 
 {-# INLINABLE machine #-}
 machine :: GameStateMachine
-machine = SM.mkStateMachine Nothing transition isFinal where
+machine = SM.mkStateMachine transition isFinal where
     isFinal _ = False
 
 {-# INLINABLE mkValidator #-}
@@ -187,12 +191,12 @@ scriptInstance = Scripts.validator @GameStateMachine
 monetaryPolicy :: Scripts.MonetaryPolicy
 monetaryPolicy = Scripts.monetaryPolicy scriptInstance
 
-client :: SM.StateMachineClient GameState GameInput
-client = SM.mkStateMachineClient $ SM.StateMachineInstance machine scriptInstance
+smInstance :: SM.StateMachineInstance GameState GameInput
+smInstance = SM.StateMachineInstance machine scriptInstance
 
 -- | The @"guess"@ endpoint.
-guess :: Contract () GameStateMachineSchema GameError ()
-guess = do
+guess :: GameStateMachineClient -> Contract w GameStateMachineSchema GameError ()
+guess client = do
     GuessArgs{guessArgsOldSecret,guessArgsNewSecret, guessArgsValueTakenOut} <- mapError GameContractError $ endpoint @"guess"
 
     let guessedSecret = ClearString (C.pack guessArgsOldSecret)
@@ -203,12 +207,12 @@ guess = do
         $ SM.runStep client
             (Guess guessedSecret newSecret guessArgsValueTakenOut)
 
-lock :: Contract () GameStateMachineSchema GameError ()
+lock :: Contract SM.SMOutput GameStateMachineSchema GameError ()
 lock = do
     LockArgs{lockArgsSecret, lockArgsValue} <- mapError GameContractError $ endpoint @"lock"
     let secret = HashedString (sha2_256 (C.pack lockArgsSecret))
         sym = Scripts.monetaryPolicyHash scriptInstance
-    _ <- mapError GameSMError $ SM.runInitialise client (Initialised sym "guess" secret) lockArgsValue
+    client <- mapError GameSMError $ SM.runInitialise smInstance (Initialised sym "guess" secret) lockArgsValue
     void $ mapError GameSMError $ SM.runStep client ForgeToken
 
 PlutusTx.unstableMakeIsData ''GameState

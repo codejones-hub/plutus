@@ -20,6 +20,7 @@ module Plutus.Contract.Trace.RequestHandler(
     -- * handlers for common requests
     , handleOwnPubKey
     , handleSlotNotifications
+    , handleUnbalancedTransactions
     , handlePendingTransactions
     , handleUtxoQueries
     , handleTxConfirmedQueries
@@ -50,12 +51,12 @@ import           Control.Monad.Freer.Extras.Log           (LogMessage, LogMsg, L
                                                            surroundDebug)
 import           Ledger                                   (Address, PubKey, Slot, Tx, TxId)
 import           Ledger.AddressMap                        (AddressMap (..))
-import           Ledger.Constraints.OffChain              (UnbalancedTx (unBalancedTxTx))
+import           Ledger.Constraints.OffChain              (UnbalancedTx)
 import           Plutus.Contract.Effects.AwaitTxConfirmed (TxConfirmed (..))
 import           Plutus.Contract.Effects.Instance         (OwnIdRequest)
 import           Plutus.Contract.Effects.UtxoAt           (UtxoAtAddress (..))
 import qualified Plutus.Contract.Wallet                   as Wallet
-import           Wallet.API                               (WalletAPIError)
+import           Wallet.API                               (WalletAPIError, signTxAndSubmit)
 import           Wallet.Effects                           (ChainIndexEffect, ContractRuntimeEffect, WalletEffect)
 import qualified Wallet.Effects
 import           Wallet.Emulator.LogMessages              (RequestHandlerLogMsg (..), TxBalanceMsg)
@@ -127,7 +128,7 @@ handleSlotNotifications =
             guard (currentSlot >= targetSlot_)
             pure currentSlot
 
-handlePendingTransactions ::
+handleUnbalancedTransactions ::
     forall effs.
     ( Member WalletEffect effs
     , Member (LogObserve (LogMessage Text)) effs
@@ -136,13 +137,26 @@ handlePendingTransactions ::
     , Member ChainIndexEffect effs
     )
     => RequestHandler effs UnbalancedTx (Either WalletAPIError Tx)
-handlePendingTransactions =
+handleUnbalancedTransactions =
     RequestHandler $ \unbalancedTx ->
+        surroundDebug @Text "handleUnbalancedTransactions" $ do
+        (Right <$> Wallet.balanceWallet unbalancedTx) `Eff.handleError` (\err -> logWarn (HandleTxFailed err) >> pure (Left err))
+
+handlePendingTransactions ::
+    forall effs.
+    ( Member WalletEffect effs
+    , Member (LogObserve (LogMessage Text)) effs
+    , Member (LogMsg RequestHandlerLogMsg) effs
+    , Member ChainIndexEffect effs
+    )
+    => RequestHandler effs Tx (Either WalletAPIError Tx)
+handlePendingTransactions =
+    RequestHandler $ \tx ->
         surroundDebug @Text "handlePendingTransactions" $ do
         logDebug StartWatchingContractAddresses
         wa <- Wallet.Effects.watchedAddresses
-        traverse_ Wallet.Effects.startWatching (AM.addressesTouched wa (unBalancedTxTx unbalancedTx))
-        (Right <$> Wallet.handleTx unbalancedTx) `Eff.handleError` (\err -> logWarn (HandleTxFailed err) >> pure (Left err))
+        traverse_ Wallet.Effects.startWatching (AM.addressesTouched wa tx)
+        (Right <$> signTxAndSubmit tx) `Eff.handleError` (\err -> logWarn (HandleTxFailed err) >> pure (Left err))
 
 handleUtxoQueries ::
     forall effs.

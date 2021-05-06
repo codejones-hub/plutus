@@ -362,7 +362,7 @@ valueAtAddress address check =
     flip postMapM (L.generalize $ Folds.valueAtAddress address) $ \vl -> do
         let result = check vl
         unless result $ do
-            tell @(Doc Void) ("Funds at address" <+> pretty address <+> "were" <> pretty vl)
+            tell @(Doc Void) ("Funds at address" <+> pretty address <+> "were" <+> pretty vl)
         pure result
 
 dataAtAddress :: IsData a => Address -> (a -> Bool) -> TracePredicate

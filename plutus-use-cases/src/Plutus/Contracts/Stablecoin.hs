@@ -67,7 +67,6 @@ module Plutus.Contracts.Stablecoin(
     , ConversionRate
     -- * State machine client
     , scriptInstance
-    , machineClient
     , step
     -- * Contract using the state machine
     , contract
@@ -96,8 +95,8 @@ import           Ledger.Typed.Tx                 (TypedScriptTxOut (..))
 import           Ledger.Value                    (AssetClass, TokenName, Value)
 import qualified Ledger.Value                    as Value
 import           Plutus.Contract
-import           Plutus.Contract.StateMachine    (SMContractError, State (..), StateMachine, StateMachineClient (..),
-                                                  StateMachineInstance (..), Void)
+import           Plutus.Contract.StateMachine    (SMContractError, SMOutput, State (..), StateMachine,
+                                                  StateMachineClient (..), StateMachineInstance (..), Void)
 import qualified Plutus.Contract.StateMachine    as StateMachine
 import qualified PlutusTx                        as PlutusTx
 import           PlutusTx.Prelude
@@ -152,8 +151,8 @@ data BankState =
     deriving anyclass (ToJSON, FromJSON)
 
 -- | Initialise the 'BankState' with zero deposits.
-initialState :: StateMachineClient BankState Input -> BankState
-initialState StateMachineClient{scInstance=StateMachineInstance{validatorInstance}} =
+initialState :: StateMachineInstance BankState Input -> BankState
+initialState StateMachineInstance{validatorInstance} =
     BankState
         { bsReserves = 0
         , bsStablecoins = 0
@@ -359,7 +358,7 @@ data InvalidStateReason
     deriving (Show)
 
 stablecoinStateMachine :: Stablecoin -> StateMachine BankState Input
-stablecoinStateMachine sc = StateMachine.mkStateMachine Nothing (transition sc) isFinal
+stablecoinStateMachine sc = StateMachine.mkStateMachine (transition sc) isFinal
     -- the state machine never stops (OK for the prototype but we probably need
     -- to add a final state to the real thing)
     where isFinal _ = False
@@ -368,16 +367,16 @@ scriptInstance :: Stablecoin -> Scripts.ScriptInstance (StateMachine BankState I
 scriptInstance stablecoin =
     let val = $$(PlutusTx.compile [|| validator ||]) `PlutusTx.applyCode` PlutusTx.liftCode stablecoin
         validator d = StateMachine.mkValidator (stablecoinStateMachine d)
-        wrap = Scripts.wrapValidator @BankState @Input
-    in Scripts.validator @(StateMachine BankState Input) val $$(PlutusTx.compile [|| wrap ||])
+        wrap = Scripts.wrapValidator
+    in Scripts.validator val $$(PlutusTx.compile [|| wrap ||])
 
-machineClient ::
+machineInstance ::
     Scripts.ScriptInstance (StateMachine BankState Input)
     -> Stablecoin
-    -> StateMachineClient BankState Input
-machineClient inst stablecoin =
+    -> StateMachineInstance BankState Input
+machineInstance inst stablecoin =
     let machine = stablecoinStateMachine stablecoin
-    in StateMachine.mkStateMachineClient (StateMachineInstance machine inst)
+    in StateMachineInstance machine inst
 
 type StablecoinSchema =
     BlockchainActions
@@ -391,13 +390,17 @@ data StablecoinError =
     deriving stock (Haskell.Show, Generic)
     deriving anyclass (ToJSON, FromJSON)
 
--- | A 'Contract' that initialises the state machine and then accepts 'Input'
---   transitions.
-contract :: Contract () StablecoinSchema StablecoinError ()
-contract = do
+-- | A 'Contract' that initialises the state machine
+initContract :: Contract SMOutput StablecoinSchema StablecoinError (StateMachineClient BankState Input, Stablecoin)
+initContract = do
     sc <- mapError InitialiseEPError $ endpoint @"initialise"
-    let theClient = machineClient (scriptInstance sc) sc
-    _ <- mapError StateMachineError $ StateMachine.runInitialise theClient (initialState theClient) mempty
+    let inst = machineInstance (scriptInstance sc) sc
+    theClient <- mapError StateMachineError $ StateMachine.runInitialise inst (initialState inst) mempty
+    pure (theClient, sc)
+
+-- | A 'Contract' that accepts 'Input' transitions.
+contract :: (StateMachineClient BankState Input, Stablecoin) -> Contract () StablecoinSchema StablecoinError ()
+contract (theClient, sc) =
     forever $ do
         i <- mapError RunStepError (endpoint @"run step")
         checkTransition theClient sc i
@@ -412,10 +415,10 @@ checkTransition theClient sc i@Input{inpConversionRate} = do
             Right Observation{obsValue} -> do
                 case currentState of
                     Just ((TypedScriptTxOut{tyTxOutData}, _), _) -> do
-                        case checkValidState sc tyTxOutData obsValue of
+                        case checkValidState sc (fst tyTxOutData) obsValue of
                             Right _ -> logInfo @String "Current state OK"
                             Left w  -> logInfo $ "Current state is invalid: " <> show w <> ". The transition may still be allowed."
-                        case applyInput sc tyTxOutData i of
+                        case applyInput sc (fst tyTxOutData) i of
                             Just (_, newState) -> case checkValidState sc newState obsValue of
                                 Right _ -> logInfo @String "New state OK"
                                 Left w  -> logWarn $ "New state is invalid: " <> show w <> ". The transition is not allowed."

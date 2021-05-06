@@ -92,7 +92,7 @@ transition State{stateData=oldData,stateValue} input = case (oldData, input) of
 
 {-# INLINABLE machine #-}
 machine :: SM.StateMachine PingPongState Input
-machine = SM.mkStateMachine Nothing transition isFinal where
+machine = SM.mkStateMachine transition isFinal where
     isFinal Stopped = True
     isFinal _       = False
 
@@ -105,24 +105,24 @@ scriptInstance = Scripts.validator @(SM.StateMachine PingPongState Input)
     $$(PlutusTx.compile [|| mkValidator ||])
     $$(PlutusTx.compile [|| wrap ||])
     where
-        wrap = Scripts.wrapValidator @PingPongState @Input
+        wrap = Scripts.wrapValidator
 
 machineInstance :: SM.StateMachineInstance PingPongState Input
 machineInstance = SM.StateMachineInstance machine scriptInstance
 
-client :: SM.StateMachineClient PingPongState Input
-client = SM.mkStateMachineClient machineInstance
+type PingPongClient = SM.StateMachineClient PingPongState Input
 
-initialise :: forall w. Contract w PingPongSchema PingPongError PingPongState
-initialise = endpoint @"initialise" >> SM.runInitialise client Pinged (Ada.lovelaceValueOf 1)
+initialise :: Contract SM.SMOutput PingPongSchema PingPongError PingPongClient
+initialise = endpoint @"initialise" >> SM.runInitialise machineInstance Pinged (Ada.lovelaceValueOf 1)
 
 run ::
     forall w.
-    PingPongState
+    PingPongClient
+    -> PingPongState
     -> Contract w PingPongSchema PingPongError ()
     -> Contract w PingPongSchema PingPongError ()
-run expectedState action = do
-    let extractState = tyTxOutData . fst
+run client expectedState action = do
+    let extractState = fst . tyTxOutData . fst
         go Nothing = throwError StoppedUnexpectedly
         go (Just currentState)
             | extractState currentState == expectedState = action
@@ -131,34 +131,37 @@ run expectedState action = do
     let datum = fmap fst maybeState
     go datum
 
-runPing :: forall w. Contract w PingPongSchema PingPongError ()
-runPing = run Ponged ping
+runPing :: forall w. PingPongClient -> Contract w PingPongSchema PingPongError ()
+runPing client = run client Ponged (ping client)
 
-ping :: forall w. Contract w PingPongSchema PingPongError ()
-ping = endpoint @"ping" >> void (SM.runStep client Ping)
+ping :: forall w. PingPongClient -> Contract w PingPongSchema PingPongError ()
+ping client = endpoint @"ping" >> void (SM.runStep client Ping)
 
-runPong :: forall w. Contract w PingPongSchema PingPongError ()
-runPong = run Pinged pong
+runPong :: forall w. PingPongClient -> Contract w PingPongSchema PingPongError ()
+runPong client = run client Pinged (pong client)
 
-pong :: forall w. Contract w PingPongSchema PingPongError ()
-pong = endpoint @"pong" >> void (SM.runStep client Pong)
+pong :: forall w. PingPongClient -> Contract w PingPongSchema PingPongError ()
+pong client = endpoint @"pong" >> void (SM.runStep client Pong)
 
-runStop :: forall w. Contract w PingPongSchema PingPongError ()
-runStop = endpoint @"stop" >> void (SM.runStep client Stop)
+runStop :: forall w. PingPongClient -> Contract w PingPongSchema PingPongError ()
+runStop client = endpoint @"stop" >> void (SM.runStep client Stop)
 
-runWaitForUpdate :: forall w. Contract w PingPongSchema PingPongError (Maybe (OnChainState PingPongState Input))
-runWaitForUpdate = SM.waitForUpdate client
+runWaitForUpdate :: forall w. PingPongClient -> Contract w PingPongSchema PingPongError (Maybe (OnChainState PingPongState Input))
+runWaitForUpdate = SM.waitForUpdate
 
-combined :: Contract (Last PingPongState) PingPongSchema PingPongError ()
-combined = forever (void initialise `select` ping `select` pong `select` runStop `select` wait) where
-    wait = do
-        _ <- endpoint @"wait"
-        newState <- runWaitForUpdate
-        case newState of
-            Nothing -> logWarn @String "runWaitForUpdate: Nothing"
-            Just (TypedScriptTxOut{tyTxOutData=s}, _) -> do
-                logInfo $ "new state: " <> show s
-                tell (Last $ Just s)
+combined :: Contract SM.SMOutput PingPongSchema PingPongError ()
+combined = do
+    client <- initialise
+    forever (ping client `select` pong client `select` runStop client `select` wait client)
+    where
+        wait client = do
+            _ <- endpoint @"wait"
+            newState <- runWaitForUpdate client
+            case newState of
+                Nothing -> logWarn @String "runWaitForUpdate: Nothing"
+                Just (TypedScriptTxOut{tyTxOutData=(s, _)}, _) -> do
+                    logInfo $ "new state: " <> show s
+                    -- tell (Last $ Just s)
 
 PlutusTx.unstableMakeIsData ''PingPongState
 PlutusTx.makeLift ''PingPongState

@@ -17,10 +17,12 @@ module Plutus.Contracts.Auction(
     SellerSchema,
     AuctionParams(..),
     HighestBid(..),
+    machineInstance,
     auctionBuyer,
     auctionSeller,
     AuctionOutput(..),
-    AuctionError(..)
+    AuctionError(..),
+    AuctionClient
     ) where
 
 import           Control.Lens                     (makeClassyPrisms)
@@ -38,7 +40,7 @@ import qualified Ledger.Typed.Scripts             as Scripts
 import           Ledger.Typed.Tx                  (TypedScriptTxOut (..))
 import           Ledger.Value                     (AssetClass)
 import           Plutus.Contract
-import           Plutus.Contract.StateMachine     (State (..), StateMachine (..), StateMachineClient,
+import           Plutus.Contract.StateMachine     (SMOutput, State (..), StateMachine (..), StateMachineClient,
                                                    StateMachineInstance (..), Void, WaitingResult (..))
 import qualified Plutus.Contract.StateMachine     as SM
 import           Plutus.Contract.Util             (loopM)
@@ -144,39 +146,35 @@ auctionTransition AuctionParams{apOwner, apAsset, apEndTime} State{stateData=old
 
 
 {-# INLINABLE auctionStateMachine #-}
-auctionStateMachine :: AssetClass -> AuctionParams -> StateMachine AuctionState AuctionInput
-auctionStateMachine threadToken auctionParams = SM.mkStateMachine (Just threadToken) (auctionTransition auctionParams) isFinal where
+auctionStateMachine :: AuctionParams -> StateMachine AuctionState AuctionInput
+auctionStateMachine auctionParams = SM.mkStateMachine (auctionTransition auctionParams) isFinal where
     isFinal Finished{} = True
     isFinal _          = False
 
 
 -- | The script instance of the auction state machine. It contains the state
 --   machine compiled to a Plutus core validator script.
-scriptInstance :: AssetClass -> AuctionParams -> Scripts.ScriptInstance (StateMachine AuctionState AuctionInput)
-scriptInstance currency auctionParams =
+scriptInstance :: AuctionParams -> Scripts.ScriptInstance (StateMachine AuctionState AuctionInput)
+scriptInstance auctionParams =
     let val = $$(PlutusTx.compile [|| validatorParam ||])
-            `PlutusTx.applyCode`
-                PlutusTx.liftCode currency
                 `PlutusTx.applyCode`
                     PlutusTx.liftCode auctionParams
-        validatorParam c f = SM.mkValidator (auctionStateMachine c f)
-        wrap = Scripts.wrapValidator @AuctionState @AuctionInput
+        validatorParam f = SM.mkValidator (auctionStateMachine f)
+        wrap = Scripts.wrapValidator
 
     in Scripts.validator @(StateMachine AuctionState AuctionInput)
         val
         $$(PlutusTx.compile [|| wrap ||])
 
--- | The machine client of the auction state machine. It contains the script instance
+-- | The machine instance of the auction state machine. It contains the script instance
 --   with the on-chain code, and the Haskell definition of the state machine for
 --   off-chain use.
-machineClient
-    :: Scripts.ScriptInstance (StateMachine AuctionState AuctionInput)
-    -> AssetClass -- ^ Thread token of the instance
-    -> AuctionParams
-    -> StateMachineClient AuctionState AuctionInput
-machineClient inst threadToken auctionParams =
-    let machine = auctionStateMachine threadToken auctionParams
-    in SM.mkStateMachineClient (StateMachineInstance machine inst)
+machineInstance
+    :: AuctionParams
+    -> StateMachineInstance AuctionState AuctionInput
+machineInstance auctionParams =
+    let machine = auctionStateMachine auctionParams
+    in StateMachineInstance machine (scriptInstance auctionParams)
 
 type BuyerSchema = BlockchainActions .\/ Endpoint "bid" Ada
 type SellerSchema = BlockchainActions -- Don't need any endpoints: the contract runs automatically until the auction is finished.
@@ -206,20 +204,21 @@ instance AsContractError AuctionError where
 instance SM.AsSMContractError AuctionError where
     _SMContractError = _StateMachineContractError . SM._SMContractError
 
--- | Client code for the seller
-auctionSeller :: Value -> Slot -> Contract AuctionOutput SellerSchema AuctionError ()
-auctionSeller value slot = do
-    threadToken <- mapError ThreadTokenError Currency.createThreadToken
-    logInfo $ "Obtained thread token: " <> show threadToken
-    tell $ threadTokenOut threadToken
-    self <- Ledger.pubKeyHash <$> ownPubKey
-    let params       = AuctionParams{apOwner = self, apAsset = value, apEndTime = slot }
-        inst         = scriptInstance threadToken params
-        client       = machineClient inst threadToken params
+type AuctionClient = StateMachineClient AuctionState AuctionInput
 
-    _ <- handleError
+-- | Client code for the seller
+auctionSeller :: Value -> Slot -> Contract SMOutput SellerSchema AuctionError ()
+auctionSeller value slot = do
+    -- threadToken <- mapError ThreadTokenError Currency.createThreadToken
+    -- logInfo $ "Obtained thread token: " <> show threadToken
+    -- tell $ threadTokenOut threadToken
+    self <- Ledger.pubKeyHash <$> ownPubKey
+    let params = AuctionParams{apOwner = self, apAsset = value, apEndTime = slot }
+        inst   = machineInstance params
+
+    client <- handleError
             (\e -> do { logError (AuctionFailed e); throwError (StateMachineContractError e) })
-            (SM.runInitialise client (initialState self) value)
+            (SM.runInitialise inst (initialState self) value)
 
     logInfo $ AuctionStarted params
     _ <- awaitSlot slot
@@ -230,12 +229,11 @@ auctionSeller value slot = do
         SM.TransitionSuccess (Finished h) -> logInfo $ AuctionEnded h
         SM.TransitionSuccess s            -> logWarn ("Unexpected state after Payout transition: " <> show s)
 
-
 -- | Get the current state of the contract and log it.
-currentState :: StateMachineClient AuctionState AuctionInput -> Contract AuctionOutput BuyerSchema AuctionError (Maybe HighestBid)
+currentState :: AuctionClient -> Contract SMOutput BuyerSchema AuctionError (Maybe HighestBid)
 currentState client = mapError StateMachineContractError (SM.getOnChainState client) >>= \case
-    Just ((TypedScriptTxOut{tyTxOutData=Ongoing s}, _), _) -> do
-        tell $ auctionStateOut $ Ongoing s
+    Just ((TypedScriptTxOut{tyTxOutData=(Ongoing s, _)}, _), _) -> do
+        -- tell $ auctionStateOut $ Ongoing s
         pure (Just s)
     _ -> do
         logWarn CurrentStateNotFound
@@ -263,7 +261,7 @@ data BuyerEvent =
         | OtherBid HighestBid -- ^ Another buyer submitted a higher bid
         | NoChange HighestBid -- ^ Nothing has changed
 
-waitForChange :: AuctionParams -> StateMachineClient AuctionState AuctionInput -> HighestBid -> Contract AuctionOutput BuyerSchema AuctionError BuyerEvent
+waitForChange :: AuctionParams -> AuctionClient -> HighestBid -> Contract SMOutput BuyerSchema AuctionError BuyerEvent
 waitForChange AuctionParams{apEndTime} client lastHighestBid = do
     s <- currentSlot
     let
@@ -288,13 +286,15 @@ waitForChange AuctionParams{apEndTime} client lastHighestBid = do
     -- see note [Buyer client]
     auctionOver `select` submitOwnBid `select` otherBid
 
-handleEvent :: StateMachineClient AuctionState AuctionInput -> HighestBid -> BuyerEvent -> Contract AuctionOutput BuyerSchema AuctionError (Either HighestBid ())
+handleEvent :: AuctionClient -> HighestBid -> BuyerEvent -> Contract SMOutput BuyerSchema AuctionError (Either HighestBid ())
 handleEvent client lastHighestBid change =
     let continue = pure . Left
         stop     = pure (Right ())
     -- see note [Buyer client]
     in case change of
-        AuctionIsOver s -> tell (auctionStateOut $ Finished s) >> stop
+        AuctionIsOver s -> do
+            -- tell (auctionStateOut $ Finished s)
+            stop
         SubmitOwnBid ada -> do
             self <- Ledger.pubKeyHash <$> ownPubKey
             r <- SM.runStep client Bid{newBid = ada, newBidder = self}
@@ -306,18 +306,15 @@ handleEvent client lastHighestBid change =
                 -- but you never know :-)
                 SM.TransitionSuccess (Finished newHighestBid) -> logError (AuctionEnded newHighestBid) >> stop
         OtherBid s -> do
-            tell (auctionStateOut $ Ongoing s)
+            -- tell (auctionStateOut $ Ongoing s)
             continue s
         NoChange s -> continue s
 
-auctionBuyer :: AssetClass -> AuctionParams -> Contract AuctionOutput BuyerSchema AuctionError ()
-auctionBuyer currency params = do
-    let inst         = scriptInstance currency params
-        client       = machineClient inst currency params
-
-        -- the actual loop, see note [Buyer client]
-        loop         = loopM (\h -> waitForChange params client h >>= handleEvent client h)
-    tell $ threadTokenOut currency
+auctionBuyer :: AuctionClient -> AuctionParams -> Contract SMOutput BuyerSchema AuctionError ()
+auctionBuyer client params = do
+    -- the actual loop, see note [Buyer client]
+    let loop         = loopM (\h -> waitForChange params client h >>= handleEvent client h)
+    -- tell $ threadTokenOut currency
     initial <- currentState client
     case initial of
         Just s -> loop s

@@ -11,6 +11,7 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE ViewPatterns          #-}
 {-# OPTIONS_GHC -fno-ignore-interface-pragmas #-}
@@ -45,8 +46,7 @@ import           Ledger.Value                 (Value)
 import qualified Ledger.Value                 as Value
 
 import           Plutus.Contract
-import           Plutus.Contract.StateMachine (AsSMContractError, State (..), StateMachine (..), TransitionResult (..),
-                                               Void)
+import           Plutus.Contract.StateMachine (AsSMContractError, State (..), StateMachine (..), Void)
 import qualified Plutus.Contract.StateMachine as SM
 import qualified PlutusTx                     as PlutusTx
 import           PlutusTx.Prelude             hiding (Applicative (..))
@@ -234,7 +234,7 @@ type MultiSigSym = StateMachine MSState Input
 
 {-# INLINABLE machine #-}
 machine :: Params -> MultiSigSym
-machine params = SM.mkStateMachine Nothing (transition params) isFinal where
+machine params = SM.mkStateMachine (transition params) isFinal where
     isFinal _ = False
 
 {-# INLINABLE mkValidator #-}
@@ -248,25 +248,28 @@ scriptInstance = Scripts.validatorParam @MultiSigSym
     where
         wrap = Scripts.wrapValidator
 
-client :: Params -> SM.StateMachineClient MSState Input
-client params = SM.mkStateMachineClient $ SM.StateMachineInstance (machine params) (scriptInstance params)
+smInstance :: Params -> SM.StateMachineInstance MSState Input
+smInstance params = SM.StateMachineInstance (machine params) (scriptInstance params)
 
 contract ::
     ( AsContractError e
     , AsSMContractError e
     )
     => Params
-    -> Contract () MultiSigSchema e ()
-contract params = forever endpoints where
-    theClient = client params
-    endpoints = (TransitionSuccess <$> lock) `select` propose `select` cancel `select` addSignature `select` pay
-    propose = endpoint @"propose-payment" >>= SM.runStep theClient . ProposePayment
-    cancel  = endpoint @"cancel-payment" >> SM.runStep theClient Cancel
-    addSignature = endpoint @"add-signature" >> (pubKeyHash <$> ownPubKey) >>= SM.runStep theClient . AddSignature
-    lock = do
-        value <- endpoint @"lock"
-        SM.runInitialise theClient Holding value
-    pay = endpoint @"pay" >> SM.runStep theClient Pay
+    -> Contract SM.SMOutput MultiSigSchema e ()
+contract params = do
+    client <- lock
+    forever $ endpoints client
+    where
+        lock = do
+            value <- endpoint @"lock"
+            SM.runInitialise (smInstance params) Holding value
+        endpoints client = propose `select` cancel `select` addSignature `select` pay
+            where
+                propose = endpoint @"propose-payment" >>= SM.runStep client . ProposePayment
+                cancel  = endpoint @"cancel-payment" >> SM.runStep client Cancel
+                addSignature = endpoint @"add-signature" >> (pubKeyHash <$> ownPubKey) >>= SM.runStep client . AddSignature
+                pay = endpoint @"pay" >> SM.runStep client Pay
 
 PlutusTx.unstableMakeIsData ''Payment
 PlutusTx.makeLift ''Payment

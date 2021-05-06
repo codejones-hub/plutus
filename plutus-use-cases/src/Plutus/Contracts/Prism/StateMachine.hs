@@ -11,6 +11,7 @@ module Plutus.Contracts.Prism.StateMachine(
     IDState(..)
     , IDAction(..)
     , UserCredential(..)
+    , StateMachine.SMOutput
     , scriptInstance
     , machineClient
     , mkMachineClient
@@ -80,7 +81,7 @@ transition UserCredential{ucAddress, ucCredential, ucToken} State{stateData=stat
 credentialStateMachine ::
   UserCredential
   -> StateMachine IDState IDAction
-credentialStateMachine cd = StateMachine.mkStateMachine Nothing (transition cd) isFinal where
+credentialStateMachine cd = StateMachine.mkStateMachine (transition cd) isFinal where
   isFinal Revoked = True
   isFinal _       = False
 
@@ -90,7 +91,7 @@ scriptInstance ::
 scriptInstance credentialData =
     let val = $$(PlutusTx.compile [|| validator ||]) `PlutusTx.applyCode` PlutusTx.liftCode credentialData
         validator d = StateMachine.mkValidator (credentialStateMachine d)
-        wrap = Scripts.wrapValidator @IDState @IDAction
+        wrap = Scripts.wrapValidator
     in Scripts.validator @(StateMachine IDState IDAction) val $$(PlutusTx.compile [|| wrap ||])
 
 machineClient ::
@@ -99,7 +100,7 @@ machineClient ::
     -> StateMachineClient IDState IDAction
 machineClient inst credentialData =
     let machine = credentialStateMachine credentialData
-    in StateMachine.mkStateMachineClient (StateMachineInstance machine inst)
+    in StateMachine.mkStateMachineClient undefined (StateMachineInstance machine inst)
 
 mkMachineClient :: CredentialAuthority -> PubKeyHash -> TokenName -> StateMachineClient IDState IDAction
 mkMachineClient authority credentialOwner tokenName =

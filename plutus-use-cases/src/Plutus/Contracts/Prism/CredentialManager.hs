@@ -20,6 +20,7 @@ module Plutus.Contracts.Prism.CredentialManager(
 import           Data.Aeson                          (FromJSON, ToJSON)
 import           GHC.Generics                        (Generic)
 import           Ledger.Constraints                  (ScriptLookups, TxConstraints (..))
+import           Ledger.Value                        (AssetClass)
 import           Plutus.Contract
 import           Plutus.Contract.Effects.RPC
 import           Plutus.Contract.StateMachine        (InvalidTransition, SMContractError, StateMachine,
@@ -34,7 +35,7 @@ data CredentialManager
 instance RPC CredentialManager where
     type RPCRequest CredentialManager = UserCredential
     type RPCRequestEndpoint CredentialManager = "credential-token-req"
-    type RPCResponse CredentialManager = (TxConstraints IDAction IDState, ScriptLookups (StateMachine IDState IDAction))
+    type RPCResponse CredentialManager = (TxConstraints IDAction (IDState, AssetClass), ScriptLookups (StateMachine IDState IDAction))
     type RPCResponseEndpoint CredentialManager = "credential-token-resp"
     type RPCError CredentialManager = CredentialManagerClientError
 
@@ -75,7 +76,7 @@ presentToken :: forall w s.
     ( HasBlockchainActions s
     )
     => UserCredential
-    -> Contract w s CredentialManagerClientError (TxConstraints IDAction IDState, ScriptLookups (StateMachine IDState IDAction))
+    -> Contract w s CredentialManagerClientError (TxConstraints IDAction (IDState, AssetClass), ScriptLookups (StateMachine IDState IDAction))
 presentToken userCredential = do
     let theClient = StateMachine.machineClient (StateMachine.scriptInstance userCredential) userCredential
     t <- mapError StateMachineError $ mkStep theClient PresentCredential

@@ -35,7 +35,8 @@ import           Ledger.Typed.Scripts                     (ScriptInstance, Scrip
 
 import           Wallet.API                               (WalletAPIError)
 
-type TxSymbol = "tx"
+type UnbalancedTxSymbol = "utx"
+type BalancedTxSymbol = "btx"
 
 data WriteTxResponse =
   WriteTxFailed WalletAPIError
@@ -53,20 +54,42 @@ writeTxResponse = iso f g where
   f = \case { WriteTxFailed w -> Left w; WriteTxSuccess t -> Right t }
   g = either WriteTxFailed WriteTxSuccess
 
-type HasWriteTx s =
-    ( HasType TxSymbol WriteTxResponse (Input s)
-    , HasType TxSymbol UnbalancedTx (Output s)
+type HasWriteUnbalancedTx s =
+    ( HasType UnbalancedTxSymbol WriteTxResponse (Input s)
+    , HasType UnbalancedTxSymbol UnbalancedTx (Output s)
     , ContractRow s)
 
-type WriteTx = TxSymbol .== (WriteTxResponse, UnbalancedTx)
+type WriteUnbalancedTx = UnbalancedTxSymbol .== (WriteTxResponse, UnbalancedTx)
+
+type HasWriteBalancedTx s =
+    ( HasType BalancedTxSymbol WriteTxResponse (Input s)
+    , HasType BalancedTxSymbol Tx (Output s)
+    , ContractRow s)
+
+type WriteBalancedTx = BalancedTxSymbol .== (WriteTxResponse, Tx)
+
+type HasWriteTx s = (HasWriteUnbalancedTx s, HasWriteBalancedTx s)
+
+type WriteTx = WriteUnbalancedTx .\/ WriteBalancedTx
 
 -- | Send an unbalanced transaction to be balanced and signed. Returns the ID
 --    of the final transaction when the transaction was submitted. Throws an
 --    error if balancing or signing failed.
 submitUnbalancedTx :: forall w s e. (AsContractError e, HasWriteTx s) => UnbalancedTx -> Contract w s e Tx
+submitUnbalancedTx utx = do
+  tx <- balanceTx utx
+  submitBalancedTx tx
+
+balanceTx :: forall w s e. (AsContractError e, HasWriteUnbalancedTx s) => UnbalancedTx -> Contract w s e Tx
 -- See Note [Injecting errors into the user's error type]
-submitUnbalancedTx t =
-  let req = request @w @TxSymbol @_ @_ @s t in
+balanceTx t =
+  let req = request @w @UnbalancedTxSymbol @_ @_ @s t in
+  req >>= either (throwError . review _WalletError) pure . view writeTxResponse
+
+submitBalancedTx :: forall w s e. (AsContractError e, HasWriteTx s) => Tx -> Contract w s e Tx
+-- See Note [Injecting errors into the user's error type]
+submitBalancedTx t =
+  let req = request @w @BalancedTxSymbol @_ @_ @s t in
   req >>= either (throwError . review _WalletError) pure . view writeTxResponse
 
 -- | Build a transaction that satisfies the constraints, then submit it to the
@@ -140,14 +163,26 @@ submitTxConfirmed
   -> Contract w s e ()
 submitTxConfirmed t = submitUnbalancedTx t >>= awaitTxConfirmed . txId
 
-event
-  :: forall s. (HasType TxSymbol WriteTxResponse (Input s), AllUniqueLabels (Input s))
+unbalancedEvent
+  :: forall s. (HasType UnbalancedTxSymbol WriteTxResponse (Input s), AllUniqueLabels (Input s))
   => WriteTxResponse
   -> Event s
-event r = Event (IsJust #tx r)
+unbalancedEvent r = Event (IsJust #utx r)
 
-pendingTransaction
-  :: forall s. ( HasType TxSymbol UnbalancedTx (Output s) )
+balancedEvent
+  :: forall s. (HasType BalancedTxSymbol WriteTxResponse (Input s), AllUniqueLabels (Input s))
+  => WriteTxResponse
+  -> Event s
+balancedEvent r = Event (IsJust #btx r)
+
+unbalancedTransaction
+  :: forall s. ( HasType UnbalancedTxSymbol UnbalancedTx (Output s) )
    => Handlers s
    -> Maybe UnbalancedTx
-pendingTransaction (Handlers r) = trial' r (Label @TxSymbol)
+unbalancedTransaction (Handlers r) = trial' r (Label @UnbalancedTxSymbol)
+
+pendingTransaction
+  :: forall s. ( HasType BalancedTxSymbol Tx (Output s) )
+   => Handlers s
+   -> Maybe Tx
+pendingTransaction (Handlers r) = trial' r (Label @BalancedTxSymbol)

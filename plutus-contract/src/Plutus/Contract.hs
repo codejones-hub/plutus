@@ -60,6 +60,10 @@ module Plutus.Contract(
     , tell
     -- * Transactions
     , HasWriteTx
+    , HasWriteBalancedTx
+    , HasWriteUnbalancedTx
+    , WriteBalancedTx
+    , WriteUnbalancedTx
     , WriteTx
     , WalletAPIError
     , submitTx
@@ -68,6 +72,8 @@ module Plutus.Contract(
     , submitTxConstraintsSpending
     , submitTxConstraintsWith
     , submitUnbalancedTx
+    , balanceTx
+    , submitBalancedTx
     -- ** Creating transactions
     , module Tx
     -- ** Tx confirmation
