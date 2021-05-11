@@ -112,3 +112,31 @@ test-suite plutus-tx-tests
     ghc-options: -g
                  -- See Plutus Tx readme
                  -fobject-code -fno-ignore-interface-pragmas -fno-omit-interface-pragmas
+
+
+test-suite patched-ghc-tests
+    type: exitcode-stdio-1.0
+    hs-source-dirs: test
+    main-is: PatchedGHC/Spec.hs
+    other-modules:
+        PatchedGHC.StrictData
+
+        PatchedGHC.SameMod
+
+        PatchedGHC.Orphan.Lib
+        PatchedGHC.Orphan.Use
+
+        PatchedGHC.OmitInterface.Lib
+        PatchedGHC.OmitInterface.Use
+    default-language: Haskell2010
+    build-depends:
+        base >=4.9 && <5,
+        plutus-core -any,
+        plutus-tx -any,
+        plutus-tx-plugin -any,
+        prettyprinter -any,
+        template-haskell -any,
+    default-extensions: TemplateHaskell DataKinds TypeApplications
+    ghc-options: -fplugin PlutusTx.Plugin -fplugin-opt PlutusTx.Plugin:dump-pir
+                 -- redundant, since default for -O1 in tests, but put explicit here for documentation
+                 -fno-omit-interface-pragmas
