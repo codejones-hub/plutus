@@ -11,6 +11,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, fromMaybe')
 import Data.Symbol (SProxy(..))
 import Data.Tuple.Nested ((/\))
+import Effect.Exception.Unsafe (unsafeThrow)
 import Marlowe.Semantics (AccountId, Accounts, Action(..), Bound, Case(..), ChoiceId(..), ChosenNum, Contract(..), Input, Observation, Party, Payment, ReduceResult(..), Slot(..), SlotInterval(..), State, Timeouts(..), Token, TransactionInput(..), TransactionOutput(..), ValueId, _accounts, _boundValues, _minSlot, computeTransaction, emptyState, evalValue, makeEnvironment, reduceContractUntilQuiescent, timeouts)
 
 -- This represents a previous step in the execution. The state property corresponds to the state before the
@@ -140,14 +141,16 @@ timeoutState currentSlot { current, previous, mPendingTimeouts, mNextTimeout } =
       Contract ->
       { mNextTimeout :: Maybe Slot, mPendingTimeouts :: Maybe PendingTimeouts }
     advanceAllTimeouts mNextTimeout' newTimeouts state' contract'
-      | mNextTimeout' >= Just currentSlot =
+      | mNextTimeout' /= Nothing && mNextTimeout' <= Just currentSlot =
         let
+          -- reduceContractUntilQuiescent 
           { txOutState, txOutContract } = case reduceContractUntilQuiescent env state' contract' of
             -- TODO: SCP-2088 We need to discuss how to display the warnings that computeTransaction may give
             ContractQuiescent warnings payments txOutState txOutContract -> { txOutState, txOutContract }
             -- FIXME: Change timeoutState to return an Either
-            RRAmbiguousSlotIntervalError -> { txOutState: state', txOutContract: contract' }
+            RRAmbiguousSlotIntervalError -> unsafeThrow "advanceAllTimeouts: ambiguous slot interval error"
 
+          -- get the next timeout after reducing the contract (Nothing if we have reached a Close)
           newNextTimeout = nextTimeout txOutContract
         in
           advanceAllTimeouts newNextTimeout (Array.snoc newTimeouts currentSlot) txOutState txOutContract

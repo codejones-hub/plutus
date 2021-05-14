@@ -13,7 +13,6 @@ import Contract.Lenses (_selectedStep, _marloweParams)
 import Contract.State (applyTimeout)
 import Contract.State (dummyState, handleAction) as Contract
 import Contract.Types (Action(..), State) as Contract
-import ContractHome.Lenses (_contracts)
 import ContractHome.State (handleAction, mkInitialState) as ContractHome
 import ContractHome.Types (Action(..), State) as ContractHome
 import Control.Monad.Reader (class MonadAsk)
@@ -194,7 +193,7 @@ handleAction { currentSlot } AdvanceTimedoutSteps = do
   selectedStep <- peruse $ _selectedContract <<< _selectedStep
   modify_
     $ over
-        (_contractsState <<< _contracts <<< traversed <<< filtered (\contract -> contract.executionState.mNextTimeout == Just currentSlot))
+        (_allContracts <<< traversed <<< filtered (\contract -> contract.executionState.mNextTimeout /= Nothing && contract.executionState.mNextTimeout <= Just currentSlot))
         (applyTimeout currentSlot)
   selectedStep' <- peruse $ _selectedContract <<< _selectedStep
   when (selectedStep /= selectedStep')
