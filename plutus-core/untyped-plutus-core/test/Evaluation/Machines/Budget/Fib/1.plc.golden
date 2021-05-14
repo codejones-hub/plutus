@@ -1,24 +1,6 @@
 ( (Right (1))
-, ({ tally: ({ BConst causes ({ cpu: 210000
-| mem: 30
-})
-| BVar causes ({ cpu: 910000
-| mem: 130
-})
-| BLamAbs causes ({ cpu: 980000
-| mem: 140
-})
-| BApply causes ({ cpu: 1260000
-| mem: 180
-})
-| BDelay causes ({ cpu: 350000
-| mem: 50
-})
-| BForce causes ({ cpu: 420000
-| mem: 60
-})
-| BBuiltin causes ({ cpu: 140000
-| mem: 20
+, ({ tally: ({ BStep causes ({ cpu: 4270000
+| mem: 610
 })
 | BBuiltinApp LessThanEqInteger causes ({ cpu: 816637
 | mem: 1

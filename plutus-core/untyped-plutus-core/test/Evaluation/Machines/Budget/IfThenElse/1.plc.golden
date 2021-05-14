@@ -1,24 +1,6 @@
 ( (Right (delay (\z -> \f -> f (delay (\z -> \f -> f (delay (\z -> \f -> f (delay (\z -> \f -> f (delay (\z -> \f -> f (delay (\z -> \f -> f (delay (\z -> \f -> f (delay (\z -> \f -> f (delay (\z -> \f -> f (delay (\z -> \f -> f (delay (\z -> \f -> z)))))))))))))))))))))))
-, ({ tally: ({ BConst causes ({ cpu: 70000
-| mem: 10
-})
-| BVar causes ({ cpu: 10360000
-| mem: 1480
-})
-| BLamAbs causes ({ cpu: 7420000
-| mem: 1060
-})
-| BApply causes ({ cpu: 9450000
-| mem: 1350
-})
-| BDelay causes ({ cpu: 3010000
-| mem: 430
-})
-| BForce causes ({ cpu: 2240000
-| mem: 320
-})
-| BBuiltin causes ({ cpu: 70000
-| mem: 10
+, ({ tally: ({ BStep causes ({ cpu: 32620000
+| mem: 4660
 })
 | BBuiltinApp IfThenElse causes ({ cpu: 0
 | mem: 0

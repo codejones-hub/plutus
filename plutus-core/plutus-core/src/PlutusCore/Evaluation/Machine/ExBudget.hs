@@ -140,6 +140,9 @@ module PlutusCore.Evaluation.Machine.ExBudget
     , ToExMemory(..)
     , ExBudgetBuiltin(..)
     , ExRestrictingBudget(..)
+    , scaleBudget
+    , fractionBudget
+    , divBudget
     )
 where
 
@@ -148,7 +151,7 @@ import           PlutusPrelude                          hiding (toList)
 import           PlutusCore.Core
 import           PlutusCore.Name
 
-import           Data.Semigroup.Generic
+import           Data.Semigroup
 import           Data.Text.Prettyprint.Doc
 import           Deriving.Aeson
 import           Language.Haskell.TH.Lift               (Lift)
@@ -178,9 +181,32 @@ instance ExBudgetBuiltin fun () where
 
 data ExBudget = ExBudget { _exBudgetCPU :: ExCPU, _exBudgetMemory :: ExMemory }
     deriving stock (Eq, Show, Generic, Lift)
-    deriving (Semigroup, Monoid) via (GenericSemigroupMonoid ExBudget)
     deriving anyclass (PrettyBy config, NFData)
     deriving (FromJSON, ToJSON) via CustomJSON '[FieldLabelModifier (CamelToSnake)] ExBudget
+
+instance Semigroup ExBudget where
+    (ExBudget cpu1 mem1) <> (ExBudget cpu2 mem2) = ExBudget (cpu1 <> cpu2) (mem1 <> mem2)
+    stimes = scaleBudget
+
+instance Monoid ExBudget where
+    mempty = ExBudget mempty mempty
+
+-- TODO: Is there some proper numeric typeclass way of doing this?
+-- This is marked 'INLINE' and not generalized over because this one is actually used in performance-critical places
+{-# INLINE scaleBudget #-}
+-- | Scale a budget by an 'Integral'.
+scaleBudget :: Integral b => b -> ExBudget -> ExBudget
+scaleBudget r (ExBudget (ExCPU cpu) (ExMemory mem)) = ExBudget (ExCPU (fromIntegral r * cpu)) (ExMemory (fromIntegral r * mem))
+
+-- TODO: Is there some proper numeric typeclass way of doing this?
+-- | Scale a budget by a 'Rational'.
+fractionBudget :: Rational -> ExBudget -> ExBudget
+fractionBudget r (ExBudget (ExCPU cpu) (ExMemory mem)) = ExBudget (ExCPU (round (r * toRational cpu))) (ExMemory (round (r * toRational mem)))
+
+-- TODO: Is there some proper numeric typeclass way of doing this?
+-- | How many times does the second budget go into the first budget?
+divBudget :: ExBudget -> ExBudget -> Integer
+divBudget (ExBudget (ExCPU cpu1) (ExMemory mem1)) (ExBudget (ExCPU cpu2) (ExMemory mem2)) = toInteger $ min (cpu1 `div` cpu2) (mem1 `div` mem2)
 
 instance Pretty ExBudget where
     pretty (ExBudget cpu memory) = parens $ fold
@@ -190,5 +216,5 @@ instance Pretty ExBudget where
         ]
 
 newtype ExRestrictingBudget = ExRestrictingBudget ExBudget deriving (Show, Eq)
-    deriving (Semigroup, Monoid) via (GenericSemigroupMonoid ExBudget)
+    deriving newtype (Semigroup, Monoid)
     deriving newtype (Pretty, PrettyBy config, NFData)

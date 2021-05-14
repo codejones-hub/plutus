@@ -1,5 +1,5 @@
 ( (Right (delay (delay (\x -> \xs -> delay (\f -> \z -> force f x (force xs f z))))))
-, ({ tally: ({ BDelay causes ({ cpu: 70000
+, ({ tally: ({ BStep causes ({ cpu: 70000
 | mem: 10
 })
 | BStartup causes ({ cpu: 50000000
