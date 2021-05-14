@@ -3,7 +3,7 @@
 , config ? { allowUnfreePredicate = (import ./nix/lib/unfree.nix).unfreePredicate; }
 , sourcesOverride ? { }
 , packages ? import ./. { inherit crossSystem config sourcesOverride enableHaskellProfiling; }
-, enableHaskellProfiling ? false
+, enableHaskellProfiling ? true
 }:
 let
   inherit (packages) pkgs plutus plutus-playground marlowe-playground plutus-pab marlowe-dashboard deployment docs;
