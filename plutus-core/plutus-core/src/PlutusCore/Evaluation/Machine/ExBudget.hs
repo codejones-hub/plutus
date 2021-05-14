@@ -92,6 +92,7 @@ import           PlutusPrelude                          hiding (toList)
 import           PlutusCore.Core
 import           PlutusCore.Name
 
+import           Data.Semigroup
 import           Data.Semigroup.Generic
 import           Data.Text.Prettyprint.Doc
 import           Deriving.Aeson
@@ -122,9 +123,15 @@ instance ExBudgetBuiltin fun () where
 
 data ExBudget = ExBudget { _exBudgetCPU :: ExCPU, _exBudgetMemory :: ExMemory }
     deriving stock (Eq, Show, Generic, Lift)
-    deriving (Semigroup, Monoid) via (GenericSemigroupMonoid ExBudget)
     deriving anyclass (PrettyBy config, NFData)
     deriving (FromJSON, ToJSON) via CustomJSON '[FieldLabelModifier (CamelToSnake)] ExBudget
+
+instance Semigroup (ExBudget) where
+    (ExBudget cpu1 mem1) <> (ExBudget cpu2 mem2) = ExBudget (cpu1 <> cpu2) (mem1 <> mem2)
+    stimes b (ExBudget cpu mem) = ExBudget (stimes b cpu) (stimes b mem)
+
+instance Monoid (ExBudget) where
+    mempty = ExBudget mempty mempty
 
 instance Pretty ExBudget where
     pretty (ExBudget cpu memory) = parens $ fold
