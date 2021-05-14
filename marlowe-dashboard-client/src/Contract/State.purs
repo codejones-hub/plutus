@@ -44,7 +44,7 @@ import Marlowe.HasParties (getParties)
 import Marlowe.Execution (ExecutionState, NamedAction(..), PreviousState, _currentContract, _currentState, _pendingTimeouts, _previousState, _previousTransactions, expandBalances, extractNamedActions, initExecution, isClosed, mkTx, nextState, timeoutState)
 import Marlowe.Extended.Metadata (emptyContractMetadata)
 import Marlowe.PAB (ContractHistory(..), PlutusAppId(..), MarloweParams)
-import Marlowe.Semantics (Contract(..), Party(..), Slot, SlotInterval(..), Token(..), TransactionInput(..))
+import Marlowe.Semantics (Contract(..), Party(..), Slot, SlotInterval(..), Token(..), TransactionInput(..), _minSlot)
 import Marlowe.Semantics (Input(..), State(..)) as Semantic
 import Plutus.V1.Ledger.Value (CurrencySymbol(..))
 import Toast.Types (ajaxErrorToast, successToast)
@@ -91,11 +91,9 @@ mkInitialState walletDetails currentSlot followerAppId contractHistory = case co
 
       mTemplate = findTemplate contract
 
-      -- FIXME: We can't use the currentSlot to create the initial execution state, since the contract
-      -- might have been created several slots ago. Hopefully this doesn't matter (the argument is
-      -- only used to set the minSlot in the contract's initial state), but we should check. We could
-      -- also consider using the `minSlot` of the original contract.
-      initialExecutionState = initExecution zero contract
+      minSlot = view _minSlot marloweData.marloweState
+
+      initialExecutionState = initExecution minSlot contract
     in
       flip map mTemplate \template ->
         let

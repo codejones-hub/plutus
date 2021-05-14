@@ -2,7 +2,7 @@ module MainFrame.State (mkMainFrame, handleAction) where
 
 import Prelude
 import Bridge (toFront)
-import Capability.Marlowe (class ManageMarlowe, getFollowerApps, getRoleContracts, subscribeToPlutusApp, subscribeToWallet, unsubscribeFromPlutusApp, unsubscribeFromWallet)
+import Capability.Marlowe (class ManageMarlowe, getFollowerApps, getRoleContracts, lookupWalletDetails, subscribeToPlutusApp, subscribeToWallet, unsubscribeFromPlutusApp, unsubscribeFromWallet)
 import Capability.Toast (class Toast, addToast)
 import Contract.State (mkInitialState, updateState) as Contract
 import ContractHome.Types (Action(..)) as ContractHome
@@ -40,7 +40,7 @@ import StaticData (walletDetailsLocalStorageKey, walletLibraryLocalStorageKey)
 import Toast.State (defaultState, handleAction) as Toast
 import Toast.Types (Action, State) as Toast
 import Toast.Types (decodedAjaxErrorToast, decodingErrorToast, errorToast, successToast)
-import WalletData.Lenses (_assets, _companionAppLastObservedState, _companionAppId, _marloweAppId, _wallet, _walletInfo)
+import WalletData.Lenses (_assets, _companionAppLastObservedState, _companionAppId, _marloweAppId, _wallet, _walletInfo, _walletNickname)
 import WebSocket.Support as WS
 
 mkMainFrame ::

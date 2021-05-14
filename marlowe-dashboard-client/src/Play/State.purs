@@ -31,7 +31,6 @@ import Data.Time.Duration (Minutes(..))
 import Data.Traversable (for)
 import Data.Tuple.Nested ((/\))
 import Data.UUID (emptyUUID)
-import Debug.Trace (spy)
 import Effect.Aff.Class (class MonadAff)
 import Env (Env)
 import Foreign.Generic (encodeJSON)
@@ -129,8 +128,8 @@ handleAction input (SaveNewWallet mTokenName) = do
         -- note the empty properties are fine for saved wallets - these will be fetched if/when
         -- this wallet is picked up
         walletDetails =
-          { walletNickname
-          , companionAppId: walletId
+          { walletNickname: newWalletNickname
+          , companionAppId
           , companionAppLastObservedState: mempty
           , marloweAppId: PlutusAppId emptyUUID
           , walletInfo
@@ -182,7 +181,7 @@ handleAction _ (UpdateRunningContracts companionAppState) = do
 
     existingMarloweParams = List.toUnfoldable $ map (view _marloweParams) (values allContracts)
 
-    newMarloweParams = spy "difference" $ difference allMarloweParams existingMarloweParams
+    newMarloweParams = difference allMarloweParams existingMarloweParams
   void
     $ for newMarloweParams \marloweParams -> do
         ajaxFollowerContract <- followContract walletDetails marloweParams
