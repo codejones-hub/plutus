@@ -128,8 +128,8 @@ handleAction input (SaveNewWallet mTokenName) = do
         -- note the empty properties are fine for saved wallets - these will be fetched if/when
         -- this wallet is picked up
         walletDetails =
-          { walletNickname: newWalletNickname
-          , companionAppId
+          { walletNickname
+          , companionAppId: walletId
           , companionAppLastObservedState: mempty
           , marloweAppId: PlutusAppId emptyUUID
           , walletInfo
