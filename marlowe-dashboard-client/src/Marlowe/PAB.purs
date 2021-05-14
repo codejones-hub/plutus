@@ -8,7 +8,7 @@ module Marlowe.PAB
   , MarloweParams(..)
   , ValidatorHash
   , MarloweData(..)
-  , History(..)
+  , ContractHistory(..)
   , CombinedWSStreamToServer(..)
   ) where
 
@@ -18,7 +18,6 @@ import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype)
-import Data.Tuple.Nested (Tuple3)
 import Data.UUID (UUID)
 import Foreign.Class (class Encode, class Decode)
 import Foreign.Generic (defaultOptions, genericDecode, genericEncode)
@@ -50,6 +49,8 @@ data PlutusApp
   = MarloweApp
   | WalletCompanionApp
   | WalletFollowerApp
+
+derive instance eqPlutusApp :: Eq PlutusApp
 
 {-
 In order to activate instances of the Plutus "contracts" (or apps) in the PAB, we need to pass the path
@@ -139,21 +140,21 @@ type MarloweData
     , marloweState :: State
     }
 
--- This is the observable state of the `FollowerContract`. The `MarloweParams` identify the
+-- This is the observable state of the `WalletFollowerApp`. The `MarloweParams` identify the
 -- the Marlowe contract on the blockchain, the `MarloweData` represents the initial contract
 -- and state, and the array of `TransactionInput` records all the transactions of the
--- contract so far.
-newtype History
-  = History (Tuple3 MarloweParams MarloweData (Array TransactionInput))
+-- contract so far. The value is `None` when the app is first activated, before the "follow"
+-- endpoint has been called (and the PAB has had time to settle).
+data ContractHistory
+  = None
+  | History MarloweParams MarloweData (Array TransactionInput)
 
-derive instance newtypeHistory :: Newtype History _
+derive instance genericHistory :: Generic ContractHistory _
 
-derive instance genericHistory :: Generic History _
-
-instance encodeHistory :: Encode History where
+instance encodeHistory :: Encode ContractHistory where
   encode value = genericEncode defaultOptions value
 
-instance decodeHistory :: Decode History where
+instance decodeHistory :: Decode ContractHistory where
   decode value = genericDecode defaultOptions value
 
 -- HACK: rolling my own websocket type to see if this helps

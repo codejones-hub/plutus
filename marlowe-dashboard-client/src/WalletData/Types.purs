@@ -14,7 +14,7 @@ import Data.Map (Map)
 import Data.Newtype (class Newtype)
 import Foreign.Class (class Encode, class Decode)
 import Foreign.Generic (defaultOptions, genericDecode, genericEncode)
-import Marlowe.PAB (PlutusAppId)
+import Marlowe.PAB (MarloweData, MarloweParams, PlutusAppId)
 import Marlowe.Semantics (Assets, PubKey)
 
 type WalletLibrary
@@ -26,6 +26,8 @@ type WalletNickname
 type WalletDetails
   = { walletNickname :: WalletNickname
     , companionAppId :: PlutusAppId
+    , companionAppLastObservedState :: Map MarloweParams MarloweData
+    , marloweAppId :: PlutusAppId
     , walletInfo :: WalletInfo
     , assets :: Assets
     }

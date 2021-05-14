@@ -27,7 +27,7 @@ import Data.Ord (abs)
 import Data.Set (Set)
 import Data.Set as Set
 import Data.Traversable (traverse)
-import Data.Tuple.Nested (get1, get2, get3, (/\))
+import Data.Tuple.Nested ((/\))
 import Data.UUID as UUID
 import Data.Unfoldable as Unfoldable
 import Effect (Effect)
@@ -35,7 +35,7 @@ import Effect.Aff.AVar as AVar
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Exception.Unsafe (unsafeThrow)
 import Env (Env)
-import Halogen (HalogenM, getHTMLElementRef, gets, liftEffect, modify_, subscribe, unsubscribe)
+import Halogen (HalogenM, getHTMLElementRef, liftEffect, subscribe, unsubscribe)
 import Halogen.Query.EventSource (EventSource)
 import Halogen.Query.EventSource as EventSource
 import MainFrame.Types (ChildSlots, Msg)
@@ -43,7 +43,7 @@ import Marlowe.Deinstantiate (findTemplate)
 import Marlowe.HasParties (getParties)
 import Marlowe.Execution (ExecutionState, NamedAction(..), PreviousState, _currentContract, _currentState, _pendingTimeouts, _previousState, _previousTransactions, expandBalances, extractNamedActions, initExecution, isClosed, mkTx, nextState, timeoutState)
 import Marlowe.Extended.Metadata (emptyContractMetadata)
-import Marlowe.PAB (PlutusAppId(..), History, MarloweParams)
+import Marlowe.PAB (ContractHistory(..), PlutusAppId(..), MarloweParams)
 import Marlowe.Semantics (Contract(..), Party(..), Slot, SlotInterval(..), Token(..), TransactionInput(..))
 import Marlowe.Semantics (Input(..), State(..)) as Semantic
 import Plutus.V1.Ledger.Value (CurrencySymbol(..))
@@ -82,66 +82,60 @@ dummyState =
 
   emptyMarloweState = Semantic.State { accounts: mempty, choices: mempty, boundValues: mempty, minSlot: zero }
 
-mkInitialState :: WalletDetails -> Slot -> PlutusAppId -> History -> Maybe State
-mkInitialState walletDetails currentSlot followerAppId history =
+mkInitialState :: WalletDetails -> Slot -> PlutusAppId -> ContractHistory -> Maybe State
+mkInitialState walletDetails currentSlot followerAppId contractHistory = case contractHistory of
+  None -> Nothing
+  History marloweParams marloweData transactionInputs ->
+    let
+      contract = marloweData.marloweContract
+
+      mTemplate = findTemplate contract
+
+      -- FIXME: We can't use the currentSlot to create the initial execution state, since the contract
+      -- might have been created several slots ago. Hopefully this doesn't matter (the argument is
+      -- only used to set the minSlot in the contract's initial state), but we should check. We could
+      -- also consider using the `minSlot` of the original contract.
+      initialExecutionState = initExecution zero contract
+    in
+      flip map mTemplate \template ->
+        let
+          isRoleParty party = case party of
+            Role _ -> true
+            _ -> false
+
+          -- Note we filter out PK parties here. This is because we don't have a design for displaying
+          -- them anywhere, and because we are currently only using one in a special case (in the Escrow
+          -- with Collateral contract), where it doesn't make much sense to show it to the user anyway.
+          -- If we ever want to use PK parties for other purposes, we will need to rethink this.
+          roleParties :: Array Party
+          roleParties = filter isRoleParty $ Set.toUnfoldable $ getParties contract
+
+          initialState =
+            { tab: Tasks
+            , executionState: initialExecutionState
+            , previousSteps: mempty
+            , marloweParams
+            , followerAppId
+            , selectedStep: 0
+            , metadata: template.metaData
+            , participants: Map.fromFoldable $ map (\x -> x /\ Nothing) roleParties
+            , userParties: getUserParties walletDetails marloweParams
+            , namedActions: mempty
+            }
+
+          updateExecutionState = over _executionState (applyTransactionInputs transactionInputs)
+        in
+          initialState
+            # updateExecutionState
+            # regenerateStepCards currentSlot
+            # selectLastStep
+
+updateState :: Slot -> Array TransactionInput -> State -> State
+updateState currentSlot transactionInputs state =
   let
-    marloweParams = get1 $ unwrap history
-
-    marloweData = get2 $ unwrap history
-
-    transactionInputs = get3 $ unwrap history
-
-    contract = marloweData.marloweContract
-
-    mTemplate = findTemplate contract
-
-    -- FIXME: We can't use the currentSlot to create the initial execution state, since the contract
-    -- might have been created several slots ago. Hopefully this doesn't matter (the argument is
-    -- only used to set the minSlot in the contract's initial state), but we should check. We could
-    -- also consider using the `minSlot` of the original contract.
-    initialExecutionState = initExecution zero contract
-  in
-    flip map mTemplate \template ->
-      let
-        isRoleParty party = case party of
-          Role _ -> true
-          _ -> false
-
-        -- Note we filter out PK parties here. This is because we don't have a design for displaying
-        -- them anywhere, and because we are currently only using one in a special case (in the Escrow
-        -- with Collateral contract), where it doesn't make much sense to show it to the user anyway.
-        -- If we ever want to use PK parties for other purposes, we will need to rethink this.
-        roleParties :: Array Party
-        roleParties = filter isRoleParty $ Set.toUnfoldable $ getParties contract
-
-        initialState =
-          { tab: Tasks
-          , executionState: initialExecutionState
-          , previousSteps: mempty
-          , marloweParams
-          , followerAppId
-          , selectedStep: 0
-          , metadata: template.metaData
-          , participants: Map.fromFoldable $ map (\x -> x /\ Nothing) roleParties
-          , userParties: getUserParties walletDetails marloweParams
-          , namedActions: mempty
-          }
-
-        updateExecutionState = over _executionState (applyTransactionInputs transactionInputs)
-      in
-        initialState
-          # updateExecutionState
-          # regenerateStepCards currentSlot
-          # selectLastStep
-
-updateState :: Slot -> History -> State -> State
-updateState currentSlot history state =
-  let
-    allTransactionInputs = get3 $ unwrap history
-
     previousTransactionInputs = toArrayOf (_executionState <<< _previousTransactions) state
 
-    newTransactionInputs = difference allTransactionInputs previousTransactionInputs
+    newTransactionInputs = difference transactionInputs previousTransactionInputs
 
     updateExecutionState = over _executionState (applyTransactionInputs newTransactionInputs)
   in
@@ -179,19 +173,15 @@ handleAction input@{ currentSlot, walletDetails } (ConfirmAction namedAction) = 
     contractInput = toInput namedAction
 
     txInput = mkTx currentSlot (currentExeState ^. _currentContract) (Unfoldable.fromMaybe contractInput)
-  -- FIXME: remove the next four lines and uncomment the code below when things are working in the PAB
-  modify_ $ applyTx currentSlot txInput
-  stepNumber <- gets currentStep
-  handleAction input (MoveToStep stepNumber)
-  addToast $ successToast "Payment received, step completed."
+  ajaxApplyInputs <- applyTransactionInput walletDetails marloweParams txInput
+  case ajaxApplyInputs of
+    Left ajaxError -> addToast $ ajaxErrorToast "Failed to submit transaction." ajaxError
+    Right _ -> do
+      --modify_ $ applyTx currentSlot txInput -- FIXME: should we do this here or wait for the PAB update?
+      --stepNumber <- gets currentStep
+      --handleAction input (MoveToStep stepNumber)
+      addToast $ successToast "Payment received, step completed."
 
---ajaxApplyInputs <- applyTransactionInput walletDetails marloweParams txInput
---case ajaxApplyInputs of
---  Left ajaxError -> addToast $ ajaxErrorToast "Failed to submit transaction." ajaxError
---  Right _ -> do
---    stepNumber <- gets currentStep
---    handleAction walletDetails (MoveToStep stepNumber)
---    addToast $ successToast "Payment received, step completed."
 handleAction _ (ChangeChoice choiceId chosenNum) = modifying _namedActions (map changeChoice)
   where
   changeChoice (MakeChoice choiceId' bounds _)

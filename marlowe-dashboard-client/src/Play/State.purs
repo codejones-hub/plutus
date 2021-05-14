@@ -7,27 +7,31 @@ module Play.State
 import Prelude
 import Capability.Contract (class ManageContract)
 import Capability.MainFrameLoop (class MainFrameLoop, callMainFrameAction)
-import Capability.Marlowe (class ManageMarlowe, createContract, lookupWalletInfo)
+import Capability.Marlowe (class ManageMarlowe, createContract, followContract, lookupWalletInfo, subscribeToPlutusApp)
 import Capability.Toast (class Toast, addToast)
-import Contract.Lenses (_selectedStep)
+import Contract.Lenses (_selectedStep, _marloweParams)
 import Contract.State (applyTimeout)
-import Contract.State (dummyState, handleAction, mkInitialState) as Contract
+import Contract.State (dummyState, handleAction) as Contract
 import Contract.Types (Action(..), State) as Contract
 import ContractHome.Lenses (_contracts)
 import ContractHome.State (handleAction, mkInitialState) as ContractHome
 import ContractHome.Types (Action(..), State) as ContractHome
 import Control.Monad.Reader (class MonadAsk)
-import Data.Array (init, snoc)
+import Data.Array (difference, init, snoc)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.Lens (assign, filtered, modifying, over, set, use, view)
 import Data.Lens.Extra (peruse)
 import Data.Lens.Traversal (traversed)
-import Data.Map (Map, insert, lookup, mapMaybe)
+import Data.List (toUnfoldable) as List
+import Data.Map (Map, insert, keys, lookup, mapMaybe, values)
 import Data.Maybe (Maybe(..))
+import Data.Set (toUnfoldable) as Set
 import Data.Time.Duration (Minutes(..))
-import Data.Tuple.Nested (tuple3)
-import Data.UUID (genUUID)
+import Data.Traversable (for)
+import Data.Tuple.Nested ((/\))
+import Data.UUID (emptyUUID)
+import Debug.Trace (spy)
 import Effect.Aff.Class (class MonadAff)
 import Env (Env)
 import Foreign.Generic (encodeJSON)
@@ -39,20 +43,18 @@ import InputField.Types (Action(..), State) as InputField
 import LocalStorage (setItem)
 import MainFrame.Types (Action(..)) as MainFrame
 import MainFrame.Types (ChildSlots, Msg)
-import Marlowe.PAB (PlutusAppId(..), History(..))
+import Marlowe.PAB (ContractHistory, PlutusAppId(..))
 import Marlowe.Semantics (Slot(..))
-import Marlowe.Semantics (State(..)) as Semantic
 import Network.RemoteData (RemoteData(..), fromEither)
 import Play.Lenses (_allContracts, _cards, _contractsState, _menuOpen, _walletIdInput, _walletNicknameInput, _remoteWalletInfo, _screen, _selectedContract, _templateState, _walletDetails, _walletLibrary)
 import Play.Types (Action(..), Card(..), Input, Screen(..), State)
-import Plutus.V1.Ledger.Value (CurrencySymbol(..))
 import StaticData (walletLibraryLocalStorageKey)
 import Template.Lenses (_extendedContract, _roleWalletInputs, _template, _templateContent)
 import Template.State (dummyState, handleAction, mkInitialState) as Template
 import Template.State (instantiateExtendedContract)
 import Template.Types (Action(..), State) as Template
-import Toast.Types (ajaxErrorToast, errorToast, successToast)
-import WalletData.Lenses (_pubKeyHash, _walletInfo)
+import Toast.Types (ajaxErrorToast, decodedAjaxErrorToast, errorToast, successToast)
+import WalletData.Lenses (_companionAppLastObservedState, _pubKeyHash, _walletInfo)
 import WalletData.State (defaultWalletDetails)
 import WalletData.Types (WalletDetails, WalletLibrary)
 import WalletData.Validation (WalletIdError, WalletNicknameError, parsePlutusAppId, walletIdError, walletNicknameError)
@@ -61,7 +63,7 @@ import WalletData.Validation (WalletIdError, WalletNicknameError, parsePlutusApp
 dummyState :: State
 dummyState = mkInitialState mempty defaultWalletDetails mempty (Slot zero) (Minutes zero)
 
-mkInitialState :: WalletLibrary -> WalletDetails -> Map PlutusAppId History -> Slot -> Minutes -> State
+mkInitialState :: WalletLibrary -> WalletDetails -> Map PlutusAppId ContractHistory -> Slot -> Minutes -> State
 mkInitialState walletLibrary walletDetails contracts currentSlot timezoneOffset =
   { walletLibrary
   , walletDetails
@@ -124,9 +126,13 @@ handleAction input (SaveNewWallet mTokenName) = do
     Success walletInfo, Just walletId -> do
       handleAction input CloseCard
       let
+        -- note the empty properties are fine for saved wallets - these will be fetched if/when
+        -- this wallet is picked up
         walletDetails =
           { walletNickname
           , companionAppId: walletId
+          , companionAppLastObservedState: mempty
+          , marloweAppId: PlutusAppId emptyUUID
           , walletInfo
           , assets: mempty
           }
@@ -166,6 +172,23 @@ handleAction _ CloseCard = do
   cards <- use _cards
   for_ (init cards) \remainingCards ->
     assign _cards remainingCards
+
+handleAction _ (UpdateRunningContracts companionAppState) = do
+  assign (_walletDetails <<< _companionAppLastObservedState) companionAppState
+  walletDetails <- use _walletDetails
+  allContracts <- use _allContracts
+  let
+    allMarloweParams = Set.toUnfoldable $ keys companionAppState
+
+    existingMarloweParams = List.toUnfoldable $ map (view _marloweParams) (values allContracts)
+
+    newMarloweParams = spy "difference" $ difference allMarloweParams existingMarloweParams
+  void
+    $ for newMarloweParams \marloweParams -> do
+        ajaxFollowerContract <- followContract walletDetails marloweParams
+        case ajaxFollowerContract of
+          Left decodedAjaxError -> addToast $ decodedAjaxErrorToast "Failed to load new contract." decodedAjaxError
+          Right (plutusAppId /\ history) -> subscribeToPlutusApp plutusAppId
 
 handleAction { currentSlot } AdvanceTimedoutSteps = do
   walletDetails <- use _walletDetails
@@ -220,23 +243,6 @@ handleAction input@{ currentSlot } (TemplateAction templateAction) = case templa
             -- should create a WalletFollower contract manually here.
             handleAction input $ SetScreen ContractsScreen
             addToast $ successToast "Contract started."
-            -- FIXME: until we get contracts running properly in the PAB, we just fake the contract here locally
-            uuid <- liftEffect genUUID
-            let
-              contractInstanceId = PlutusAppId uuid
-
-              marloweParams = { rolePayoutValidatorHash: mempty, rolesCurrency: CurrencySymbol { unCurrencySymbol: "" } }
-
-              marloweState = Semantic.State { accounts: mempty, choices: mempty, boundValues: mempty, minSlot: zero }
-
-              marloweData = { marloweContract: contract, marloweState }
-
-              history = History $ tuple3 marloweParams marloweData mempty
-
-              mContractState = Contract.mkInitialState walletDetails currentSlot contractInstanceId history
-            for_ mContractState \contractState -> do
-              modifying _allContracts $ insert contractInstanceId contractState
-              handleAction input $ ContractHomeAction $ ContractHome.OpenContract contractInstanceId
   _ -> toTemplate $ Template.handleAction templateAction
 
 handleAction input (ContractHomeAction contractHomeAction) = case contractHomeAction of

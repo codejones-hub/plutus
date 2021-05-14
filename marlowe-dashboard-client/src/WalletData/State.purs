@@ -1,5 +1,6 @@
 module WalletData.State
   ( defaultWalletDetails
+  , defaultWalletInfo
   , adaToken
   , getAda
   ) where
@@ -18,6 +19,8 @@ defaultWalletDetails :: WalletDetails
 defaultWalletDetails =
   { walletNickname: mempty
   , companionAppId: PlutusAppId emptyUUID
+  , companionAppLastObservedState: mempty
+  , marloweAppId: PlutusAppId emptyUUID
   , walletInfo: defaultWalletInfo
   , assets: mempty
   }

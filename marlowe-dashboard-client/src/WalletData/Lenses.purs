@@ -1,6 +1,8 @@
 module WalletData.Lenses
   ( _walletNickname
   , _companionAppId
+  , _companionAppLastObservedState
+  , _marloweAppId
   , _walletInfo
   , _assets
   , _wallet
@@ -12,8 +14,9 @@ import Prelude
 import Data.Lens (Lens')
 import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Lens.Record (prop)
+import Data.Map (Map)
 import Data.Symbol (SProxy(..))
-import Marlowe.PAB (PlutusAppId)
+import Marlowe.PAB (MarloweData, MarloweParams, PlutusAppId)
 import Marlowe.Semantics (Assets, PubKey)
 import WalletData.Types (PubKeyHash, Wallet, WalletDetails, WalletInfo, WalletNickname)
 
@@ -22,6 +25,12 @@ _walletNickname = prop (SProxy :: SProxy "walletNickname")
 
 _companionAppId :: Lens' WalletDetails PlutusAppId
 _companionAppId = prop (SProxy :: SProxy "companionAppId")
+
+_companionAppLastObservedState :: Lens' WalletDetails (Map MarloweParams MarloweData)
+_companionAppLastObservedState = prop (SProxy :: SProxy "companionAppLastObservedState")
+
+_marloweAppId :: Lens' WalletDetails PlutusAppId
+_marloweAppId = prop (SProxy :: SProxy "marloweAppId")
 
 _walletInfo :: Lens' WalletDetails WalletInfo
 _walletInfo = prop (SProxy :: SProxy "walletInfo")
