@@ -189,8 +189,8 @@ newtype CekBudgetSpender fun s = CekBudgetSpender
 -- under the hood.
 -- | Runtime budgeting info.
 data ExBudgetInfo cost fun s = ExBudgetInfo
-    { _exBudgetModeSpender  :: !(CekBudgetSpender fun s)  -- ^ A spending function.
-    , _exBudgetModeGetFinal :: !(ST s cost)                        -- ^ For accessing the final state.
+    { _exBudgetModeSpender :: !(CekBudgetSpender fun s)  -- ^ A spending function.
+    , _exBudgetModeGet     :: !(ST s cost)               -- ^ For accessing the state.
     }
 
 -- We make a separate data type here just to save the caller of the CEK machine from those pesky
@@ -439,7 +439,7 @@ runCekM runtime (ExBudgetMode getExBudgetInfo) emitting a = runST $ do
         ?cekEmitter = mayLogsRef
         ?cekBudgetSpender = _exBudgetModeSpender exBudgetMode
     errOrRes <- unsafeIOToST $ try @_ @(CekEvaluationException uni fun) $ unsafeSTToIO a
-    st' <- _exBudgetModeGetFinal exBudgetMode
+    st' <- _exBudgetModeGet exBudgetMode
     logs <- case mayLogsRef of
         Nothing      -> pure []
         Just logsRef -> DList.toList <$> readSTRef logsRef
@@ -470,8 +470,10 @@ enterComputeCek
     -> TermWithMem uni fun
     -> CekM s (Term Name uni fun ())
 enterComputeCek slippage costs = computeCek 0 where
+    spendAccumulatedBudget :: Int -> CekM s ()
     spendAccumulatedBudget bacc = spendBudgetCek BApply (stimes bacc (cekVarCost costs))
     {-# INLINE maybeSpendBudget #-}
+    maybeSpendBudget :: Int -> CekM s Int
     maybeSpendBudget bacc = if bacc >= slippage then spendAccumulatedBudget bacc >> pure 0 else pure bacc
 
     -- | The computing part of the CEK machine.
@@ -488,8 +490,8 @@ enterComputeCek slippage costs = computeCek 0 where
         -> CekM s (Term Name uni fun ())
     -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
     computeCek bacc ctx env (Var _ varName) = do
-        val <- lookupVarName varName env
         bacc' <- maybeSpendBudget bacc
+        val <- lookupVarName varName env
         returnCek (bacc' +1) ctx val
     computeCek bacc ctx _ (Constant ex val) = do
         bacc' <- maybeSpendBudget bacc
@@ -654,8 +656,11 @@ runCek
 runCek costs runtime mode emitting term =
     runCekM runtime mode emitting $ do
         spendBudgetCek BStartup (cekStartupCost costs)
-        enterComputeCek 100 costs [] mempty memTerm
+        enterComputeCek slippage costs [] mempty memTerm
   where
+    -- The number of machine steps which may pass before we actually account for the step
+    -- budget
+    slippage = 100
     memTerm = withMemory term
     {- This is a temporary workaround for a bug where every AST node was being
        annotated with the size of the entire AST, leading to the costing
