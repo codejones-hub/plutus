@@ -1,10 +1,10 @@
-module PatchedGHC.Orphan.Use where
+module PatchedGHC.InstanceSameMod.Use where
 
 import Data.Proxy
 import PlutusTx
 import PlutusTx.Plugin.Utils (plc)
 
-import PatchedGHC.Orphan.Lib
+import PatchedGHC.InstanceSameMod.Lib
 
 instance C Integer where
     m _ = ()

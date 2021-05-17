@@ -1,26 +1,17 @@
-There are 4 cases that break **plutus compilation** via the patched ghc:
+# Issues with the Patched GHC
+
+There are 3 cases that break **plutus compilation** via the patched ghc:
 
 ## StrictData
 
 When an ADT has at least one strict field.
 
-## SameMod
+## InstanceSameMod
 
-Typeclasses that are defined and used *in the same module*.
-
-Note: you cannot rely on plutus `compile` TemplateHaskell-helper, instead you have to use the more verbose `plc` marker,
-because of TemplateHaskell's stage restriction.
-
-## Orphan
-
-This example is very similar to "SameMod" except the move of the
-`class` definition outside in a separate file (named `Lib`) so to
-as to change the original instance to an orphan. The Lib will compile, but at its
-use site it breaks similarly to `SameMod`.
+Instances (no matter the number of methods) which are defined *and* compiled by plutus *inside the same module*.
 
 Note: you cannot rely on plutus `compile` TemplateHaskell-helper, instead you have to use the more verbose `plc` marker,
 because of TemplateHaskell's stage restriction.
-
 
 ## OmitInterface
 

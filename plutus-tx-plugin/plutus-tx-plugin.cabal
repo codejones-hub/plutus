@@ -121,10 +121,8 @@ test-suite patched-ghc-tests
     other-modules:
         PatchedGHC.StrictData
 
-        PatchedGHC.SameMod
-
-        PatchedGHC.Orphan.Lib
-        PatchedGHC.Orphan.Use
+        PatchedGHC.InstanceSameMod.Lib
+        PatchedGHC.InstanceSameMod.Use
 
         PatchedGHC.OmitInterface.Lib
         PatchedGHC.OmitInterface.Use
