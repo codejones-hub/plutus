@@ -124,6 +124,9 @@ test-suite patched-ghc-tests
         PatchedGHC.InstanceSameMod.Lib
         PatchedGHC.InstanceSameMod.Use
 
+        PatchedGHC.InstanceContext.Lib
+        PatchedGHC.InstanceContext.Use
+
         PatchedGHC.OmitInterface.Lib
         PatchedGHC.OmitInterface.Use
     default-language: Haskell2010
