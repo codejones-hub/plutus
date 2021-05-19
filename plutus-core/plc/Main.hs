@@ -866,7 +866,7 @@ runEval (EvalOptions language inp ifmt evalMode printMode budgetMode timingMode 
                           case timingMode of
                             NoTiming -> evaluate term & handleResult
                             -- FIXME: reenable, why it needs Unique? is it for printing?
-                            -- Timing n -> timeEval n evaluate term >>= handleTimingResults term
+                            Timing n -> void $ timeEval n evaluate term -- >>= handleTimingResults term
                     Verbose bm -> do
                           let evaluate = Cek.runCekNoEmit cekparams bm
                           case timingMode of
@@ -875,7 +875,7 @@ runEval (EvalOptions language inp ifmt evalMode printMode budgetMode timingMode 
                                     printBudgetState term cekModel budget
                                     handleResultSilently result  -- We just want to see the budget information
                             -- FIXME: reenable, why it needs Unique? is it for printing?
-                            -- Timing n -> timeEval n evaluate term >>= handleTimingResultsWithBudget term
+                            Timing n -> void $ timeEval n evaluate term -- >>= handleTimingResultsWithBudget term
 
     where handleResult result =
               case result of

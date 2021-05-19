@@ -470,7 +470,7 @@ lookupVarName varName varEnv = do
         Just val -> pure val
 
 lookupName' :: DeBruijn -> B.BList a -> Maybe a
-lookupName' name e = Just $ e `B.index` fromIntegral (name^.coerced :: Natural)
+lookupName' name e = Just $ e `B.index` (fromIntegral (name^.coerced :: Natural)-1)
 
 -- See Note [Compilation peculiarities].
 -- | The entering point to the CEK machine's engine.
