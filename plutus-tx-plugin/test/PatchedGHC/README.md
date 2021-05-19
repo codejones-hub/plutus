@@ -1,6 +1,6 @@
 # Issues with the Patched GHC
 
-There are 4 cases that break **plutus compilation** via the patched ghc:
+There are 5 cases that break **plutus compilation** via the patched ghc:
 
 ## StrictData
 
@@ -29,6 +29,14 @@ There is no workaround currently.
 
 An example with separate modules Lib (for typeclass declaration and instances, no orphans) and Use (for plutus compilation/use site).
 
-This breaks plutus compilation for some methods which belong to typeclasses of >=2 number of methods,
-and the ghc compilation of the Lib is done with `-fomit-interface-pragmas`,
-which happens to be the default flag for `ghc -O0` (not cabal).
+This breaks plutus compilation for some methods which belong to typeclasses of >=2 number of methods.
+The error is that the wrong method implementation is returned upon querying the extensible interface.
+For example, in a typeclass with 2 methods `method1` and `method2, querying for the RHS of `method2` returns
+the implementation RHS of `method1` which most likely will run into a type error.
+
+Workaround: Use `-fno-omit-interface-pragmas` or use  `ghc -O`, aka `ghc -O1' (`cabal` defaults to `-O`)
+
+## plutus-ledger:Ledger.Typed.Scripts.Validators.forwardingMPS
+
+This yields the same method mismatch error as the `OmitInterface` above. The workaround of `OmitInterface`
+does not seem to help. It has to do with the 2-typeclass `Data` and the method `fromData`.
