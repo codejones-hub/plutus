@@ -52,8 +52,8 @@ cons x = \case
 
 uncons :: BList a -> Maybe (a, BList a)
 uncons (Cons _ (Node s a l r) ys) = Just (a, Cons s l (Cons s r ys))
-uncons (Cons _ (Leaf a) ys) = Just (a, ys)
-uncons Nil = Nothing
+uncons (Cons _ (Leaf a) ys)       = Just (a, ys)
+uncons Nil                        = Nothing
 
 -- TODO: use arch-independent Word32 or Word64
 index :: BList a -> Word -> a

@@ -56,17 +56,17 @@ import           PlutusCore.Universe
 import           UntypedPlutusCore.Evaluation.Machine.Cek.CekMachineCosts (CekMachineCosts (..))
 
 
-import           Control.Lens                            (coerced)
+import           Control.Lens                                             (coerced)
 import           Control.Lens.Review
 import           Control.Monad.Catch
 import           Control.Monad.Except
 import           Control.Monad.ST
 import           Control.Monad.ST.Unsafe
 import           Data.Array
+import qualified Data.BRAL                                                as B
 import           Data.DList                                               (DList)
 import qualified Data.DList                                               as DList
 import           Data.Hashable                                            (Hashable)
-import qualified Data.BRAL                               as B
 import qualified Data.Kind                                                as GHC
 import           Data.Proxy
 import           Data.STRef
