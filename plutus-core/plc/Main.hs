@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE TypeApplications          #-}
+{-# OPTIONS_GHC -Wwarn=unused-top-binds -Wwarn=unused-local-binds -Wwarn=incomplete-patterns #-}
 
 module Main (main) where
 
@@ -69,7 +70,7 @@ type UntypedProgram a = UPLC.Program PLC.Name PLC.DefaultUni PLC.DefaultFun a
 
 data Program a =
       TypedProgram (TypedProgram a)
-    | UntypedProgram (UntypedProgram a)
+    | UntypedProgram (UntypedProgramDeBruijn a)
     deriving (Functor)
 
 instance (PP.PrettyBy PP.PrettyConfigPlc (Program a)) where
@@ -403,8 +404,7 @@ toDeBruijn :: UntypedProgram a -> IO (UntypedProgramDeBruijn a)
 toDeBruijn prog =
   case runExcept @UPLC.FreeVariableError (UPLC.deBruijnProgram prog) of
     Left e  -> errorWithoutStackTrace $ show e
-    Right p -> return $ UPLC.programMapNames (\(UPLC.NamedDeBruijn _ ix) -> UPLC.DeBruijn ix) p
-
+    Right p -> pure p
 
 -- | Convert an untyped de-Bruijn-indexed program to one with standard names.
 -- We have nothing to base the names on, so every variable is named "v" (but
@@ -430,13 +430,15 @@ parsePlcInput language inp = do
     bsContents <- BSL.fromStrict . encodeUtf8 . T.pack <$> getPlcInput inp
     case language of
       TypedPLC   -> handleResult TypedProgram   $ PLC.runQuoteT $ runExceptT (PLC.parseScoped bsContents)
-      UntypedPLC -> handleResult UntypedProgram $ PLC.runQuoteT $ runExceptT (UPLC.parseScoped bsContents)
+      -- FIXME: no need for runquoteT in the following
+      UntypedPLC -> handleResult UntypedProgram $ PLC.runQuoteT $ runExceptT (UPLC.deBruijnProgram =<< UPLC.parseScoped bsContents)
       where handleResult wrapper =
                 \case
                   Left errCheck        -> failWith errCheck
                   Right (Left errEval) -> failWith errEval
                   Right (Right p)      -> return $ wrapper p
             failWith (err :: PlcParserError) =  errorWithoutStackTrace $ PP.displayPlcDef err
+
 
 -- Read a binary-encoded file (eg, CBOR- or Flat-encoded PLC)
 getBinaryInput :: Input -> IO BSL.ByteString
@@ -449,10 +451,10 @@ loadASTfromCBOR :: Language -> AstNameType -> Input -> IO (Program ())
 loadASTfromCBOR language cborMode inp =
     case (language, cborMode) of
          (TypedPLC,   Named)    -> getBinaryInput inp <&> PLC.deserialiseRestoringUnitsOrFail >>= handleResult TypedProgram
-         (UntypedPLC, Named)    -> getBinaryInput inp <&> UPLC.deserialiseRestoringUnitsOrFail >>= handleResult UntypedProgram
+         (UntypedPLC, Named)    -> getBinaryInput inp <&> UPLC.deserialiseRestoringUnitsOrFail >>= mapM toDeBruijn >>= handleResult UntypedProgram
          (TypedPLC,   DeBruijn) -> typedDeBruijnNotSupportedError
          (UntypedPLC, DeBruijn) -> getBinaryInput inp <&> UPLC.deserialiseRestoringUnitsOrFail >>=
-                                   mapM fromDeBruijn >>= handleResult UntypedProgram
+                                   handleResult UntypedProgram
     where handleResult wrapper =
               \case
                Left (DeserialiseFailure offset msg) ->
@@ -464,9 +466,9 @@ loadASTfromFlat :: Language -> AstNameType -> Input -> IO (Program ())
 loadASTfromFlat language flatMode inp =
     case (language, flatMode) of
          (TypedPLC,   Named)    -> getBinaryInput inp <&> unflat >>= handleResult TypedProgram
-         (UntypedPLC, Named)    -> getBinaryInput inp <&> unflat >>= handleResult UntypedProgram
+         (UntypedPLC, Named)    -> getBinaryInput inp <&> unflat >>= mapM toDeBruijn >>= handleResult UntypedProgram
          (TypedPLC,   DeBruijn) -> typedDeBruijnNotSupportedError
-         (UntypedPLC, DeBruijn) -> getBinaryInput inp <&> unflat >>= mapM fromDeBruijn >>= handleResult UntypedProgram
+         (UntypedPLC, DeBruijn) -> getBinaryInput inp <&> unflat >>= handleResult UntypedProgram
     where handleResult wrapper =
               \case
                Left e  -> errorWithoutStackTrace $ "Flat deserialisation failure:" ++ show e
@@ -495,7 +497,7 @@ serialiseProgramCBOR (UntypedProgram p) = UPLC.serialiseOmittingUnits p
 -- | Convert names to de Bruijn indices and then serialise
 serialiseDbProgramCBOR :: Program () -> IO (BSL.ByteString)
 serialiseDbProgramCBOR (TypedProgram _)   = typedDeBruijnNotSupportedError
-serialiseDbProgramCBOR (UntypedProgram p) = UPLC.serialiseOmittingUnits <$> toDeBruijn p
+serialiseDbProgramCBOR (UntypedProgram p) = pure $ UPLC.serialiseOmittingUnits p
 
 writeCBOR :: Output -> AstNameType -> Program a -> IO ()
 writeCBOR outp cborMode prog = do
@@ -515,7 +517,7 @@ serialiseProgramFlat (UntypedProgram p) = BSL.fromStrict $ flat p
 -- | Convert names to de Bruijn indices and then serialise
 serialiseDbProgramFlat :: Flat a => Program a -> IO (BSL.ByteString)
 serialiseDbProgramFlat (TypedProgram _)   = typedDeBruijnNotSupportedError
-serialiseDbProgramFlat (UntypedProgram p) = BSL.fromStrict . flat <$> toDeBruijn p
+serialiseDbProgramFlat (UntypedProgram p) = pure (BSL.fromStrict . flat $ p)
 
 writeFlat :: Output -> AstNameType -> Program a -> IO ()
 writeFlat outp flatMode prog = do
@@ -570,14 +572,12 @@ runPrint (PrintOptions language inp mode) =
 
 ---------------- Erasure ----------------
 
-eraseProgram :: TypedProgram a -> Program a
-eraseProgram = UntypedProgram . UPLC.eraseProgram
-
 -- | Input a program, erase the types, then output it
 runErase :: EraseOptions -> IO ()
 runErase (EraseOptions inp ifmt outp ofmt mode) = do
   TypedProgram typedProg <- getProgram TypedPLC ifmt inp
-  let untypedProg = () <$ eraseProgram typedProg
+  let untypedNameProg = () <$ UPLC.eraseProgram typedProg
+  untypedProg <- UntypedProgram <$> toDeBruijn untypedNameProg
   case ofmt of
     Plc           -> writePlc outp mode untypedProg
     Cbor cborMode -> writeCBOR outp cborMode untypedProg
@@ -750,7 +750,7 @@ timeEval n evaluate prog
 
 ---------------- Printing budgets and costs ----------------
 
-printBudgetStateBudget :: UPLC.Term UPLC.Name PLC.DefaultUni PLC.DefaultFun () -> CekModel -> ExBudget -> IO ()
+printBudgetStateBudget :: UPLC.Term UPLC.DeBruijn PLC.DefaultUni PLC.DefaultFun () -> CekModel -> ExBudget -> IO ()
 printBudgetStateBudget _ model b =
     case model of
       Unit -> pure ()
@@ -761,7 +761,7 @@ printBudgetStateBudget _ model b =
               putStrLn $ "Memory budget: " ++ show mem
 
 printBudgetStateTally :: (Eq fun, Cek.Hashable fun, Show fun)
-       => UPLC.Term UPLC.Name PLC.DefaultUni PLC.DefaultFun () -> CekModel ->  Cek.CekExTally fun -> IO ()
+       => UPLC.Term UPLC.DeBruijn PLC.DefaultUni PLC.DefaultFun () -> CekModel ->  Cek.CekExTally fun -> IO ()
 printBudgetStateTally term model (Cek.CekExTally costs) = do
   putStrLn $ "Const      " ++ pbudget Cek.BConst
   putStrLn $ "Var        " ++ pbudget Cek.BVar
@@ -806,7 +806,7 @@ printBudgetStateTally term model (Cek.CekExTally costs) = do
         totalTime = (getCPU $ getSpent Cek.BStartup) + getCPU totalComputeCost + getCPU builtinCosts
 
 class PrintBudgetState cost where
-    printBudgetState :: UPLC.Term PLC.Name PLC.DefaultUni PLC.DefaultFun () -> CekModel -> cost -> IO ()
+    printBudgetState :: UPLC.Term PLC.DeBruijn PLC.DefaultUni PLC.DefaultFun () -> CekModel -> cost -> IO ()
     -- TODO: Tidy this up.  We're passing in the term and the CEK cost model
     -- here, but we only need them in tallying mode (where we need the term so
     -- we can print out the AST size and we need the model type to decide how
@@ -865,7 +865,8 @@ runEval (EvalOptions language inp ifmt evalMode printMode budgetMode timingMode 
                           let evaluate = Cek.evaluateCekNoEmit cekparams
                           case timingMode of
                             NoTiming -> evaluate term & handleResult
-                            Timing n -> timeEval n evaluate term >>= handleTimingResults term
+                            -- FIXME: reenable, why it needs Unique? is it for printing?
+                            -- Timing n -> timeEval n evaluate term >>= handleTimingResults term
                     Verbose bm -> do
                           let evaluate = Cek.runCekNoEmit cekparams bm
                           case timingMode of
@@ -873,7 +874,8 @@ runEval (EvalOptions language inp ifmt evalMode printMode budgetMode timingMode 
                                     let (result, budget) = evaluate term
                                     printBudgetState term cekModel budget
                                     handleResultSilently result  -- We just want to see the budget information
-                            Timing n -> timeEval n evaluate term >>= handleTimingResultsWithBudget term
+                            -- FIXME: reenable, why it needs Unique? is it for printing?
+                            -- Timing n -> timeEval n evaluate term >>= handleTimingResultsWithBudget term
 
     where handleResult result =
               case result of

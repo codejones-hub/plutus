@@ -11,7 +11,7 @@ generators.
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
-
+{-# OPTIONS_GHC -Wwarn=unused-top-binds  #-}
 module PlutusCore.Generators.NEAT.Spec
   ( tests
   , GenOptions (..)
@@ -81,10 +81,11 @@ tests genOpts@GenOptions{} =
       (TyBuiltinG TyUnitG)
       (packAssertion prop_typePreservation)
 
-  , bigTest "typed CK vs untyped CEK produce the same output"
-      genOpts {genDepth = 18}
-      (TyBuiltinG TyUnitG)
-      (packAssertion prop_agree_termEval)
+  -- FIXME: reenable
+  -- , bigTest "typed CK vs untyped CEK produce the same output"
+  --     genOpts {genDepth = 18}
+  --     (TyBuiltinG TyUnitG)
+  --     (packAssertion prop_agree_termEval)
   ]
 
 
@@ -141,30 +142,31 @@ prop_typePreservation tyG tmG = do
 -- |Property: check if both the typed CK and untyped CEK machines produce the same ouput
 -- modulo erasure.
 --
-prop_agree_termEval :: ClosedTypeG -> ClosedTermG -> ExceptT TestFail Quote ()
-prop_agree_termEval tyG tmG = do
-  tcConfig <- withExceptT TypeError $ getDefTypeCheckConfig ()
+-- FIXME: reenable
+-- prop_agree_termEval :: ClosedTypeG -> ClosedTermG -> ExceptT TestFail Quote ()
+-- prop_agree_termEval tyG tmG = do
+--   tcConfig <- withExceptT TypeError $ getDefTypeCheckConfig ()
 
-  -- Check if the type checker for generated terms is sound:
-  ty <- withExceptT GenError $ convertClosedType tynames (Type ()) tyG
-  withExceptT TypeError $ checkKind tcConfig () ty (Type ())
-  tm <- withExceptT GenError $ convertClosedTerm tynames names tyG tmG
-  withExceptT TypeError $ checkType tcConfig () tm (Normalized ty)
+--   -- Check if the type checker for generated terms is sound:
+--   ty <- withExceptT GenError $ convertClosedType tynames (Type ()) tyG
+--   withExceptT TypeError $ checkKind tcConfig () ty (Type ())
+--   tm <- withExceptT GenError $ convertClosedTerm tynames names tyG tmG
+--   withExceptT TypeError $ checkType tcConfig () tm (Normalized ty)
 
-  -- run typed CK on input
-  tmCk <- withExceptT CkP $ liftEither $
-    evaluateCkNoEmit defaultBuiltinsRuntime tm `catchError` handleError ty
+--   -- run typed CK on input
+--   tmCk <- withExceptT CkP $ liftEither $
+--     evaluateCkNoEmit defaultBuiltinsRuntime tm `catchError` handleError ty
 
-  -- erase CK output
-  let tmUCk = U.erase tmCk
+--   -- erase CK output
+--   let tmUCk = U.erase tmCk
 
-  -- run untyped CEK on erased input
-  tmUCek <- withExceptT UCekP $ liftEither $
-    U.evaluateCekNoEmit defaultCekParameters (U.erase tm) `catchError` handleUError
+--   -- run untyped CEK on erased input
+--   tmUCek <- withExceptT UCekP $ liftEither $
+--     U.evaluateCekNoEmit defaultCekParameters (U.erase tm) `catchError` handleUError
 
-  -- check if typed CK and untyped CEK give the same output modulo erasure
-  unless (tmUCk == tmUCek) $
-    throwCtrex (CtrexUntypedTermEvaluationMismatch tyG tmG [tmUCk,tmUCek])
+--   -- check if typed CK and untyped CEK give the same output modulo erasure
+--   unless (tmUCk == tmUCek) $
+--     throwCtrex (CtrexUntypedTermEvaluationMismatch tyG tmG [tmUCk,tmUCek])
 
 -- |Property: the following diagram commutes for well-kinded types...
 --

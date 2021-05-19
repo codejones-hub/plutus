@@ -136,7 +136,8 @@ library
         Common
         ErrorCode
         Data.ByteString.Hash
-        PlcTestUtils
+        --FIXME: reenable
+        --PlcTestUtils
         Crypto
         Data.Text.Prettyprint.Doc.Custom
         Data.SatInt
@@ -237,6 +238,7 @@ library
         Data.Aeson.Flatten
         Data.Aeson.THReader
         Data.Functor.Foldable.Monadic
+        Data.BRAL
     build-depends:
         Stream -any,
         aeson -any,

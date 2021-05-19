@@ -296,7 +296,7 @@ unindent d = map (dropWhile isSpace) $ (lines . show $ d)
 runLastPiece :: Solution
 runLastPiece = search (1,2) Female initialBoard initialPieces
 
-mkLastPieceTerm :: Term NamedDeBruijn DefaultUni DefaultFun ()
+mkLastPieceTerm :: Term DeBruijn DefaultUni DefaultFun ()
 mkLastPieceTerm =
   let (Program _ _ code) = getPlc $ $$(compile [|| runLastPiece ||])
   in code
