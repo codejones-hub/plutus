@@ -38,6 +38,7 @@ common lang
 
 library
     import: lang
+    ghc-options: -fprof-auto
     exposed-modules:
         PlutusCore
         PlutusCore.Quote

@@ -1,7 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase   #-}
-{-# OPTIONS_GHC -fprof-auto   #-}
-{-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-uniques -dsuppress-coercions -dsuppress-type-applications -dsuppress-unfoldings -dsuppress-idinfo -dumpdir /tmp/dumps #-}
+{-# LANGUAGE TypeFamilies   #-}
 
 module Data.BRAL ( BList -- abstract type for now
                  , nil
@@ -13,6 +12,13 @@ module Data.BRAL ( BList -- abstract type for now
 
 import           Data.Bits (unsafeShiftR)
 
+import qualified Data.List as List
+import GHC.Exts as Exts
+
+instance Exts.IsList (BList a) where
+  type Item (BList a) = a
+  fromList = foldr cons Nil
+  toList = List.unfoldr uncons
 
 -- TODO: add doctests
 -- TODO: quickcheck?
@@ -59,17 +65,17 @@ uncons Nil                        = Nothing
 index :: BList a -> Word -> a
 index Nil _ = error "out of bounds"
 index (Cons w t ts) !i0 =
-    if i0 <= w
-    then indexTree i0 t
-    else index ts (i0-w)
+    if i0 >= w
+    then index ts (i0-w)
+    else indexTree i0 t
   where
     indexTree :: Word -> Tree a -> a
-    indexTree _ (Leaf x) = x
-    --indexTree x (Leaf _) = error $ "out of bounds" ++ show x
+    indexTree 0 (Leaf x) = x
+    indexTree x (Leaf _) = error $ "out of bounds" ++ show x
     indexTree i (Node s x l r)
         | i == 0 = x
         | i <= s = indexTree (i-1) l
-        | otherwise = indexTree (i-1) r
+        | otherwise = indexTree (i-1-s) r
 
 -- TODO: safeIndex
 -- TODO: add monoid instance?
