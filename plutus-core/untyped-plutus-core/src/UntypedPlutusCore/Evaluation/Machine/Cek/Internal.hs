@@ -66,6 +66,7 @@ import           Data.Hashable                           (Hashable)
 import           Data.Proxy
 import           Data.STRef
 import           Data.Text.Prettyprint.Doc
+import qualified Data.HashMap.Lazy as H
 
 {- Note [Compilation peculiarities]
 READ THIS BEFORE TOUCHING ANYTHING IN THIS FILE
@@ -169,9 +170,10 @@ data CekValue uni fun =
       Int               -- The number of @force@s to apply to the builtin.
                         -- We need it to construct a term if the machine is returning a stuck partial application.
       [CekValue uni fun]    -- Arguments we've computed so far.
-    deriving (Show, Eq) -- Eq is just for tests.
+    -- FIXME: disabled show
+    deriving (Eq) -- Eq is just for tests.
 
-type CekValEnv uni fun = UniqueMap TermUnique (CekValue uni fun)
+type CekValEnv uni fun = H.HashMap TermUnique (CekValue uni fun)
 
 -- | The CEK machine is parameterized over a @spendBudget@ function that has (roughly) the same type
 -- as the one from the 'SpendBudget' class (and so the @SpendBudget@ instance for 'CekM'
@@ -351,7 +353,7 @@ dischargeCekValEnv valEnv =
     -- this to terms which have no free variables remaining, at which point we won't call this
     -- substitution function any more and so we will terminate.
     termSubstFreeNames $ \name -> do
-        val <- lookupName name valEnv
+        val <- H.lookup (coerce $ nameUnique name) valEnv
         Just $ dischargeCekValue val
 
 -- Convert a CekValue into a term by replacing all bound variables with the terms
@@ -404,7 +406,8 @@ data Frame uni fun
     = FrameApplyFun (CekValue uni fun)                         -- ^ @[V _]@
     | FrameApplyArg (CekValEnv uni fun) (TermWithMem uni fun)  -- ^ @[_ N]@
     | FrameForce                                               -- ^ @(force _)@
-    deriving (Show)
+    -- FIXME
+    --deriving (Show)
 
 type Context uni fun = [Frame uni fun]
 
@@ -429,12 +432,12 @@ runCekM runtime (ExBudgetMode getExBudgetInfo) emitting a = runST $ do
 -- | Extend an environment with a variable name, the value the variable stands for
 -- and the environment the value is defined in.
 extendEnv :: Name -> CekValue uni fun -> CekValEnv uni fun -> CekValEnv uni fun
-extendEnv = insertByName
+extendEnv n = H.insert (coerce $ nameUnique n)
 
 -- | Look up a variable name in the environment.
 lookupVarName :: forall uni fun cost s . (PrettyUni uni fun) => Name -> CekValEnv uni fun -> CekM cost uni fun s (CekValue uni fun)
 lookupVarName varName varEnv = do
-    case lookupName varName varEnv of
+    case H.lookup (coerce $ nameUnique varName) varEnv of
         Nothing  -> throwingWithCauseExc @(CekEvaluationException uni fun) _MachineError OpenTermEvaluatedMachineError $ Just var where
             var = Var () varName
         Just val -> pure val
