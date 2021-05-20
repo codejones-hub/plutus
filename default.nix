@@ -9,9 +9,10 @@
 { system ? builtins.currentSystem
 , crossSystem ? null
 , config ? { allowUnfreePredicate = (import ./nix/lib/unfree.nix).unfreePredicate; }
+, useFlakes ? false
   # Overrides for niv
 , sourcesOverride ? { }
-, packages ? import ./nix { inherit system crossSystem config sourcesOverride checkMaterialization enableHaskellProfiling; }
+, packages ? import ./nix { inherit system crossSystem config useFlakes sourcesOverride checkMaterialization enableHaskellProfiling; }
   # An explicit git rev to use, passed when we are in Hydra
   # Whether to check that the pinned shas for haskell.nix are correct. We want this to be
   # false, generally, since it does more work, but we set it to true in the CI
