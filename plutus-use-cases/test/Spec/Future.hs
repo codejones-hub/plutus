@@ -12,6 +12,7 @@
 module Spec.Future(tests, theFuture, increaseMarginTrace, settleEarlyTrace, payOutTrace) where
 
 import           Control.Monad           (void)
+import           Data.Default            (Default (def))
 import           Test.Tasty
 import qualified Test.Tasty.HUnit        as HUnit
 
@@ -72,7 +73,7 @@ setup =
     FutureSetup
         { shortPK = walletPubKey w1
         , longPK = walletPubKey (Wallet 2)
-        , contractStart = TimeSlot.slotToPOSIXTime 15
+        , contractStart = TimeSlot.slotToBeginPOSIXTime def 15
         }
 
 w1 :: Wallet
@@ -85,7 +86,7 @@ w2 = Wallet 2
 --   due at slot #100.
 theFuture :: Future
 theFuture = Future {
-    ftDeliveryDate  = TimeSlot.slotToPOSIXTime 100,
+    ftDeliveryDate  = TimeSlot.slotToBeginPOSIXTime def 100,
     ftUnits         = units,
     ftUnitPrice     = forwardPrice,
     ftInitialMargin = Ada.lovelaceValueOf 800,
@@ -172,7 +173,7 @@ settleEarly :: ContractHandle () FutureSchema FutureError -> EmulatorTrace ()
 settleEarly hdl = do
     let
         spotPrice = Ada.lovelaceValueOf 11240
-        ov = mkSignedMessage (TimeSlot.slotToPOSIXTime 25) spotPrice
+        ov = mkSignedMessage (TimeSlot.slotToBeginPOSIXTime def 25) spotPrice
     Trace.callEndpoint @"settle-early" hdl ov
     void $ Trace.waitNSlots 1
 

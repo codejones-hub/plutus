@@ -14,6 +14,7 @@ import           Control.Monad                      (void, when)
 import qualified Control.Monad.Freer                as Freer
 import qualified Control.Monad.Freer.Error          as Freer
 import           Control.Monad.Freer.Extras.Log     (LogLevel (..))
+import           Data.Default                       (Default (def))
 import           Data.Monoid                        (Last (..))
 
 import           Ledger                             (Ada, Slot (..), Value, pubKeyHash)
@@ -42,7 +43,7 @@ params =
     AuctionParams
         { apOwner   = pubKeyHash $ walletPubKey (Wallet 1)
         , apAsset   = theToken
-        , apEndTime = TimeSlot.slotToPOSIXTime 100
+        , apEndTime = TimeSlot.slotToEndPOSIXTime def 100
         }
 
 -- | The token that we are auctioning off.
@@ -107,7 +108,8 @@ auctionTrace2 = do
     Trace.callEndpoint @"bid" hdl3 60
     _ <- Trace.waitNSlots 35
     Trace.callEndpoint @"bid" hdl2 trace2WinningBid
-    void $ Trace.waitUntilSlot (succ $ succ $ TimeSlot.posixTimeToSlot $ apEndTime params)
+    void $ Trace.waitUntilTime $ apEndTime params
+    void $ Trace.waitNSlots 2
 
 trace1FinalState :: AuctionOutput
 trace1FinalState =
@@ -174,7 +176,7 @@ instance ContractModel AuctionModel where
 
     initialState = AuctionModel { _currentBid = 0
                                 , _winner     = w1
-                                , _endSlot    = TimeSlot.posixTimeToSlot $ apEndTime params
+                                , _endSlot    = TimeSlot.posixTimeToEnclosingSlot def $ apEndTime params
                                 , _phase      = NotStarted }
 
     arbitraryAction s
