@@ -66,7 +66,7 @@ import           Data.Hashable                           (Hashable)
 import           Data.Proxy
 import           Data.STRef
 import           Data.Text.Prettyprint.Doc
-import qualified Data.HashMap.Lazy as H
+import qualified Data.HashMap.Strict as H
 
 {- Note [Compilation peculiarities]
 READ THIS BEFORE TOUCHING ANYTHING IN THIS FILE
