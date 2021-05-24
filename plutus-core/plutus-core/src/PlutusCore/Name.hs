@@ -117,14 +117,17 @@ newtype UniqueMap unique a = UniqueMap
     { unUniqueMap :: IM.IntMap a
     } deriving newtype (Show, Eq, Semigroup, Monoid, Functor)
 
+{-# INLINE insertByUnique #-}
 -- | Insert a value by a unique.
 insertByUnique :: Coercible unique Unique => unique -> a -> UniqueMap unique a -> UniqueMap unique a
 insertByUnique uniq = coerce . IM.insert (coerce uniq)
 
+{-# INLINE insertByName #-}
 -- | Insert a value by the unique of a name.
 insertByName :: HasUnique name unique => name -> a -> UniqueMap unique a -> UniqueMap unique a
 insertByName = insertByUnique . view unique
 
+{-# INLINE insertByNameIndex #-}
 -- | Insert a value by the index of the unique of a name.
 -- Unlike 'insertByUnique' and 'insertByName', this function does not provide any static guarantees,
 -- so you can for example insert by a type-level name in a map from term-level uniques.
@@ -147,14 +150,17 @@ fromUniques = fromFoldable insertByUnique
 fromNames :: Foldable f => HasUnique name unique => f (name, a) -> UniqueMap unique a
 fromNames = fromFoldable insertByName
 
+{-# INLINE lookupUnique #-}
 -- | Look up a value by a unique.
 lookupUnique :: Coercible unique Unique => unique -> UniqueMap unique a -> Maybe a
 lookupUnique uniq = IM.lookup (coerce uniq) . unUniqueMap
 
+{-# INLINE lookupName #-}
 -- | Look up a value by the unique of a name.
 lookupName :: HasUnique name unique => name -> UniqueMap unique a -> Maybe a
 lookupName = lookupUnique . view unique
 
+{-# INLINE lookupNameIndex #-}
 -- | Look up a value by the index of the unique of a name.
 -- Unlike 'lookupUnique' and 'lookupName', this function does not provide any static guarantees,
 -- so you can for example look up a type-level name in a map from term-level uniques.
