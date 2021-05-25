@@ -141,8 +141,6 @@ module PlutusCore.Evaluation.Machine.ExBudget
     , ExBudgetBuiltin(..)
     , ExRestrictingBudget(..)
     , scaleBudget
-    , fractionBudget
-    , divBudget
     )
 where
 
@@ -197,16 +195,6 @@ instance Monoid ExBudget where
 -- | Scale a budget by an 'Integral'.
 scaleBudget :: Integral b => b -> ExBudget -> ExBudget
 scaleBudget r (ExBudget (ExCPU cpu) (ExMemory mem)) = ExBudget (ExCPU (fromIntegral r * cpu)) (ExMemory (fromIntegral r * mem))
-
--- TODO: Is there some proper numeric typeclass way of doing this?
--- | Scale a budget by a 'Rational'.
-fractionBudget :: Rational -> ExBudget -> ExBudget
-fractionBudget r (ExBudget (ExCPU cpu) (ExMemory mem)) = ExBudget (ExCPU (round (r * toRational cpu))) (ExMemory (round (r * toRational mem)))
-
--- TODO: Is there some proper numeric typeclass way of doing this?
--- | How many times does the second budget go into the first budget?
-divBudget :: ExBudget -> ExBudget -> Integer
-divBudget (ExBudget (ExCPU cpu1) (ExMemory mem1)) (ExBudget (ExCPU cpu2) (ExMemory mem2)) = toInteger $ min (cpu1 `div` cpu2) (mem1 `div` mem2)
 
 instance Pretty ExBudget where
     pretty (ExBudget cpu memory) = parens $ fold

@@ -120,6 +120,9 @@ points in it).
 
 In general, it's advised to run benchmarks (and look at Core output if the results are suspicious)
 on any changes in this file.
+
+Finally, it's important to put bang patterns on any Int arguments to ensure that GHC unboxes them:
+this can make a surprisingly large difference.
 -}
 
 {- Note [Scoping]
