@@ -141,6 +141,7 @@ module PlutusCore.Evaluation.Machine.ExBudget
     , ExBudgetBuiltin(..)
     , ExRestrictingBudget(..)
     , scaleBudget
+    , withinBudget
     )
 where
 
@@ -195,6 +196,9 @@ instance Monoid ExBudget where
 -- | Scale a budget by an 'Integral'.
 scaleBudget :: Integral b => b -> ExBudget -> ExBudget
 scaleBudget r (ExBudget (ExCPU cpu) (ExMemory mem)) = ExBudget (ExCPU (fromIntegral r * cpu)) (ExMemory (fromIntegral r * mem))
+
+withinBudget :: ExBudget -> ExBudget -> Bool
+withinBudget (ExBudget cpu1 mem1) (ExBudget cpu2 mem2) = cpu1 <= cpu2 && mem1 <= mem2
 
 instance Pretty ExBudget where
     pretty (ExBudget cpu memory) = parens $ fold
