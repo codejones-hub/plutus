@@ -46,11 +46,11 @@ import           Text.PrettyBy                                     (IgnorePretty
 -- | Construct an 'ExBudgetMode' out of a function returning a value of the budgeting state type.
 -- The value then gets added to the current state via @(<>)@.
 monoidalBudgeting
-    :: Monoid cost => ExBudget -> (ExBudgetCategory fun -> ExBudget -> cost) -> ExBudgetMode cost uni fun
-monoidalBudgeting slippage toCost = ExBudgetMode $ do
+    :: Monoid cost => (ExBudgetCategory fun -> ExBudget -> cost) -> ExBudgetMode cost uni fun
+monoidalBudgeting toCost = ExBudgetMode $ do
     costRef <- newSTRef mempty
     let spend key budgetToSpend = modifySTRef' costRef (<> toCost key budgetToSpend)
-    pure $ ExBudgetInfo (CekBudgetSpender spend) slippage (readSTRef costRef)
+    pure $ ExBudgetInfo (CekBudgetSpender spend) (readSTRef costRef)
 
 -- | For calculating the cost of execution by counting up using the 'Monoid' instance of 'ExBudget'.
 newtype CountingSt = CountingSt ExBudget
@@ -62,7 +62,7 @@ instance Pretty CountingSt where
 
 -- | For calculating the cost of execution.
 counting :: ExBudgetMode CountingSt uni fun
-counting = monoidalBudgeting mempty $ const CountingSt
+counting = monoidalBudgeting $ const CountingSt
 
 -- | For a detailed report on what costs how much + the same overall budget that 'Counting' gives.
 -- The (derived) 'Monoid' instance of 'CekExTally' is the main piece of the machinery.
@@ -94,7 +94,7 @@ instance (Show fun, Ord fun) => Pretty (TallyingSt fun) where
 -- | For a detailed report on what costs how much + the same overall budget that 'Counting' gives.
 tallying :: (Eq fun, Hashable fun) => ExBudgetMode (TallyingSt fun) uni fun
 tallying =
-    monoidalBudgeting mempty $ \key budgetToSpend ->
+    monoidalBudgeting $ \key budgetToSpend ->
         TallyingSt (CekExTally $ singleton key budgetToSpend) budgetToSpend
 
 newtype RestrictingSt = RestrictingSt ExRestrictingBudget
@@ -111,11 +111,7 @@ defaultSlippageFraction = 0.1
 
 -- | For execution, to avoid overruns.
 restricting :: forall uni fun . (PrettyUni uni fun) => ExRestrictingBudget -> ExBudgetMode RestrictingSt uni fun
-restricting = restricting' defaultSlippageFraction
-
--- | For execution, to avoid overruns. Allows configuring the slippage fraction directly.
-restricting' :: forall uni fun . (PrettyUni uni fun) => Rational -> ExRestrictingBudget -> ExBudgetMode RestrictingSt uni fun
-restricting' slippageFraction (ExRestrictingBudget budgetInit@(ExBudget cpuInit memInit)) = ExBudgetMode $ do
+restricting (ExRestrictingBudget (ExBudget cpuInit memInit)) = ExBudgetMode $ do
     -- We keep the counters in a PrimArray. This is better than an STRef since it stores its contents unboxed.
     --
     -- If we don't specify the element type then GHC has difficulty inferring it, but it's
@@ -145,7 +141,7 @@ restricting' slippageFraction (ExRestrictingBudget budgetInit@(ExBudget cpuInit 
                 throwingWithCauseExc @(CekEvaluationException uni fun) _EvaluationError
                     (UserEvaluationError $ CekOutOfExError $ ExRestrictingBudget $ ExBudget cpuLeft' memLeft')
                     Nothing
-    pure $ ExBudgetInfo (CekBudgetSpender spend) (fractionBudget slippageFraction budgetInit) $ do
+    pure $ ExBudgetInfo (CekBudgetSpender spend) $ do
         finalExBudget <- ExBudget <$> readCpu <*> readMem
         pure . RestrictingSt $ ExRestrictingBudget finalExBudget
 

@@ -180,7 +180,6 @@ newtype CekBudgetSpender fun s = CekBudgetSpender
 -- | Runtime budgeting info.
 data ExBudgetInfo cost fun s = ExBudgetInfo
     { _exBudgetModeSpender  :: !(CekBudgetSpender fun s)  -- ^ A spending function.
-    , _exBudgetModeSlippage :: !ExBudget
     , _exBudgetModeGetFinal :: !(ST s cost)               -- ^ For accessing the final state.
     }
 
@@ -205,9 +204,27 @@ machine steps" as a simple 'Int'.
 
 This saves a *lot* of time, at the cost of potentially overshooting the budget by slippage*step_cost,
 which is okay so long as we bound the slippage appropriately.
+
+There are two options for how to bound the slippage:
+1. As a fixed number of steps
+2. As a proportion of the overall budget
+
+Option 2 initially seems much better as a bound: if we run N scripts with an overall budget of B, then
+the potential overrun from 1 is N*slippage, whereas the overrun from 2 is B*slippage. That is, 2
+says we always overrun by a fraction of the total amount of time you were expecting, whereas 1 says
+it depends how many scripts you run... so if I send you a lot of small scripts, I could cause a lot
+of overrun.
+
+However, it turns out (empirically) that we can pick a number for 1 that gives us most of the speedup, but such
+that the maximum overrun is negligible (e.g. much smaller than the "startup cost"). So in the end
+we opted for 1, which also happens to be simpler to implement.
 -}
 
 type Slippage = Int
+-- See Note [Cost slippage]
+-- | The default number of slippage (in machine steps) to allow.
+defaultSlippage :: Slippage
+defaultSlippage = 100
 
 {- Note [Implicit parameters in the machine]
 The traditional way to pass context into a function is to use 'ReaderT'. However, 'ReaderT' has some
@@ -449,14 +466,7 @@ runCekM (MachineParameters costs runtime) (ExBudgetMode getExBudgetInfo) emittin
         ?cekEmitter = mayLogsRef
         ?cekBudgetSpender = _exBudgetModeSpender exBudgetMode
         ?cekCosts = costs
-        -- We have the slippage in terms of *budget*, this computes the slippage in terms of *steps*, which
-        -- is what the machine wants.
-        --
-        -- Taking the minimum with 1000 avoids us picking a ridiculous number of steps if we're using
-        -- the enormous budget.
-        -- TODO: make the benchmarks run things with the minimum required budget instead
-        -- so we won't need this.
-        ?cekSlippage = min 1000 (fromIntegral $ _exBudgetModeSlippage exBudgetMode `divBudget` cekStepCost costs)
+        ?cekSlippage = defaultSlippage
     errOrRes <- unsafeIOToST $ try @_ @(CekEvaluationException uni fun) $ unsafeSTToIO a
     st' <- _exBudgetModeGetFinal exBudgetMode
     logs <- case mayLogsRef of
