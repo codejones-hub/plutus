@@ -516,33 +516,33 @@ enterComputeCek = computeCek 0 where
         -> CekM s (Term Name uni fun ())
     -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
     computeCek !unbudgetedSteps ctx env (Var _ varName) = do
-        !unbudgetedSteps' <- maybeSpendBudget unbudgetedSteps
+        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
         val <- lookupVarName varName env
-        returnCek (unbudgetedSteps'+1) ctx val
+        returnCek unbudgetedSteps' ctx val
     computeCek !unbudgetedSteps ctx _ (Constant _ val) = do
-        !unbudgetedSteps' <- maybeSpendBudget unbudgetedSteps
-        returnCek (unbudgetedSteps'+1) ctx (VCon val)
+        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+        returnCek unbudgetedSteps' ctx (VCon val)
     computeCek !unbudgetedSteps ctx env (LamAbs _ name body) = do
-        !unbudgetedSteps' <- maybeSpendBudget unbudgetedSteps
-        returnCek (unbudgetedSteps'+1) ctx (VLamAbs name body env)
+        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+        returnCek unbudgetedSteps' ctx (VLamAbs name body env)
     computeCek !unbudgetedSteps ctx env (Delay _ body) = do
-        !unbudgetedSteps' <- maybeSpendBudget unbudgetedSteps
-        returnCek (unbudgetedSteps'+1) ctx (VDelay body env)
+        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+        returnCek unbudgetedSteps' ctx (VDelay body env)
     -- s ; ρ ▻ lam x L  ↦  s ◅ lam x (L , ρ)
     computeCek !unbudgetedSteps ctx env (Force _ body) = do
-        !unbudgetedSteps' <- maybeSpendBudget unbudgetedSteps
-        computeCek (unbudgetedSteps'+1) (FrameForce : ctx) env body
+        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+        computeCek unbudgetedSteps' (FrameForce : ctx) env body
     -- s ; ρ ▻ [L M]  ↦  s , [_ (M,ρ)]  ; ρ ▻ L
     computeCek !unbudgetedSteps ctx env (Apply _ fun arg) = do
-        !unbudgetedSteps' <- maybeSpendBudget unbudgetedSteps
-        computeCek (unbudgetedSteps'+1) (FrameApplyArg env arg : ctx) env fun
+        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+        computeCek unbudgetedSteps' (FrameApplyArg env arg : ctx) env fun
     -- s ; ρ ▻ abs α L  ↦  s ◅ abs α (L , ρ)
     -- s ; ρ ▻ con c  ↦  s ◅ con c
     -- s ; ρ ▻ builtin bn  ↦  s ◅ builtin bn arity arity [] [] ρ
     computeCek !unbudgetedSteps ctx _ (Builtin _ bn) = do
-        !unbudgetedSteps' <- maybeSpendBudget unbudgetedSteps
+        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
         BuiltinRuntime _ arity _ _ <- lookupBuiltinExc (Proxy @(CekEvaluationException uni fun)) bn ?cekRuntime
-        returnCek (unbudgetedSteps'+1) ctx (VBuiltin bn arity arity 0 [])
+        returnCek unbudgetedSteps' ctx (VBuiltin bn arity arity 0 [])
     -- s ; ρ ▻ error A  ↦  <> A
     computeCek !_ _ _ (Error _) = do
         throwingCek @uni @fun _EvaluationFailure ()
@@ -672,12 +672,13 @@ enterComputeCek = computeCek 0 where
     spendAccumulatedBudget :: Int -> CekM s ()
     spendAccumulatedBudget !unbudgetedSteps = spendBudgetCek BStep (scaleBudget unbudgetedSteps (cekStepCost ?cekCosts))
 
-    -- | Spend the budget that has accumulated for a number of machine steps, but only if we've exceeded our slippage.
-    maybeSpendBudget :: Int -> CekM s Int
-    maybeSpendBudget !unbudgetedSteps =
-        if unbudgetedSteps >= ?cekSlippage
-        then spendAccumulatedBudget unbudgetedSteps >> pure 0
-        else pure unbudgetedSteps
+    -- | Accumulate a step, and maybe spend the budget that has accumulated for a number of machine steps, but only if we've exceeded our slippage.
+    stepAndMaybeSpend :: Int -> CekM s Int
+    stepAndMaybeSpend !unbudgetedSteps =
+        let !unbudgetedSteps' = unbudgetedSteps+1
+        in if unbudgetedSteps' >= ?cekSlippage
+        then spendAccumulatedBudget unbudgetedSteps' >> pure 0
+        else pure unbudgetedSteps'
 
 -- See Note [Compilation peculiarities].
 -- | Evaluate a term using the CEK machine and keep track of costing, logging is optional.
