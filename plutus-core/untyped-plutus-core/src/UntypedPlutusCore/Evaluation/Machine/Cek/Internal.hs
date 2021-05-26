@@ -516,31 +516,31 @@ enterComputeCek = computeCek 0 where
         -> CekM s (Term Name uni fun ())
     -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
     computeCek !unbudgetedSteps ctx env (Var _ varName) = do
-        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
         val <- lookupVarName varName env
         returnCek unbudgetedSteps' ctx val
     computeCek !unbudgetedSteps ctx _ (Constant _ val) = do
-        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
         returnCek unbudgetedSteps' ctx (VCon val)
     computeCek !unbudgetedSteps ctx env (LamAbs _ name body) = do
-        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
         returnCek unbudgetedSteps' ctx (VLamAbs name body env)
     computeCek !unbudgetedSteps ctx env (Delay _ body) = do
-        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
         returnCek unbudgetedSteps' ctx (VDelay body env)
     -- s ; ρ ▻ lam x L  ↦  s ◅ lam x (L , ρ)
     computeCek !unbudgetedSteps ctx env (Force _ body) = do
-        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
         computeCek unbudgetedSteps' (FrameForce : ctx) env body
     -- s ; ρ ▻ [L M]  ↦  s , [_ (M,ρ)]  ; ρ ▻ L
     computeCek !unbudgetedSteps ctx env (Apply _ fun arg) = do
-        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
         computeCek unbudgetedSteps' (FrameApplyArg env arg : ctx) env fun
     -- s ; ρ ▻ abs α L  ↦  s ◅ abs α (L , ρ)
     -- s ; ρ ▻ con c  ↦  s ◅ con c
     -- s ; ρ ▻ builtin bn  ↦  s ◅ builtin bn arity arity [] [] ρ
     computeCek !unbudgetedSteps ctx _ (Builtin _ bn) = do
-        !unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
         BuiltinRuntime _ arity _ _ <- lookupBuiltinExc (Proxy @(CekEvaluationException uni fun)) bn ?cekRuntime
         returnCek unbudgetedSteps' ctx (VBuiltin bn arity arity 0 [])
     -- s ; ρ ▻ error A  ↦  <> A
