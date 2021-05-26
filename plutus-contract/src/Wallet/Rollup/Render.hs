@@ -142,7 +142,7 @@ instance Render TokenName where
     render t              = pure $ pretty $ Value.toString t
 
 instance Render Builtins.ByteString where
-    render = pure . pretty . JSON.encodeByteString
+    render = pure . pretty . JSON.encodeByteString . Builtins.toHaskellByteString
 
 deriving via RenderPretty PlutusTx.Data instance
          Render PlutusTx.Data

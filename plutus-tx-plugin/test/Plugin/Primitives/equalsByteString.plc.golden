@@ -1,1 +1,40 @@
-(delay (lam case_True_9 (lam case_False_10 case_True_9)))
+(program
+  (let
+    (nonrec)
+    (datatypebind
+      (datatype
+        (tyvardecl Bool (type))
+
+        Bool_match
+        (vardecl True Bool) (vardecl False Bool)
+      )
+    )
+    (termbind
+      (strict)
+      (vardecl
+        equalsByteString (fun (con bytestring) (fun (con bytestring) Bool))
+      )
+      (lam
+        arg
+        (con bytestring)
+        (lam
+          arg
+          (con bytestring)
+          (let
+            (nonrec)
+            (termbind
+              (strict)
+              (vardecl b (con bool))
+              [ [ (builtin equalsByteString) arg ] arg ]
+            )
+            [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+          )
+        )
+      )
+    )
+    [
+      [ equalsByteString (con bytestring #68656c6c6f) ]
+      (con bytestring #68656c6c6f)
+    ]
+  )
+)

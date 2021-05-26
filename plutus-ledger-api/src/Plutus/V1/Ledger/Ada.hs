@@ -32,6 +32,7 @@ import           Data.Fixed
 
 import           Codec.Serialise.Class            (Serialise)
 import           Data.Aeson                       (FromJSON, ToJSON)
+import qualified Data.ByteString                  as BS
 import           Data.Tagged
 import           Data.Text.Prettyprint.Doc.Extras
 import           GHC.Generics                     (Generic)
@@ -45,12 +46,12 @@ import qualified PlutusTx.Prelude                 as P
 {-# INLINABLE adaSymbol #-}
 -- | The 'CurrencySymbol' of the 'Ada' currency.
 adaSymbol :: CurrencySymbol
-adaSymbol = TH.currencySymbol emptyByteString
+adaSymbol = TH.currencySymbol BS.empty
 
 {-# INLINABLE adaToken #-}
 -- | The 'TokenName' of the 'Ada' currency.
 adaToken :: TokenName
-adaToken = TH.tokenName emptyByteString
+adaToken = TH.tokenName BS.empty
 
 -- | ADA, the special currency on the Cardano blockchain. The unit of Ada is Lovelace, and
 --   1M Lovelace is one Ada.
