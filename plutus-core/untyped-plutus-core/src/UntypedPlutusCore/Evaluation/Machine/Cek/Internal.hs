@@ -696,20 +696,20 @@ enterComputeCek ref = computeCek where
     -- | Spend the budget that has been accumulated for a number of machine steps.
     spendAccumulatedBudget :: CekM s ()
     spendAccumulatedBudget = do
-        let len = fromEnum (maxBound :: StepKind) +1
+        let len = fromEnum (maxBound :: StepKind) +2
         for_ [minBound..maxBound] $ \(k :: StepKind) ->
             do
               unbudgetedSteps <- readPrimArray ref (fromEnum k + 1)
               spendBudgetCek (BStep k) (stimes unbudgetedSteps (cekStepCost ?cekCosts k))
         setPrimArray ref 0 len 0
 
-    -- This will probably be inlined regardless, but it's important that it happen, since otherwise the return value
-    -- in CekM s Int won't be unboxed (although it seems like it could be).
     {-# INLINE stepAndMaybeSpend #-}
-    -- | Accumulate a step, and maybe spend the budget that has accumulated for a number of machine steps, but only if we've exceeded our slippage.
     stepAndMaybeSpend :: StepKind -> CekM s ()
-    stepAndMaybeSpend kind = do
-        let ix = fromEnum kind +1
+    stepAndMaybeSpend kind = stepAndMaybeSpend' (fromEnum kind +1)
+
+    -- | Accumulate a step, and maybe spend the budget that has accumulated for a number of machine steps, but only if we've exceeded our slippage.
+    stepAndMaybeSpend' :: Int -> CekM s ()
+    stepAndMaybeSpend' ix = do
         unbudgetedStepsK <- readPrimArray ref ix
         unbudgetedStepsTotal <- readPrimArray ref 0
         let unbudgetedStepsK' = unbudgetedStepsK+1
