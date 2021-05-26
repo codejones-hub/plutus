@@ -504,7 +504,7 @@ enterComputeCek
     -> CekValEnv uni fun
     -> Term Name uni fun ()
     -> CekM s (Term Name uni fun ())
-enterComputeCek ref = computeCek 0 where
+enterComputeCek ref = computeCek where
     -- | The computing part of the CEK machine.
     -- Either
     -- 1. adds a frame to the context and calls 'computeCek' ('Force', 'Apply')
@@ -512,42 +512,41 @@ enterComputeCek ref = computeCek 0 where
     -- 3. returns 'EvaluationFailure' ('Error')
     -- 4. looks up a variable in the environment and calls 'returnCek' ('Var')
     computeCek
-        :: Int
-        -> Context uni fun
+        :: Context uni fun
         -> CekValEnv uni fun
         -> Term Name uni fun ()
         -> CekM s (Term Name uni fun ())
     -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
-    computeCek !unbudgetedSteps ctx env (Var _ varName) = do
-        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+    computeCek ctx env (Var _ varName) = do
+        stepAndMaybeSpend
         val <- lookupVarName varName env
-        returnCek unbudgetedSteps' ctx val
-    computeCek !unbudgetedSteps ctx _ (Constant _ val) = do
-        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
-        returnCek unbudgetedSteps' ctx (VCon val)
-    computeCek !unbudgetedSteps ctx env (LamAbs _ name body) = do
-        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
-        returnCek unbudgetedSteps' ctx (VLamAbs name body env)
-    computeCek !unbudgetedSteps ctx env (Delay _ body) = do
-        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
-        returnCek unbudgetedSteps' ctx (VDelay body env)
+        returnCek ctx val
+    computeCek ctx _ (Constant _ val) = do
+        stepAndMaybeSpend
+        returnCek ctx (VCon val)
+    computeCek ctx env (LamAbs _ name body) = do
+        stepAndMaybeSpend
+        returnCek ctx (VLamAbs name body env)
+    computeCek ctx env (Delay _ body) = do
+        stepAndMaybeSpend
+        returnCek ctx (VDelay body env)
     -- s ; ρ ▻ lam x L  ↦  s ◅ lam x (L , ρ)
-    computeCek !unbudgetedSteps ctx env (Force _ body) = do
-        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
-        computeCek unbudgetedSteps' (FrameForce : ctx) env body
+    computeCek ctx env (Force _ body) = do
+        stepAndMaybeSpend
+        computeCek (FrameForce : ctx) env body
     -- s ; ρ ▻ [L M]  ↦  s , [_ (M,ρ)]  ; ρ ▻ L
-    computeCek !unbudgetedSteps ctx env (Apply _ fun arg) = do
-        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
-        computeCek unbudgetedSteps' (FrameApplyArg env arg : ctx) env fun
+    computeCek ctx env (Apply _ fun arg) = do
+        stepAndMaybeSpend
+        computeCek (FrameApplyArg env arg : ctx) env fun
     -- s ; ρ ▻ abs α L  ↦  s ◅ abs α (L , ρ)
     -- s ; ρ ▻ con c  ↦  s ◅ con c
     -- s ; ρ ▻ builtin bn  ↦  s ◅ builtin bn arity arity [] [] ρ
-    computeCek !unbudgetedSteps ctx _ (Builtin _ bn) = do
-        unbudgetedSteps' <- stepAndMaybeSpend unbudgetedSteps
+    computeCek ctx _ (Builtin _ bn) = do
+        stepAndMaybeSpend
         BuiltinRuntime _ arity _ _ <- lookupBuiltinExc (Proxy @(CekEvaluationException uni fun)) bn ?cekRuntime
-        returnCek unbudgetedSteps' ctx (VBuiltin bn arity arity 0 [])
+        returnCek ctx (VBuiltin bn arity arity 0 [])
     -- s ; ρ ▻ error A  ↦  <> A
-    computeCek !_ _ _ (Error _) = do
+    computeCek _ _ (Error _) = do
         throwingCek @uni @fun _EvaluationFailure ()
 
     {- | The returning phase of the CEK machine.
@@ -564,21 +563,21 @@ enterComputeCek ref = computeCek 0 where
           return the result, or extend the value with the new argument and call
           returnCek.  If v is anything else, fail.
     -}
-    returnCek :: Int -> Context uni fun -> CekValue uni fun -> CekM s (Term Name uni fun ())
+    returnCek :: Context uni fun -> CekValue uni fun -> CekM s (Term Name uni fun ())
     --- Instantiate all the free variable of the resulting term in case there are any.
     -- . ◅ V           ↦  [] V
-    returnCek !unbudgetedSteps [] val = do
-        spendAccumulatedBudget unbudgetedSteps
+    returnCek [] val = do
+        spendAccumulatedBudget
         pure $ void $ dischargeCekValue val
     -- s , {_ A} ◅ abs α M  ↦  s ; ρ ▻ M [ α / A ]*
-    returnCek !unbudgetedSteps (FrameForce : ctx) fun = forceEvaluate unbudgetedSteps ctx fun
+    returnCek (FrameForce : ctx) fun = forceEvaluate ctx fun
     -- s , [_ (M,ρ)] ◅ V  ↦  s , [V _] ; ρ ▻ M
-    returnCek !unbudgetedSteps (FrameApplyArg argVarEnv arg : ctx) fun = do
-        computeCek unbudgetedSteps (FrameApplyFun fun : ctx) argVarEnv arg
+    returnCek (FrameApplyArg argVarEnv arg : ctx) fun = do
+        computeCek (FrameApplyFun fun : ctx) argVarEnv arg
     -- s , [(lam x (M,ρ)) _] ◅ V  ↦  s ; ρ [ x  ↦  V ] ▻ M
     -- FIXME: add rule for VBuiltin once it's in the specification.
-    returnCek !unbudgetedSteps (FrameApplyFun fun : ctx) arg = do
-        applyEvaluate unbudgetedSteps ctx fun arg
+    returnCek (FrameApplyFun fun : ctx) arg = do
+        applyEvaluate ctx fun arg
 
     {- Note [Accumulating arguments].  The VBuiltin value contains lists of type and
     term arguments which grow as new arguments are encountered.  In the code below
@@ -600,9 +599,9 @@ enterComputeCek ref = computeCek 0 where
     -- or extend the value with @force@ and call returnCek;
     -- if v is anything else, fail.
     forceEvaluate
-        :: Int -> Context uni fun -> CekValue uni fun -> CekM s (Term Name uni fun ())
-    forceEvaluate !unbudgetedSteps ctx (VDelay body env) = computeCek unbudgetedSteps ctx env body
-    forceEvaluate !unbudgetedSteps ctx val@(VBuiltin bn arity0 arity forces args) =
+        :: Context uni fun -> CekValue uni fun -> CekM s (Term Name uni fun ())
+    forceEvaluate ctx (VDelay body env) = computeCek ctx env body
+    forceEvaluate ctx val@(VBuiltin bn arity0 arity forces args) =
         case arity of
           []             ->
               throwingDischarged _MachineError EmptyBuiltinArityMachineError val
@@ -614,9 +613,9 @@ enterComputeCek ref = computeCek 0 where
                             where val' = VBuiltin bn arity0 arity (forces + 1) args -- reconstruct the bad application
           TypeArg:arity' ->
               case arity' of
-                [] -> applyBuiltin unbudgetedSteps ctx bn args  -- Final argument is a type argument
-                _  -> returnCek unbudgetedSteps ctx $ VBuiltin bn arity0 arity' (forces + 1) args -- More arguments expected
-    forceEvaluate !_ _ val =
+                [] -> applyBuiltin ctx bn args  -- Final argument is a type argument
+                _  -> returnCek ctx $ VBuiltin bn arity0 arity' (forces + 1) args -- More arguments expected
+    forceEvaluate _ val =
             throwingDischarged _MachineError NonPolymorphicInstantiationMachineError val
 
     -- | Apply a function to an argument and proceed.
@@ -626,14 +625,13 @@ enterComputeCek ref = computeCek 0 where
     -- it's the final argument then apply the builtin to its arguments, return the result, or extend
     -- the value with the new argument and call 'returnCek'. If v is anything else, fail.
     applyEvaluate
-        :: Int
-        -> Context uni fun
+        :: Context uni fun
         -> CekValue uni fun   -- lhs of application
         -> CekValue uni fun   -- rhs of application
         -> CekM s (Term Name uni fun ())
-    applyEvaluate !unbudgetedSteps ctx (VLamAbs name body env) arg =
-        computeCek unbudgetedSteps ctx (extendEnv name arg env) body
-    applyEvaluate !unbudgetedSteps ctx val@(VBuiltin bn arity0 arity forces args) arg = do
+    applyEvaluate ctx (VLamAbs name body env) arg =
+        computeCek ctx (extendEnv name arg env) body
+    applyEvaluate ctx val@(VBuiltin bn arity0 arity forces args) arg = do
         case arity of
           []        -> throwingDischarged _MachineError EmptyBuiltinArityMachineError val
                     -- Should be impossible: see forceEvaluate.
@@ -642,18 +640,17 @@ enterComputeCek ref = computeCek 0 where
           TermArg:arity' -> do
               let args' = args ++ [arg]
               case arity' of
-                [] -> applyBuiltin unbudgetedSteps ctx bn args' -- 'arg' was the final argument
-                _  -> returnCek unbudgetedSteps ctx $ VBuiltin bn arity0 arity' forces args'  -- More arguments expected
-    applyEvaluate !_ _ val _ = throwingDischarged _MachineError NonFunctionalApplicationMachineError val
+                [] -> applyBuiltin ctx bn args' -- 'arg' was the final argument
+                _  -> returnCek ctx $ VBuiltin bn arity0 arity' forces args'  -- More arguments expected
+    applyEvaluate _ val _ = throwingDischarged _MachineError NonFunctionalApplicationMachineError val
 
     -- | Apply a builtin to a list of CekValue arguments
     applyBuiltin
-        :: Int
-        -> Context uni fun
+        :: Context uni fun
         -> fun
         -> [CekValue uni fun]
         -> CekM s (Term Name uni fun ())
-    applyBuiltin !unbudgetedSteps ctx bn args = do
+    applyBuiltin ctx bn args = do
       BuiltinRuntime sch _ f exF <- lookupBuiltinExc (Proxy @(CekEvaluationException uni fun)) bn ?cekRuntime
 
       let
@@ -669,23 +666,25 @@ enterComputeCek ref = computeCek 0 where
       case resultOrErr of
           -- Turn the cause of a possible failure, being a 'CekValue', into a 'Term'.
           Left e       -> throwCek $ mapCauseInMachineException (void . dischargeCekValue) e
-          Right result -> returnCek unbudgetedSteps ctx result
+          Right result -> returnCek ctx result
 
     -- | Spend the budget that has been accumulated for a number of machine steps.
-    spendAccumulatedBudget :: Int -> CekM s ()
-    spendAccumulatedBudget !unbudgetedSteps = spendBudgetCek BStep (stimes unbudgetedSteps (cekStepCost ?cekCosts))
+    spendAccumulatedBudget :: CekM s ()
+    spendAccumulatedBudget = do
+        unbudgetedSteps <- readPrimArray ref 0
+        spendBudgetCek BStep (stimes unbudgetedSteps (cekStepCost ?cekCosts))
+        writePrimArray ref 0 0
 
     -- This will probably be inlined regardless, but it's important that it happen, since otherwise the return value
     -- in CekM s Int won't be unboxed (although it seems like it could be).
     {-# INLINE stepAndMaybeSpend #-}
     -- | Accumulate a step, and maybe spend the budget that has accumulated for a number of machine steps, but only if we've exceeded our slippage.
-    stepAndMaybeSpend :: Int -> CekM s Int
-    stepAndMaybeSpend !unbudgetedSteps = do
-        writePrimArray ref 0 unbudgetedSteps
-        let !unbudgetedSteps' = unbudgetedSteps+1
-        if unbudgetedSteps' >= ?cekSlippage
-        then spendAccumulatedBudget unbudgetedSteps' >> pure 0
-        else pure unbudgetedSteps'
+    stepAndMaybeSpend :: CekM s ()
+    stepAndMaybeSpend = do
+        unbudgetedSteps <- readPrimArray ref 0
+        let unbudgetedSteps' = unbudgetedSteps+1
+        writePrimArray ref 0 unbudgetedSteps'
+        when (unbudgetedSteps' >= ?cekSlippage) spendAccumulatedBudget
 
 -- See Note [Compilation peculiarities].
 -- | Evaluate a term using the CEK machine and keep track of costing, logging is optional.
@@ -700,4 +699,5 @@ runCek params mode emitting term =
     runCekM params mode emitting $ do
         spendBudgetCek BStartup (cekStartupCost ?cekCosts)
         ref <- newPrimArray 1
+        writePrimArray ref 0 0
         enterComputeCek ref [] mempty term
