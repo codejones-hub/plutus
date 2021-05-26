@@ -69,6 +69,7 @@ import           Data.Hashable                                            (Hasha
 import qualified Data.Kind                                                as GHC
 import           Data.Proxy
 import           Data.STRef
+import           Data.Semigroup                                           (stimes)
 import           Data.Text.Prettyprint.Doc
 
 {- Note [Compilation peculiarities]
@@ -670,7 +671,7 @@ enterComputeCek = computeCek 0 where
 
     -- | Spend the budget that has been accumulated for a number of machine steps.
     spendAccumulatedBudget :: Int -> CekM s ()
-    spendAccumulatedBudget !unbudgetedSteps = spendBudgetCek BStep (scaleBudget unbudgetedSteps (cekStepCost ?cekCosts))
+    spendAccumulatedBudget !unbudgetedSteps = spendBudgetCek BStep (stimes unbudgetedSteps (cekStepCost ?cekCosts))
 
     -- | Accumulate a step, and maybe spend the budget that has accumulated for a number of machine steps, but only if we've exceeded our slippage.
     stepAndMaybeSpend :: Int -> CekM s Int
