@@ -34,6 +34,7 @@ module UntypedPlutusCore.Evaluation.Machine.Cek.Internal
     , ErrorWithCause(..)
     , EvaluationError(..)
     , ExBudgetCategory(..)
+    , StepKind(..)
     , PrettyUni
     , extractEvaluationResult
     , runCek
@@ -65,6 +66,7 @@ import           Control.Monad.ST.Unsafe
 import           Data.Array
 import           Data.DList                                               (DList)
 import qualified Data.DList                                               as DList
+import           Data.Foldable                                            (for_)
 import           Data.Hashable                                            (Hashable)
 import qualified Data.Kind                                                as GHC
 import           Data.Primitive.PrimArray
@@ -132,8 +134,29 @@ The CEK machine does not rely on the global uniqueness condition, so the renamer
 prerequisite. The CEK machine correctly handles name shadowing.
 -}
 
+data StepKind
+    = BConst
+    | BVar
+    | BLamAbs
+    | BApply
+    | BDelay
+    | BForce
+    | BBuiltin         -- Cost of evaluating a Builtin AST node
+    deriving stock (Show, Eq, Ord, Generic, Enum, Bounded)
+    deriving anyclass (NFData, Hashable)
+
+cekStepCost :: CekMachineCosts -> StepKind -> ExBudget
+cekStepCost costs = \case
+    BConst   -> cekConstCost costs
+    BVar     -> cekVarCost costs
+    BLamAbs  -> cekLamCost costs
+    BApply   -> cekApplyCost costs
+    BDelay   -> cekDelayCost costs
+    BForce   -> cekForceCost costs
+    BBuiltin -> cekBuiltinCost costs
+
 data ExBudgetCategory fun
-    = BStep
+    = BStep StepKind
     | BBuiltinApp fun  -- Cost of evaluating a fully applied builtin function
     | BStartup
     deriving stock (Show, Eq, Ord, Generic)
@@ -518,31 +541,31 @@ enterComputeCek ref = computeCek where
         -> CekM s (Term Name uni fun ())
     -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
     computeCek ctx env (Var _ varName) = do
-        stepAndMaybeSpend
+        stepAndMaybeSpend BVar
         val <- lookupVarName varName env
         returnCek ctx val
     computeCek ctx _ (Constant _ val) = do
-        stepAndMaybeSpend
+        stepAndMaybeSpend BConst
         returnCek ctx (VCon val)
     computeCek ctx env (LamAbs _ name body) = do
-        stepAndMaybeSpend
+        stepAndMaybeSpend BLamAbs
         returnCek ctx (VLamAbs name body env)
     computeCek ctx env (Delay _ body) = do
-        stepAndMaybeSpend
+        stepAndMaybeSpend BDelay
         returnCek ctx (VDelay body env)
     -- s ; ρ ▻ lam x L  ↦  s ◅ lam x (L , ρ)
     computeCek ctx env (Force _ body) = do
-        stepAndMaybeSpend
+        stepAndMaybeSpend BForce
         computeCek (FrameForce : ctx) env body
     -- s ; ρ ▻ [L M]  ↦  s , [_ (M,ρ)]  ; ρ ▻ L
     computeCek ctx env (Apply _ fun arg) = do
-        stepAndMaybeSpend
+        stepAndMaybeSpend BApply
         computeCek (FrameApplyArg env arg : ctx) env fun
     -- s ; ρ ▻ abs α L  ↦  s ◅ abs α (L , ρ)
     -- s ; ρ ▻ con c  ↦  s ◅ con c
     -- s ; ρ ▻ builtin bn  ↦  s ◅ builtin bn arity arity [] [] ρ
     computeCek ctx _ (Builtin _ bn) = do
-        stepAndMaybeSpend
+        stepAndMaybeSpend BBuiltin
         BuiltinRuntime _ arity _ _ <- lookupBuiltinExc (Proxy @(CekEvaluationException uni fun)) bn ?cekRuntime
         returnCek ctx (VBuiltin bn arity arity 0 [])
     -- s ; ρ ▻ error A  ↦  <> A
@@ -671,20 +694,27 @@ enterComputeCek ref = computeCek where
     -- | Spend the budget that has been accumulated for a number of machine steps.
     spendAccumulatedBudget :: CekM s ()
     spendAccumulatedBudget = do
-        unbudgetedSteps <- readPrimArray ref 0
-        spendBudgetCek BStep (stimes unbudgetedSteps (cekStepCost ?cekCosts))
-        writePrimArray ref 0 0
+        let len = fromEnum (maxBound :: StepKind) +1
+        for_ [minBound..maxBound] $ \(k :: StepKind) ->
+            do
+              unbudgetedSteps <- readPrimArray ref (fromEnum k + 1)
+              spendBudgetCek (BStep k) (stimes unbudgetedSteps (cekStepCost ?cekCosts k))
+        setPrimArray ref 0 len 0
 
     -- This will probably be inlined regardless, but it's important that it happen, since otherwise the return value
     -- in CekM s Int won't be unboxed (although it seems like it could be).
     {-# INLINE stepAndMaybeSpend #-}
     -- | Accumulate a step, and maybe spend the budget that has accumulated for a number of machine steps, but only if we've exceeded our slippage.
-    stepAndMaybeSpend :: CekM s ()
-    stepAndMaybeSpend = do
-        unbudgetedSteps <- readPrimArray ref 0
-        let unbudgetedSteps' = unbudgetedSteps+1
-        writePrimArray ref 0 unbudgetedSteps'
-        when (unbudgetedSteps' >= ?cekSlippage) spendAccumulatedBudget
+    stepAndMaybeSpend :: StepKind -> CekM s ()
+    stepAndMaybeSpend kind = do
+        let ix = fromEnum kind +1
+        unbudgetedStepsK <- readPrimArray ref ix
+        unbudgetedStepsTotal <- readPrimArray ref 0
+        let unbudgetedStepsK' = unbudgetedStepsK+1
+        let unbudgetedStepsTotal' = unbudgetedStepsTotal+1
+        writePrimArray ref ix unbudgetedStepsK'
+        writePrimArray ref 0 unbudgetedStepsTotal'
+        when (unbudgetedStepsTotal' >= ?cekSlippage) spendAccumulatedBudget
 
 -- See Note [Compilation peculiarities].
 -- | Evaluate a term using the CEK machine and keep track of costing, logging is optional.
@@ -698,6 +728,7 @@ runCek
 runCek params mode emitting term =
     runCekM params mode emitting $ do
         spendBudgetCek BStartup (cekStartupCost ?cekCosts)
-        ref <- newPrimArray 1
-        writePrimArray ref 0 0
+        let len = fromEnum (maxBound :: StepKind) +1
+        ref <- newPrimArray len
+        setPrimArray ref 0 len 0
         enterComputeCek ref [] mempty term

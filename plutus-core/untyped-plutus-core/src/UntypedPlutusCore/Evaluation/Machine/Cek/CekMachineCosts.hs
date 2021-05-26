@@ -27,7 +27,16 @@ cekMachineCostsPrefix = "cek"
 data CekMachineCosts =
     CekMachineCosts {
       cekStartupCost :: ExBudget  -- General overhead
-    , cekStepCost    :: ExBudget
+    , cekVarCost     :: ExBudget
+    , cekConstCost   :: ExBudget
+    , cekLamCost     :: ExBudget
+    , cekDelayCost   :: ExBudget
+    , cekForceCost   :: ExBudget
+    , cekApplyCost   :: ExBudget
+    , cekBuiltinCost :: ExBudget
+    -- ^ Just the cost of evaluating a Builtin node, not the builtin itself.
+    -- There's no entry for Error since we'll be exiting anyway; also, what would
+    -- happen if calling 'Error' caused the budget to be exceeded?
     }
     deriving (Eq, Show, Generic, Lift)
     deriving (FromJSON, ToJSON) via CustomJSON '[FieldLabelModifier (CamelToSnake)] CekMachineCosts
@@ -38,7 +47,13 @@ data CekMachineCosts =
 unitCekMachineCosts :: CekMachineCosts
 unitCekMachineCosts =
     CekMachineCosts { cekStartupCost = zeroCost
-                    , cekStepCost    = unitCost
+                    , cekVarCost     = unitCost
+                    , cekConstCost   = unitCost
+                    , cekLamCost     = unitCost
+                    , cekDelayCost   = unitCost
+                    , cekForceCost   = unitCost
+                    , cekApplyCost   = unitCost
+                    , cekBuiltinCost = unitCost
                     }
         where
           zeroCost = ExBudget 0 0
