@@ -699,4 +699,5 @@ runCek
 runCek params mode emitting term =
     runCekM params mode emitting $ do
         spendBudgetCek BStartup (cekStartupCost ?cekCosts)
-        enterComputeCek [] mempty term
+        ref <- newPrimArray 1
+        enterComputeCek ref [] mempty term
