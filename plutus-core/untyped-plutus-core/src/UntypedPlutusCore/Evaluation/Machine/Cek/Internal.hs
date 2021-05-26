@@ -67,6 +67,7 @@ import           Data.DList                                               (DList
 import qualified Data.DList                                               as DList
 import           Data.Hashable                                            (Hashable)
 import qualified Data.Kind                                                as GHC
+import           Data.Primitive.PrimArray
 import           Data.Proxy
 import           Data.STRef
 import           Data.Semigroup                                           (stimes)
@@ -498,11 +499,12 @@ lookupVarName varName varEnv = do
 enterComputeCek
     :: forall uni fun s
     . (Ix fun, PrettyUni uni fun, GivenCekReqs uni fun s, uni `Everywhere` ExMemoryUsage)
-    => Context uni fun
+    => MutablePrimArray s Int
+    -> Context uni fun
     -> CekValEnv uni fun
     -> Term Name uni fun ()
     -> CekM s (Term Name uni fun ())
-enterComputeCek = computeCek 0 where
+enterComputeCek ref = computeCek 0 where
     -- | The computing part of the CEK machine.
     -- Either
     -- 1. adds a frame to the context and calls 'computeCek' ('Force', 'Apply')
@@ -678,9 +680,10 @@ enterComputeCek = computeCek 0 where
     {-# INLINE stepAndMaybeSpend #-}
     -- | Accumulate a step, and maybe spend the budget that has accumulated for a number of machine steps, but only if we've exceeded our slippage.
     stepAndMaybeSpend :: Int -> CekM s Int
-    stepAndMaybeSpend !unbudgetedSteps =
+    stepAndMaybeSpend !unbudgetedSteps = do
+        writePrimArray ref 0 unbudgetedSteps
         let !unbudgetedSteps' = unbudgetedSteps+1
-        in if unbudgetedSteps' >= ?cekSlippage
+        if unbudgetedSteps' >= ?cekSlippage
         then spendAccumulatedBudget unbudgetedSteps' >> pure 0
         else pure unbudgetedSteps'
 
