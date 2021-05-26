@@ -181,6 +181,7 @@ data ExBudget = ExBudget { _exBudgetCPU :: ExCPU, _exBudgetMemory :: ExMemory }
     deriving anyclass (PrettyBy config, NFData)
     deriving (FromJSON, ToJSON) via CustomJSON '[FieldLabelModifier (CamelToSnake)] ExBudget
 
+-- These functions are performance critical, so we can't use GenericSemigroupMonoid, and we insist that they be inlined.
 instance Semigroup ExBudget where
     {-# INLINE (<>) #-}
     (ExBudget cpu1 mem1) <> (ExBudget cpu2 mem2) = ExBudget (cpu1 <> cpu2) (mem1 <> mem2)
