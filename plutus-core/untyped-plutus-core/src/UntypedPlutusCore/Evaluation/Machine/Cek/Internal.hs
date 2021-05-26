@@ -673,6 +673,9 @@ enterComputeCek = computeCek 0 where
     spendAccumulatedBudget :: Int -> CekM s ()
     spendAccumulatedBudget !unbudgetedSteps = spendBudgetCek BStep (stimes unbudgetedSteps (cekStepCost ?cekCosts))
 
+    -- This will probably be inlined regardless, but it's important that it happen, since otherwise the return value
+    -- in CekM s Int won't be unboxed (although it seems like it could be).
+    {-# INLINE stepAndMaybeSpend #-}
     -- | Accumulate a step, and maybe spend the budget that has accumulated for a number of machine steps, but only if we've exceeded our slippage.
     stepAndMaybeSpend :: Int -> CekM s Int
     stepAndMaybeSpend !unbudgetedSteps =
