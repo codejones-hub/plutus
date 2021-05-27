@@ -252,7 +252,7 @@ that the maximum overrun is negligible (e.g. much smaller than the "startup cost
 we opted for 1, which also happens to be simpler to implement.
 -}
 
-type Slippage = Int
+type Slippage = Word8
 -- See Note [Cost slippage]
 -- | The default number of slippage (in machine steps) to allow.
 defaultSlippage :: Slippage
@@ -524,7 +524,7 @@ lookupVarName varName varEnv = do
 enterComputeCek
     :: forall uni fun s
     . (Ix fun, PrettyUni uni fun, GivenCekReqs uni fun s, uni `Everywhere` ExMemoryUsage)
-    => MutablePrimArray s Int
+    => MutablePrimArray s Word8
     -> Context uni fun
     -> CekValEnv uni fun
     -> Term Name uni fun ()
