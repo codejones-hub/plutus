@@ -80,7 +80,7 @@ import           Control.Monad.Freer.TH                  (makeEffect)
 import           Data.Default                            (Default (..))
 import qualified Data.Map                                as Map
 import           Data.Maybe                              (fromMaybe)
-import           Data.Text.Prettyprint.Doc               (defaultLayoutOptions, layoutPretty, pretty)
+import           Data.Text.Prettyprint.Doc               (colon, defaultLayoutOptions, layoutPretty, pretty, (<+>))
 import           Data.Text.Prettyprint.Doc.Render.String (renderString)
 import           Plutus.Trace.Scheduler                  (EmSystemCall, ThreadId, exit, runThreads)
 import           System.IO                               (Handle, hPutStrLn, stdout)
@@ -207,6 +207,12 @@ instance Default TraceConfig where
             { showEvent     = defaultShowEvent
             , outputHandle  = stdout
             }
+
+-- | Shows the wallet balance events
+walletBalanceShowEvent :: EmulatorEvent' -> Maybe String
+walletBalanceShowEvent = \case
+  WalletEvent w (Wallet.TxBalanceLog m) -> Just . renderString . layoutPretty defaultLayoutOptions $ pretty w <> colon <+> pretty m
+  _ -> Nothing
 
 defaultShowEvent :: EmulatorEvent' -> Maybe String
 defaultShowEvent = \case
