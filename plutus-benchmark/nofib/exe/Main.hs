@@ -6,9 +6,7 @@ module Main where
 import           Prelude                                  ((<>))
 import qualified Prelude                                  as Haskell
 
-import           Control.Exception
 import           Control.Monad                            ()
-import           Control.Monad.Trans.Except
 import qualified Data.ByteString.Lazy                     as BSL
 import           Data.Char                                (isSpace)
 import           Options.Applicative                      as Opt hiding (action)
@@ -183,7 +181,7 @@ options = hsubparser
 
 ---------------- Evaluation ----------------
 
-evaluateWithCek :: UPLC.Term DeBruijn DefaultUni DefaultFun () -> EvaluationResult (UPLC.Term DeBruijn DefaultUni DefaultFun ())
+evaluateWithCek :: UPLC.Term UPLC.DeBruijn DefaultUni DefaultFun () -> EvaluationResult (UPLC.Term UPLC.DeBruijn DefaultUni DefaultFun ())
 evaluateWithCek = unsafeEvaluateCekNoEmit PLC.defaultCekParameters
 
 writeCBORnamed :: UPLC.Program Name DefaultUni DefaultFun () -> IO ()
@@ -235,7 +233,6 @@ main = do
                                      else print $ Prime.runPrimalityTest n
     DumpPLC pa -> Haskell.mapM_ putStrLn $ unindent . PLC.prettyPlcClassicDebug . mkProg . getDBrTerm $ pa
         where unindent d = map (dropWhile isSpace) $ (Haskell.lines . Haskell.show $ d)
-    DumpCBORnamed pa   -> writeCBORnamed . mkProg . getUnDBrTerm $ pa
     DumpCBORdeBruijn pa-> writeCBORdeBruijn . mkProg . getDBrTerm $ pa
     -- Write the output to stdout and let the user deal with redirecting it.
     where getDBrTerm :: ProgAndArgs -> UPLC.Term UPLC.DeBruijn DefaultUni DefaultFun ()
