@@ -382,7 +382,7 @@ dischargeCekValEnv valEnv = go 0
   where
    go :: Word -> Term DeBruijn uni fun () -> Term DeBruijn uni fun ()
    go !lvl = \case
-    var@(Var _ name) -> let n = fromIntegral (name^.coerced :: Natural)
+    var@(Var _ name) -> let n = name^.coerced :: Word
                        in if n <= lvl
                           then var
                           else dischargeCekValue $ valEnv `B.index` (n - lvl)
@@ -468,7 +468,7 @@ lookupVarName varName varEnv = do
         Just val -> pure val
 
 lookupName' :: DeBruijn -> B.BList a -> Maybe a
-lookupName' name e = Just $ e `B.index` fromIntegral (name^.coerced :: Natural)
+lookupName' name e = Just $ e `B.index` (name^.coerced :: Word)
 
 -- See Note [Compilation peculiarities].
 -- | The entering point to the CEK machine's engine.
