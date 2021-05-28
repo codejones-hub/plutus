@@ -8,31 +8,29 @@ module Data.BRAL ( BList -- abstract type for now
                  , Data.BRAL.null
                  , Data.BRAL.head
                  , Data.BRAL.tail
+                 , uncons
                  ) where
 
-import           Data.Bits (unsafeShiftR)
-
-
--- TODO: add doctests
--- TODO: quickcheck?
+import           Data.Bits  (unsafeShiftR)
+import           Data.Maybe (fromMaybe)
 
 -- A complete binary tree.
 -- Note: the size of the tree is not stored/cached,
 -- unless it appears as a root tree in BList, which the size is stored inside the Cons.
 data Tree a = Leaf a
             | Node a !(Tree a) !(Tree a)
-            deriving Show
+            deriving (Eq, Show)
 
 -- a strict list of complete binary trees accompanied by their size.
 -- The trees appear in >=-size order.
 -- Note: this blist is strict on its spine, unlike the haskell's stdlib list
 data BList a = Cons
                -- TODO: use arch-independent Word32 or Word64
-               !Word -- ^ the size of the head tree
+               {-# UNPACK #-} !Word -- ^ the size of the head tree
                !(Tree a) -- ^ the head tree
                !(BList a) -- ^ the tail trees
              | Nil
-             deriving Show
+             deriving (Eq, Show)
 
 {-# INLINABLE nil #-}
 nil :: BList a
@@ -49,21 +47,23 @@ cons x = \case
     (Cons w1 t1 (Cons w2 t2 ts')) | w1 == w2 -> Cons (2*w1+1) (Node x t1 t2) ts'
     ts                                       -> Cons 1 (Leaf x) ts
 
+
+-- /O(1)/
+uncons :: BList a -> Maybe (a, BList a)
+uncons (Cons _ (Leaf x) ts) = Just (x, ts)
+uncons (Cons treeSize (Node x t1 t2) ts) = Just
+    (x, let halfSize = unsafeShiftR treeSize 1 -- probably faster than `div w 2`
+        in Cons halfSize t1 $ Cons halfSize t2 ts -- split the node in two
+    )
+uncons Nil = Nothing
+
 -- O(1) worst-case
 head :: BList a -> a
-head (Cons 1 (Leaf x) _)     = x
-head (Cons _ (Node x _ _) _) = x
-head Nil                     = error "empty blist"
-head _                       = error "invalid blist"
+head = fst . fromMaybe (error "empty blist") . uncons
 
 -- O(1) worst-case
 tail :: BList a -> BList a
-tail (Cons 1 (Leaf _) ts) = ts
-tail (Cons treeSize (Node _ t1 t2) ts) =
-    let halfSize = unsafeShiftR treeSize 1 -- probably faster than `div w 2`
-    in Cons halfSize t1 $ Cons halfSize t2 ts -- split the node in two
-tail Nil = error "empty blist"
-tail _ = error "invalid blist"
+tail = snd. fromMaybe (error "empty blist") . uncons
 
 -- 1-based
 -- NOTE: no check if zero 0 index is passed, if 0 is passed it MAY overflow the index
@@ -106,4 +106,3 @@ indexZero (Cons w t ts) !i  =
            else indexTree halfSize (offset - 1 - halfSize) t2
 
 -- TODO: safeIndex
--- TODO: add monoid instance?
