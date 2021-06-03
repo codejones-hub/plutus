@@ -3,7 +3,6 @@
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE OverloadedStrings      #-}
-
 module PlutusCore.Name
     ( -- * Types
       Name (..)
@@ -34,7 +33,7 @@ import           PlutusCore.Pretty.ConfigName
 
 import           Control.Lens
 import           Data.Hashable
-import qualified Data.IntMap                  as IM
+import "containers" Data.IntMap                  as IM
 import qualified Data.Text                    as T
 import           Instances.TH.Lift            ()
 import           Language.Haskell.TH.Syntax   (Lift)
@@ -137,7 +136,7 @@ insertByNameIndex = insertByUnique . coerce . view unique
 fromFoldable
     :: Foldable f
     => (i -> a -> UniqueMap unique a -> UniqueMap unique a) -> f (i, a) -> UniqueMap unique a
-fromFoldable ins = foldl' (flip $ uncurry ins) mempty
+fromFoldable ins = PlutusPrelude.foldl' (flip $ uncurry ins) mempty
 
 -- | Convert a 'Foldable' with uniques into a 'UniqueMap'.
 fromUniques :: Foldable f => Coercible Unique unique => f (unique, a) -> UniqueMap unique a

@@ -33,8 +33,7 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 import           Control.Monad.Trans.Maybe
 import           Data.Functor.Identity
-import           Data.Set                  (Set)
-import qualified Data.Set                  as Set
+import           "containers" Data.Set     as Set
 import qualified Data.Text                 as Text
 import           Hedgehog                  (GenT, PropertyT)
 

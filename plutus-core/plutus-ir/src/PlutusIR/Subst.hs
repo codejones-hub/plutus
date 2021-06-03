@@ -3,14 +3,14 @@ module PlutusIR.Subst
     , uniquesType
     ) where
 
-import qualified PlutusCore.Core.Type as PLC
-import qualified PlutusCore.Name      as PLC
-import           PlutusCore.Subst     (uniquesType)
+import qualified PlutusCore.Core.Type  as PLC
+import qualified PlutusCore.Name       as PLC
+import           PlutusCore.Subst      (uniquesType)
 
 import           PlutusIR.Core
 
-import           Data.Set             as Set
-import           Data.Set.Lens        (setOf)
+import           "containers" Data.Set as Set
+import           Data.Set.Lens         (setOf)
 
 uniquesTerm
     :: PLC.HasUniques (Term tyname name uni fun ann)

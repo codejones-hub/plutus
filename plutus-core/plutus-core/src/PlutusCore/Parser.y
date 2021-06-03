@@ -35,7 +35,7 @@ import Universe
 
 import           Data.ByteString.Lazy      (ByteString)
 import qualified Data.List.NonEmpty        as NE
-import qualified Data.Map
+import"containers" Data.Map
 import           Data.Proxy
 import qualified Data.Text as T
 import Data.Text.Prettyprint.Doc.Internal  (Doc (Text))
@@ -84,7 +84,7 @@ import Control.Monad.State
 %%
 
 some(p)
-    : some(p) p { $2 :| toList $1 }
+    : some(p) p { $2 :| PlutusPrelude.toList $1 }
     | p { $1 :| [] }
 
 parens(p)

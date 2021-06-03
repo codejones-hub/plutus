@@ -44,9 +44,9 @@ import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as NAM
 import qualified Algebra.Graph.ToGraph                as Graph
 
 import           Data.Foldable
-import qualified Data.Map                             as Map
+import           "containers" Data.Map                as Map
 import           Data.Maybe
-import qualified Data.Set                             as Set
+import           "containers" Data.Set                as Set
 
 -- | A map from keys to pairs of bindings and their dependencies (as a list of keys).
 type DefMap key def = Map.Map key (def, Set.Set key)
@@ -112,7 +112,7 @@ wrapWithDefs x tds body =
             let bs = catMaybes $ toValue <$> Graph.vertexList scc
             in mkLet x (if Graph.isAcyclic scc then NonRec else Rec) bs acc
     -- process from the inside out
-    in foldl' wrapDefScc body (defSccs tds)
+    in Data.Foldable.foldl' wrapDefScc body (defSccs tds)
 
 class (Monad m, Ord key) => MonadDefs key uni fun ann m | m -> key uni fun ann where
     liftDef :: DefT key uni fun ann Identity a -> m a

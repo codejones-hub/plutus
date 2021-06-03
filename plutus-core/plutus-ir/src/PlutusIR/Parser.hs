@@ -36,7 +36,7 @@ import qualified Text.Megaparsec                    as Parsec
 
 import           Data.Char
 import           Data.Foldable
-import qualified Data.Map                           as M
+import           "containers" Data.Map              as M
 import           Data.Proxy
 import qualified Data.Text                          as T
 
@@ -142,7 +142,7 @@ reservedWord w = lexeme $ try $ do
     return p
 
 builtinFunction :: (Bounded fun, Enum fun, Pretty fun) => Parser fun
-builtinFunction = lexeme $ choice $ map parseBuiltin [minBound .. maxBound]
+builtinFunction = lexeme $ choice $ Prelude.map parseBuiltin [minBound .. maxBound]
     where parseBuiltin builtin = try $ string (display builtin) >> pure builtin
 
 name :: Parser Name
@@ -264,7 +264,7 @@ appType = do
     pos  <- getSourcePos
     fn   <- typ
     args <- some typ
-    pure $ foldl' (TyApp pos) fn args
+    pure $ Data.Foldable.foldl' (TyApp pos) fn args
 
 kind :: Parser (Kind SourcePos)
 kind = inParens (typeKind <|> funKind)
@@ -378,7 +378,7 @@ plcTerm
        , Bounded fun, Enum fun, Pretty fun
        )
     => Parser (PLC.Term TyName Name uni fun SourcePos)
-plcTerm = term' empty
+plcTerm = term' Text.Megaparsec.empty
 
 -- Note that PIR programs do not actually carry a version number
 -- we (optionally) parse it all the same so we can parse all PLC code

@@ -21,7 +21,7 @@ import           PlutusCore.Core        (HasUniques)
 import           PlutusCore.Name
 
 import           Control.Lens
-import           Data.Set               as Set
+import           "containers" Data.Set  as Set
 import           Data.Set.Lens          (setOf)
 
 purely :: ((a -> Identity b) -> c -> Identity d) -> (a -> b) -> c -> d

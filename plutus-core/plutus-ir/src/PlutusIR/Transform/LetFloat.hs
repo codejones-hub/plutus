@@ -24,9 +24,9 @@ import qualified Algebra.Graph.AdjacencyMap.Algorithm as AM
 import qualified Algebra.Graph.NonEmpty.AdjacencyMap  as AMN
 
 import           Data.Either                          (fromRight)
-import qualified Data.IntMap                          as IM
-import qualified Data.Map                             as M
-import qualified Data.Set                             as S
+import "containers" Data.IntMap                          as IM
+import "containers" Data.Map                             as M
+import "containers" Data.Set                             as S
 import qualified Data.Set.NonEmpty                    as NS
 
 import qualified Data.List.NonEmpty                   as NE
@@ -433,7 +433,7 @@ p2Term pir fd =
   topSortedSccs :: [NS.NESet PLC.Unique]
   topSortedSccs =
     let allLets = M.keysSet rhsTable
-    in mapMaybe (\scc ->  NS.nonEmptySet $
+    in Data.Maybe.mapMaybe (\scc ->  NS.nonEmptySet $
                   -- we are not interested in graph structure anymore
                   -- make sure that scc contain only to-be floated lets (i.e. no lambdas and no fixed effectful lets)
                   AMN.vertexSet scc `S.intersection` allLets

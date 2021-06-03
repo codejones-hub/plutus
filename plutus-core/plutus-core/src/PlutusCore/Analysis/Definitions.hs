@@ -23,7 +23,7 @@ import           Control.Monad.State
 import           Control.Monad.Writer
 
 import           Data.Foldable
-import qualified Data.Set              as Set
+import           "containers" Data.Set as Set
 
 {- Note [Unique usage errors]
 The definitions analysis can find a number of problems with usage of uniques, however
@@ -52,9 +52,9 @@ lookupDef n = do
     case previousDef of
         Just d -> pure d
         Nothing -> do
-            let empty = (Nothing, mempty)
-            modify $ insertByNameIndex n empty
-            pure empty
+            let empty_ = (Nothing, mempty)
+            modify $ insertByNameIndex n empty_
+            pure empty_
 
 addDef
     :: (Ord ann,

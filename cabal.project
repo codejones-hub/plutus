@@ -26,6 +26,8 @@ packages: doc
           quickcheck-dynamic
           web-ghc
           word-array
+          unordered-intmap-0.1.2/unordered-intmap.cabal
+          containers-0.6.2.2/containersng/containersng.cabal
 
 -- We never, ever, want this.
 write-ghc-environment-files: never

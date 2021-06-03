@@ -16,7 +16,7 @@ import           Control.Monad.Error.Lens
 import           Control.Monad.Trans
 
 import           Data.List.NonEmpty                hiding (length)
-import qualified Data.Set                          as Set
+import "containers" Data.Set                          as Set
 
 import qualified PlutusCore                        as PLC
 import qualified PlutusCore.MkPlc                  as PLC
@@ -72,7 +72,7 @@ compileRecTerms
 compileRecTerms body bs = do
     p <- lift getEnclosing
     fixpoint <- mkFixpoint bs
-    Tuple.bindTuple p (PIR.varDeclName . PIR.defVar <$> toList bs) fixpoint body
+    Tuple.bindTuple p (PIR.varDeclName . PIR.defVar <$> Data.List.NonEmpty.toList bs) fixpoint body
 
 -- | Given a list of var decls, create a tuples of values that computes their mutually recursive fixpoint.
 mkFixpoint

@@ -32,7 +32,7 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 
 import qualified Algebra.Graph                  as G
-import qualified Data.Map                       as Map
+import           "containers" Data.Map          as Map
 import           Data.Semigroup.Generic         (GenericSemigroupMonoid (..))
 import           Witherable
 
@@ -191,7 +191,7 @@ processTerm = handleTerm <=< traverseOf termSubtypes applyTypeSubstitution where
             -- Note that we don't *remove* the bindings or scope the state, so the state will carry over
             -- into "sibling" terms. This is fine because we have global uniqueness
             -- (see Note [Inlining and global uniqueness]), if somewhat wasteful.
-            bs' <- wither processSingleBinding (toList bs)
+            bs' <- wither processSingleBinding (PlutusPrelude.toList bs)
             t' <- processTerm t
             -- Use 'mkLet': we're using lists of bindings rather than NonEmpty since we might actually
             -- have got rid of all of them!

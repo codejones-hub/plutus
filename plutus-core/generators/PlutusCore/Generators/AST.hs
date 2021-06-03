@@ -24,8 +24,7 @@ import           PlutusCore.Subst
 
 import           Control.Monad.Morph   (hoist)
 import           Control.Monad.Reader
-import           Data.Set              (Set)
-import qualified Data.Set              as Set
+import           "containers" Data.Set as Set
 import           Hedgehog              hiding (Size, Var)
 import qualified Hedgehog.Internal.Gen as Gen
 import qualified Hedgehog.Range        as Range
@@ -139,7 +138,7 @@ variables. This way we get diverse and interesting mangled terms.
 
 subset1 :: (MonadGen m, Ord a) => Set a -> m (Maybe (Set a))
 subset1 s
-    | null xs   = return Nothing
+    | Prelude.null xs   = return Nothing
     | otherwise = fmap (Just . Set.fromList) $ (:) <$> Gen.element xs <*> Gen.subsequence xs
     where xs = Set.toList s
 
@@ -163,7 +162,7 @@ mangleNames term = do
     mayNamesMangle <- subset1 names
     for mayNamesMangle $ \namesMangle -> do
         let isNew name = not $ name `Set.member` namesMangle
-        newNames <- Gen.justT $ ensure (not . null) . filter isNew <$> genNames
+        newNames <- Gen.justT $ ensure (not . Prelude.null) . Prelude.filter isNew <$> genNames
         let mang name
                 | name `Set.member` namesMangle = Just <$> Gen.element newNames
                 | otherwise                     = return Nothing

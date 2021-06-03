@@ -15,7 +15,7 @@ import           UntypedPlutusCore.Evaluation.Machine.Cek.CekMachineCosts (cekMa
 import           Data.Aeson
 import           Data.Aeson.Flatten
 import qualified Data.HashMap.Strict                                      as HM
-import qualified Data.Map                                                 as Map
+import           "containers" Data.Map                                    as Map
 import qualified Data.Text                                                as Text
 
 

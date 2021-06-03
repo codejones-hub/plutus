@@ -14,7 +14,7 @@ import qualified PlutusCore.StdLib.Data.ScottUnit as Unit
 import           Control.Lens                     hiding (Strict)
 import           Control.Monad.State
 
-import qualified Data.Map                         as Map
+import "containers" Data.Map                         as Map
 
 {- Note [Compiling non-strict bindings]
 Given `let x : ty = rhs in body`, we

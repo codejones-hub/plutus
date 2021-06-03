@@ -8,7 +8,7 @@ import           PlutusIR
 
 import qualified PlutusCore.Pretty         as PLC
 
-import qualified Data.Set                  as S
+import           "containers" Data.Set     as S
 import           Data.Text.Prettyprint.Doc ((<+>))
 import qualified Data.Text.Prettyprint.Doc as PP
 

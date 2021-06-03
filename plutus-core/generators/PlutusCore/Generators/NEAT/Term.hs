@@ -36,7 +36,7 @@ import           Control.Monad.Except
 import           Data.Bifunctor.TH
 import           Data.ByteString                   (ByteString, pack)
 import           Data.Coolean                      (Cool, false, toCool, true, (&&&))
-import qualified Data.Map                          as Map
+import           "containers" Data.Map             as Map
 import qualified Data.Stream                       as Stream
 import qualified Data.Text                         as Text
 import           PlutusCore
@@ -483,13 +483,13 @@ weakenTy ty = sub (TyVarG . FS) ty
 
 -- |Reduce a generated type by a single step, or fail.
 stepTypeG :: TypeG n -> Maybe (TypeG n)
-stepTypeG (TyVarG _)                  = empty
+stepTypeG (TyVarG _)                  = Control.Enumerable.empty
 stepTypeG (TyFunG ty1 ty2)            = (TyFunG <$> stepTypeG ty1 <*> pure ty2)
                                     <|> (TyFunG <$> pure ty1 <*> stepTypeG ty2)
 stepTypeG (TyIFixG ty1 k ty2)         = (TyIFixG <$> stepTypeG ty1 <*> pure k <*> pure ty2)
                                     <|> (TyIFixG <$> pure ty1 <*> pure k <*> stepTypeG ty2)
 stepTypeG (TyForallG k ty)            = TyForallG <$> pure k <*> stepTypeG ty
-stepTypeG (TyBuiltinG _)              = empty
+stepTypeG (TyBuiltinG _)              = Control.Enumerable.empty
 stepTypeG (TyLamG ty)                 = TyLamG <$> stepTypeG ty
 stepTypeG (TyAppG (TyLamG ty1) ty2 _) = pure (sub (\case FZ -> ty2; FS i -> TyVarG i) ty1)
 stepTypeG (TyAppG ty1 ty2 k)          = (TyAppG <$> stepTypeG ty1 <*> pure ty2 <*> pure k)

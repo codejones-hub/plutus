@@ -20,7 +20,6 @@
 {-# LANGUAGE TypeFamilies             #-}
 {-# LANGUAGE TypeOperators            #-}
 {-# LANGUAGE UndecidableInstances     #-}
-
 module UntypedPlutusCore.Evaluation.Machine.Cek.Internal
     -- See Note [Compilation peculiarities].
     ( EvaluationResult(..)
@@ -68,6 +67,7 @@ import           Data.Array
 import           Data.DList                                               (DList)
 import qualified Data.DList                                               as DList
 import           Data.Hashable                                            (Hashable)
+import           "containersng" Data.IntMap                               as I
 import qualified Data.Kind                                                as GHC
 import           Data.Proxy
 import           Data.STRef
@@ -198,7 +198,7 @@ data CekValue uni fun =
                                             -- Check the docs of 'BuiltinRuntime' for details.
     deriving (Show)
 
-type CekValEnv uni fun = UniqueMap TermUnique (CekValue uni fun)
+type CekValEnv uni fun = I.IntMap (CekValue uni fun)
 
 -- | The CEK machine is parameterized over a @spendBudget@ function that has (roughly) the same type
 -- as the one from the 'SpendBudget' class (and so the @SpendBudget@ instance for 'CekM'
@@ -483,7 +483,7 @@ dischargeCekValEnv valEnv =
     -- this to terms which have no free variables remaining, at which point we won't call this
     -- substitution function any more and so we will terminate.
     termSubstFreeNames $ \name -> do
-        val <- lookupName name valEnv
+        val <- I.lookup (coerce $ name^.theUnique) valEnv
         Just $ dischargeCekValue val
 
 -- | Convert a 'CekValue' into a 'Term' by replacing all bound variables with the terms
@@ -560,12 +560,12 @@ runCekM (MachineParameters costs runtime) (ExBudgetMode getExBudgetInfo) emittin
 -- | Extend an environment with a variable name, the value the variable stands for
 -- and the environment the value is defined in.
 extendEnv :: Name -> CekValue uni fun -> CekValEnv uni fun -> CekValEnv uni fun
-extendEnv = insertByName
+extendEnv n = I.insert $ coerce $ n ^. theUnique
 
 -- | Look up a variable name in the environment.
 lookupVarName :: forall uni fun s . (PrettyUni uni fun) => Name -> CekValEnv uni fun -> CekM uni fun s (CekValue uni fun)
 lookupVarName varName varEnv =
-    case lookupName varName varEnv of
+    case I.lookup (coerce $ varName ^.theUnique) varEnv of
         Nothing  -> throwingWithCause _MachineError OpenTermEvaluatedMachineError $ Just var where
             var = Var () varName
         Just val -> pure val

@@ -29,7 +29,7 @@ common lang
     default-extensions: ExplicitForAll FlexibleContexts ScopedTypeVariables
                         DeriveGeneric StandaloneDeriving DeriveLift
                         GeneralizedNewtypeDeriving DeriveFunctor DeriveFoldable
-                        DeriveTraversable DerivingStrategies DerivingVia
+                        DeriveTraversable DerivingStrategies DerivingVia PackageImports
     ghc-options: -Wall -Wnoncanonical-monad-instances
                  -Wincomplete-uni-patterns -Wincomplete-record-updates
                  -Wredundant-constraints -Widentities
@@ -276,7 +276,6 @@ library
         monoidal-containers,
         mtl -any,
         nonempty-containers -any,
-        mono-traversable -any,
         parser-combinators >= 0.4.0,
         prettyprinter >=1.1.0.1,
         prettyprinter-configurable -any,
@@ -298,7 +297,8 @@ library
         transformers -any,
         unordered-containers -any,
         witherable -any,
-        word-array -any
+        word-array -any,
+        containersng == 0.6.2.2
 
 test-suite satint-test
   import: lang
@@ -524,9 +524,10 @@ benchmark bral-bench
         plutus-core -any,
         criterion >= 1.5.9.0,
         random >= 1.2.0,
-        containers -any,
+        containersng == 0.6.2.2,
         -- broken for ral-0.2 conflic with  cardano-binary:recursion-schemes
-        ral == 0.1
+        ral == 0.1,
+        unordered-intmap == 0.1.2
 
 test-suite bral-test
     type: exitcode-stdio-1.0

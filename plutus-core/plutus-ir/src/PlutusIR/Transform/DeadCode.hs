@@ -19,7 +19,7 @@ import           Control.Monad
 import           Control.Monad.Reader
 
 import           Data.Coerce
-import qualified Data.Set                       as Set
+import           "containers" Data.Set          as Set
 
 import qualified Algebra.Graph                  as G
 import qualified Algebra.Graph.ToGraph          as T

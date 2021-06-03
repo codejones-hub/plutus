@@ -20,8 +20,8 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 
 import qualified Algebra.Graph.Class      as G
-import qualified Data.Map                 as Map
-import qualified Data.Set                 as Set
+import           "containers" Data.Map    as Map
+import           "containers" Data.Set    as Set
 
 import qualified Data.List.NonEmpty       as NE
 

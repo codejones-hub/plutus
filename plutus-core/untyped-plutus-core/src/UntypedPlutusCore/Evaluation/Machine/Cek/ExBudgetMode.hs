@@ -34,7 +34,7 @@ import           Control.Monad.Except
 import           Data.HashMap.Monoidal                             as HashMap
 import           Data.Hashable                                     (Hashable)
 import           Data.List                                         (intersperse)
-import qualified Data.Map.Strict                                   as Map
+import           "containers" Data.Map.Strict                      as Map
 import           Data.Primitive.PrimArray
 import           Data.STRef
 import           Data.SatInt
@@ -94,7 +94,7 @@ instance (Show fun, Ord fun) => Pretty (TallyingSt fun) where
 tallying :: (Eq fun, Hashable fun) => ExBudgetMode (TallyingSt fun) uni fun
 tallying =
     monoidalBudgeting $ \key budgetToSpend ->
-        TallyingSt (CekExTally $ singleton key budgetToSpend) budgetToSpend
+        TallyingSt (CekExTally $ HashMap.singleton key budgetToSpend) budgetToSpend
 
 newtype RestrictingSt = RestrictingSt ExRestrictingBudget
     deriving stock (Eq, Show)
