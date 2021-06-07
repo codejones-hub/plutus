@@ -175,7 +175,6 @@ library
         uuid -any,
         vector -any,
         warp -any,
-        Win32-network -any,
         websockets -any,
         yaml -any,
         mwc-random -any,
