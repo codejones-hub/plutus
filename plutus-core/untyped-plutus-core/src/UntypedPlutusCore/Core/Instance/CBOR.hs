@@ -30,6 +30,8 @@ instance ( Closed uni
         Force    ann t    -> encodeConstructorTag 5 <> encode ann <> encode t
         Error    ann      -> encodeConstructorTag 6 <> encode ann
         Builtin  ann bn   -> encodeConstructorTag 7 <> encode ann <> encode bn
+        GVar      ann n   -> encodeConstructorTag 8 <> encode ann <> encode n
+        LamAbs   ann n t  -> encodeConstructorTag 9 <> encode ann <> encode n <> encode t
 
     decode = go =<< decodeConstructorTag
         where go 0 = Var      <$> decode <*> decode
@@ -40,6 +42,8 @@ instance ( Closed uni
               go 5 = Force    <$> decode <*> decode
               go 6 = Error    <$> decode
               go 7 = Builtin  <$> decode <*> decode
+              go 8 = GVar      <$> decode <*> decode
+              go 9 = GLamAbs   <$> decode <*> decode <*> decode
               go _ = fail "Failed to decode Term TyName Name ()"
 
 instance ( Closed uni

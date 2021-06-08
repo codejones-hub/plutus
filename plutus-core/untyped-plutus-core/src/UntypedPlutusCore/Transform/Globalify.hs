@@ -6,7 +6,6 @@ import           Control.Lens.Fold
 import           Control.Lens.Plated
 import           Control.Monad.Reader
 import           Data.Semigroup
-import           Data.Word
 import qualified PlutusCore.Name               as TPLC
 import           PlutusCore.Quote
 import           UntypedPlutusCore.Core.Plated
@@ -43,33 +42,35 @@ In terms of implementation, we can also handle this neatly with a new kind of na
 a normal name of a global name. Mostly "global" lambdas are just like normal lambdas, otherwise.
 -}
 
-globalifyProgram :: Program TPLC.Name uni fun ann -> Program (GName TPLC.Name) uni fun ann
+globalifyProgram :: Program TPLC.Name uni fun () -> Program TPLC.Name uni fun ()
 globalifyProgram (Program x v t) = Program x v $ globalifyTerm t
 
-globalifyTerm :: Term TPLC.Name uni fun ann -> Term (GName TPLC.Name) uni fun ann
+globalifyTerm :: Term TPLC.Name uni fun () -> Term TPLC.Name uni fun ()
 globalifyTerm t = flip runReader (0, mempty) $ gatherGlobals $ runQuote $ rename t
 
-maxGlobal :: Term (GName name) uni fun a -> Word64
-maxGlobal t = getMax $ foldMapOf (cosmosOf termSubterms) (\case {LamAbs _ (GName w) _  -> Max w; _ -> Max 0}) t
+maxGlobal :: Term name uni fun a -> Word
+maxGlobal t = getMax $ foldMapOf (cosmosOf termSubterms) (\case {GLamAbs _ w _  -> Max w; _ -> Max 0}) t
 
-gatherGlobals :: forall m uni fun ann . (m ~ Reader (Word64, TPLC.UniqueMap TPLC.TermUnique Word64)) => Term TPLC.Name uni fun ann -> m (Term (GName TPLC.Name) uni fun ann)
+gatherGlobals :: forall m uni fun . (m ~ Reader (Word, TPLC.UniqueMap TPLC.TermUnique Word)) => Term TPLC.Name uni fun () -> m (Term TPLC.Name uni fun ())
 -- See Note [Globalifying]
 -- This is the key part!
 gatherGlobals (Apply x l r) = Apply x <$> gatherGlobals l <*> rewriteGlobals r
 gatherGlobals (LamAbs x n b) = do
     currentCounter <- asks fst
     b' <- local (\(c, m) -> (c+1, TPLC.insertByName n c m)) $ gatherGlobals b
-    pure $ LamAbs x (GName currentCounter) b'
+    pure $ GLamAbs x currentCounter b'
 gatherGlobals (Delay x b) = Delay x <$> gatherGlobals b
 gatherGlobals (Force x b) = Force x <$> gatherGlobals b
 -- This is just the non-recursive bits
 gatherGlobals t = rewriteGlobals t
 
-rewriteGlobals :: Term TPLC.Name uni fun ann -> Reader (Word64, TPLC.UniqueMap TPLC.TermUnique Word64) (Term (GName TPLC.Name) uni fun ann)
+rewriteGlobals :: Term TPLC.Name uni fun () -> Reader (Word, TPLC.UniqueMap TPLC.TermUnique Word) (Term TPLC.Name uni fun ())
 rewriteGlobals t = do
     m <- asks snd
-    let go n  =
+    let
+        go :: TPLC.Name -> Maybe (Term TPLC.Name uni fun ())
+        go n =
           case TPLC.lookupName n m of
-              Just w  -> GName w
-              Nothing -> NName n
-    pure $ termMapNames go t
+              Just w  -> Just $ GVar () w
+              Nothing -> Nothing
+    pure $ termSubstNames go t

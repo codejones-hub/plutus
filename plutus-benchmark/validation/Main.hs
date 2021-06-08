@@ -29,7 +29,7 @@ import           Text.Printf                              (printf)
   source code, along with README files explaining which scripts were involved in
   each validation during the tests.  --}
 
-type Term a    = UPLC.Term (UPLC.GName PLC.Name) PLC.DefaultUni PLC.DefaultFun a
+type Term a    = UPLC.Term PLC.Name PLC.DefaultUni PLC.DefaultFun a
 type Program a = UPLC.Program PLC.Name PLC.DefaultUni PLC.DefaultFun a
 type PlcParserError = PLC.Error PLC.DefaultUni PLC.DefaultFun PLC.AlexPosn
 

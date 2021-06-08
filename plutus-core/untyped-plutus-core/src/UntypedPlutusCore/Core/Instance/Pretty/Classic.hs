@@ -27,14 +27,16 @@ instance
         , GShow uni, Closed uni, uni `Everywhere` PrettyConst, Pretty fun
         ) => PrettyBy (PrettyConfigClassic configName) (Term name uni fun a) where
     prettyBy config = go where
-        go (Constant _ val)     = parens' $ "con" </> prettyTypeOf val </> pretty val  -- NB: actually calls prettyConst
-        go (Builtin _ bi)       = parens' $ "builtin" </> pretty bi
-        go (Var _ name)         = prettyName name
-        go (LamAbs _ name body) = parens' $ "lam" </> vsep' [prettyName name, go body]
-        go (Apply _ fun arg)    = brackets' $ vsep' [go fun, go arg]
-        go (Delay _ term)       = parens' ("delay" </> go term)
-        go (Force _ term)       = parens' ("force" </> go term)
-        go (Error _)            = parens' "error"
+        go (Constant _ val)      = parens' $ "con" </> prettyTypeOf val </> pretty val  -- NB: actually calls prettyConst
+        go (Builtin _ bi)        = parens' $ "builtin" </> pretty bi
+        go (Var _ name)          = prettyName name
+        go (GVar _ name)         = pretty name
+        go (LamAbs _ name body)  = parens' $ "lam" </> vsep' [prettyName name, go body]
+        go (GLamAbs _ name body) = parens' $ "glam" </> vsep' [prettyName name, go body]
+        go (Apply _ fun arg)     = brackets' $ vsep' [go fun, go arg]
+        go (Delay _ term)        = parens' ("delay" </> go term)
+        go (Force _ term)        = parens' ("force" </> go term)
+        go (Error _)             = parens' "error"
 
         prettyName :: PrettyClassicBy configName n => n -> Doc ann
         prettyName = prettyBy config

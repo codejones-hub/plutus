@@ -115,7 +115,7 @@ handleError ty e = case U._ewcError e of
 handleUError ::
           U.ErrorWithCause (U.EvaluationError user internal) term
        -> Either (U.ErrorWithCause (U.EvaluationError user internal) term)
-                 (U.Term (U.GName Name) DefaultUni DefaultFun ())
+                 (U.Term Name DefaultUni DefaultFun ())
 handleUError e = case U._ewcError e of
   U.UserEvaluationError     _ -> return (U.Error ())
   U.InternalEvaluationError _ -> throwError e
@@ -158,11 +158,11 @@ prop_agree_termEval tyG tmG = do
     evaluateCkNoEmit defaultBuiltinsRuntime tm `catchError` handleError ty
 
   -- erase CK output
-  let tmUCk = U.globalifyTerm $ U.erase tmCk
+  let tmUCk = U.erase tmCk
 
   -- run untyped CEK on erased input
   tmUCek <- withExceptT UCekP $ liftEither $
-    U.evaluateCekNoEmit defaultCekParameters (U.globalifyTerm $ U.erase tm) `catchError` handleUError
+    U.evaluateCekNoEmit defaultCekParameters (U.erase tm) `catchError` handleUError
 
   -- check if typed CK and untyped CEK give the same output modulo erasure
   unless (tmUCk == tmUCek) $
@@ -307,7 +307,7 @@ data Ctrex
   | CtrexUntypedTermEvaluationMismatch
     ClosedTypeG
     ClosedTermG
-    [U.Term (U.GName Name) DefaultUni DefaultFun ()]
+    [U.Term Name DefaultUni DefaultFun ()]
 
 instance Show TestFail where
   show (TypeError e)  = show e

@@ -94,6 +94,8 @@ instance ( Closed uni
         Force    ann t    -> encodeTerm 5 <> encode ann <> encode t
         Error    ann      -> encodeTerm 6 <> encode ann
         Builtin  ann bn   -> encodeTerm 7 <> encode ann <> encode bn
+        GVar      ann n   -> encodeTerm 8 <> encode ann <> encode n
+        GLamAbs   ann n t -> encodeTerm 9 <> encode ann <> encode n <> encode t
 
     decode = go =<< decodeTerm
         where go 0 = Var      <$> decode <*> decode
@@ -104,12 +106,16 @@ instance ( Closed uni
               go 5 = Force    <$> decode <*> decode
               go 6 = Error    <$> decode
               go 7 = Builtin  <$> decode <*> decode
+              go 8 = GVar  <$> decode <*> decode
+              go 9 = GLamAbs   <$> decode <*> decode <*> decode
               go _ = fail "Failed to decode Term Name ()"
 
     size tm sz = termTagWidth + sz + case tm of
         Var      ann n    -> getSize ann + getSize n
+        GVar      ann n   -> getSize ann + getSize n
         Delay    ann t    -> getSize ann + getSize t
         LamAbs   ann n t  -> getSize ann + getSize n + getSize t
+        GLamAbs   ann n t -> getSize ann + getSize n + getSize t
         Apply    ann t t' -> getSize ann + getSize t + getSize t'
         Constant ann c    -> getSize ann + getSize c
         Force    ann t    -> getSize ann + getSize t

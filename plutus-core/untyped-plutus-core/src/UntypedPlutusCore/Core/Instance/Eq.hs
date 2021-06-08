@@ -29,8 +29,13 @@ eqTermM (Builtin _ bi1) (Builtin _ bi2) =
     eqM bi1 bi2
 eqTermM (Var _ name1) (Var _ name2) =
     eqNameM name1 name2
+eqTermM (GVar _ name1) (GVar _ name2) =
+    eqM name1 name2
 eqTermM (LamAbs _ name1 body1) (LamAbs _ name2 body2) =
     withTwinBindings name1 name2 $ eqTermM body1 body2
+eqTermM (GLamAbs _ name1 body1) (GLamAbs _ name2 body2) = do
+    eqM name1 name2
+    eqTermM body1 body2
 eqTermM (Apply _ fun1 arg1) (Apply _ fun2 arg2) = do
     eqTermM fun1 fun2
     eqTermM arg1 arg2
@@ -42,7 +47,9 @@ eqTermM (Error _) (Error _) = pure ()
 eqTermM Constant{} _ = empty
 eqTermM Builtin{}  _ = empty
 eqTermM Var{}      _ = empty
+eqTermM GVar{}      _ = empty
 eqTermM LamAbs{}   _ = empty
+eqTermM GLamAbs{}   _ = empty
 eqTermM Apply{}    _ = empty
 eqTermM Delay{}    _ = empty
 eqTermM Force{}    _ = empty

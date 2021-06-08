@@ -29,10 +29,15 @@ instance
         Constant _ val -> unitDocM $ pretty val
         Builtin _ bi -> unitDocM $ pretty bi
         Var _ name -> prettyM name
+        GVar _ name -> prettyM name
         LamAbs _ name body ->
             compoundDocM binderFixity $ \prettyIn ->
                 let prettyBot x = prettyIn ToTheRight botFixity x
                 in "\\" <> prettyBot name <+> "->" <+> prettyBot body
+        GLamAbs _ name body ->
+            compoundDocM binderFixity $ \prettyIn ->
+                let prettyBot x = prettyIn ToTheRight botFixity x
+                in "\\g" <> prettyBot name <+> "->" <+> prettyBot body
         Apply _ fun arg -> fun `juxtPrettyM` arg
         Delay _ term ->
             sequenceDocM ToTheRight juxtFixity $ \prettyEl ->

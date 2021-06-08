@@ -853,7 +853,7 @@ runEval (EvalOptions language inp ifmt evalMode printMode budgetMode timingMode 
             CK  -> errorWithoutStackTrace "There is no CK machine for Untyped Plutus Core"
             CEK -> do
                   UntypedProgram prog <- getProgram UntypedPLC ifmt inp
-                  let term = void . UPLC.globalifyTerm $ UPLC.toTerm $ prog
+                  let term = UPLC.globalifyTerm $ void $ UPLC.toTerm $ prog
                       !_ = rnf term
                       cekparams = case cekModel of
                                 Default -> PLC.defaultCekParameters  -- AST nodes are charged according to the default cost model

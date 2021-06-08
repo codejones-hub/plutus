@@ -40,11 +40,13 @@ termUniques f = \case
 termSubterms :: Traversal' (Term name uni fun ann) (Term name uni fun ann)
 termSubterms f = \case
     LamAbs ann n t  -> LamAbs ann n <$> f t
+    GLamAbs ann n t -> GLamAbs ann n <$> f t
     Apply ann t1 t2 -> Apply ann <$> f t1 <*> f t2
     Delay ann t     -> Delay ann <$> f t
     Force ann t     -> Force ann <$> f t
     e@Error {}      -> pure e
     v@Var {}        -> pure v
+    v@GVar {}       -> pure v
     c@Constant {}   -> pure c
     b@Builtin {}    -> pure b
 

@@ -84,7 +84,7 @@ runTPlc values = do
 runUPlc
     :: ToUPlc a DefaultUni TPLC.DefaultFun
     => [a]
-    -> ExceptT SomeException IO (UPLC.EvaluationResult (UPLC.Term (UPLC.GName TPLC.Name) DefaultUni TPLC.DefaultFun ()))
+    -> ExceptT SomeException IO (UPLC.EvaluationResult (UPLC.Term TPLC.Name DefaultUni TPLC.DefaultFun ()))
 runUPlc values = do
     ps <- traverse toUPlc values
     let (UPLC.Program _ _ t) = foldl1 UPLC.applyProgram ps
