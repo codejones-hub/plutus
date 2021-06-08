@@ -20,6 +20,7 @@
 {-# LANGUAGE TypeFamilies             #-}
 {-# LANGUAGE TypeOperators            #-}
 {-# LANGUAGE UndecidableInstances     #-}
+{-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-uniques -dsuppress-coercions -dsuppress-type-applications -dsuppress-unfoldings -dsuppress-idinfo -dumpdir /tmp/dumps #-}
 
 module UntypedPlutusCore.Evaluation.Machine.Cek.Internal
     -- See Note [Compilation peculiarities].
@@ -568,18 +569,21 @@ runCekM (MachineParameters costs runtime) (ExBudgetMode getExBudgetInfo) emittin
         Just logsRef -> DList.toList <$> readSTRef logsRef
     pure (errOrRes, st', logs)
 
+--{-# INLINE extendEnv #-}
 -- | Extend an environment with a variable name, the value the variable stands for
 -- and the environment the value is defined in.
-extendEnv :: Name -> CekValue uni fun -> CekValEnv uni fun -> CekValEnv uni fun
-extendEnv = insertByName
+extendEnv :: (GivenCekGEnv uni fun s) => GName Name -> CekValue uni fun -> CekValEnv uni fun -> CekM uni fun s (CekValEnv uni fun)
+extendEnv (NName n) v e = pure $ insertByName n v e
+extendEnv (GName n) v e = CekCarryingM $ STArray.writeArray ?cekGEnv n v >> pure e
 
+--{-# INLINE lookupVarName #-}
 -- | Look up a variable name in the environment.
-lookupVarName :: forall uni fun s . (PrettyUni uni fun) => Name -> CekValEnv uni fun -> CekM uni fun s (CekValue uni fun)
-lookupVarName varName varEnv =
-    case lookupName varName varEnv of
-        Nothing  -> throwingWithCause _MachineError OpenTermEvaluatedMachineError $ Just var where
-            var = Var () (NName varName)
+lookupVarName :: forall uni fun s . (PrettyUni uni fun, GivenCekGEnv uni fun s) => GName Name -> CekValEnv uni fun -> CekM uni fun s (CekValue uni fun)
+lookupVarName v@(NName n) varEnv =
+    case lookupName n varEnv of
+        Nothing  -> throwingWithCause _MachineError OpenTermEvaluatedMachineError $ Just (Var () v)
         Just val -> pure val
+lookupVarName (GName w) _ = CekCarryingM $ STArray.readArray ?cekGEnv w
 
 -- | Take pieces of a possibly partial builtin application and either create a 'CekValue' using
 -- 'makeKnown' or a partial builtin application depending on whether the built-in function is
@@ -623,9 +627,7 @@ enterComputeCek = computeCek (toWordArray 0) where
     -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
     computeCek !unbudgetedSteps ctx env (Var _ name) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BVar unbudgetedSteps
-        val <- case name of
-            NName n -> lookupVarName n env
-            GName w -> CekCarryingM $ STArray.readArray ?cekGEnv w
+        val <- lookupVarName name env
         returnCek unbudgetedSteps' ctx val
     computeCek !unbudgetedSteps ctx _ (Constant _ val) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BConst unbudgetedSteps
@@ -722,10 +724,9 @@ enterComputeCek = computeCek (toWordArray 0) where
         -> CekValue uni fun   -- lhs of application
         -> CekValue uni fun   -- rhs of application
         -> CekM uni fun s (Term (GName Name) uni fun ())
-    applyEvaluate !unbudgetedSteps ctx (VLamAbs (NName name) body env) arg = computeCek unbudgetedSteps ctx (extendEnv name arg env) body
-    applyEvaluate !unbudgetedSteps ctx (VLamAbs (GName name) body env) arg = do
-        CekCarryingM $ STArray.writeArray ?cekGEnv name arg
-        computeCek unbudgetedSteps ctx env body
+    applyEvaluate !unbudgetedSteps ctx (VLamAbs name body env) arg = do
+        env' <- extendEnv name arg env
+        computeCek unbudgetedSteps ctx env' body
     -- TODO: check if annotating @f@ and @exF@ with bangs speeds anything up.
     applyEvaluate !unbudgetedSteps ctx (VBuiltin fun term env (BuiltinRuntime sch f exF)) arg = do
         let term' = Apply () term $ dischargeCekValue arg
