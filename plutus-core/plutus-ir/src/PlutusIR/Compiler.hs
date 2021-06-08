@@ -53,7 +53,8 @@ simplify = DeadCode.removeDeadBindings . Inline.inline . Beta.beta
 
 -- | Perform some simplification of a 'Term'.
 simplifyTerm :: forall m e uni fun a b. Compiling m e uni fun a => Term TyName Name uni fun b -> m (Term TyName Name uni fun b)
-simplifyTerm = runIfOpts $ PLC.rename >=> simplify'
+simplifyTerm = runIfOpts $ PLC.rename >=> pure . DeadCode.removeDeadBindings >=> simplify'
+    -- NOTE: we need at least one pass of dead code elimination
     where
         simplify' :: Term TyName Name uni fun b -> m (Term TyName Name uni fun b)
         simplify' t = do
