@@ -1,94 +1,471 @@
 (program
   (let
-    (rec)
-    (datatypebind
-      (datatype
-        (tyvardecl List (fun (type) (type)))
-        (tyvardecl a (type))
-        Nil_match
-        (vardecl Nil [List a]) (vardecl Cons (fun a (fun [List a] [List a])))
-      )
+    (nonrec)
+    (termbind
+      (strict)
+      (vardecl addInteger (fun (con integer) (fun (con integer) (con integer))))
+      (builtin addInteger)
+    )
+    (termbind
+      (strict)
+      (vardecl appendString (fun (con string) (fun (con string) (con string))))
+      (builtin append)
     )
     (let
-      (nonrec)
+      (rec)
       (datatypebind
-        (datatype (tyvardecl Unit (type))  Unit_match (vardecl Unit Unit))
+        (datatype
+          (tyvardecl List (fun (type) (type)))
+          (tyvardecl a (type))
+          Nil_match
+          (vardecl Nil [List a]) (vardecl Cons (fun a (fun [List a] [List a])))
+        )
       )
       (let
-        (rec)
+        (nonrec)
         (termbind
-          (nonstrict)
+          (strict)
           (vardecl
-            mapDirect
-            (all a (type) (all b (type) (fun (fun a b) (fun [List a] [List b]))))
+            build
+            (all a (type) (fun (all b (type) (fun (fun a (fun b b)) (fun b b))) [List a]))
           )
           (abs
             a
             (type)
-            (abs
-              b
-              (type)
-              (lam
-                f
-                (fun a b)
+            (lam
+              g
+              (all b (type) (fun (fun a (fun b b)) (fun b b)))
+              [ [ { g [List a] } { Cons a } ] { Nil a } ]
+            )
+          )
+        )
+        (termbind
+          (strict)
+          (vardecl charToString (fun (con char) (con string)))
+          (builtin charToString)
+        )
+        (typebind (tyvardecl Char (type)) (con char))
+        (termbind
+          (strict)
+          (vardecl
+            concatenate
+            (fun (con bytestring) (fun (con bytestring) (con bytestring)))
+          )
+          (builtin concatenate)
+        )
+        (termbind
+          (strict)
+          (vardecl decodeUtf (fun (con bytestring) (con string)))
+          (builtin decodeUtf8)
+        )
+        (termbind
+          (strict)
+          (vardecl
+            divideInteger (fun (con integer) (fun (con integer) (con integer)))
+          )
+          (builtin divideInteger)
+        )
+        (termbind
+          (strict)
+          (vardecl
+            dropByteString
+            (fun (con integer) (fun (con bytestring) (con bytestring)))
+          )
+          (builtin dropByteString)
+        )
+        (termbind
+          (strict) (vardecl emptyByteString (con bytestring)) (con bytestring #)
+        )
+        (termbind (strict) (vardecl emptyString (con string)) (con string ""))
+        (termbind
+          (strict)
+          (vardecl encodeUtf (fun (con string) (con bytestring)))
+          (builtin encodeUtf8)
+        )
+        (datatypebind
+          (datatype
+            (tyvardecl Bool (type))
+
+            Bool_match
+            (vardecl True Bool) (vardecl False Bool)
+          )
+        )
+        (termbind
+          (strict)
+          (vardecl
+            equalsByteString (fun (con bytestring) (fun (con bytestring) Bool))
+          )
+          (lam
+            arg
+            (con bytestring)
+            (lam
+              arg
+              (con bytestring)
+              [
                 (lam
-                  l
-                  [List a]
-                  [
-                    [
+                  b
+                  (con bool)
+                  [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+                )
+                [ [ (builtin equalsByteString) arg ] arg ]
+              ]
+            )
+          )
+        )
+        (termbind
+          (strict)
+          (vardecl equalsInteger (fun (con integer) (fun (con integer) Bool)))
+          (lam
+            arg
+            (con integer)
+            (lam
+              arg
+              (con integer)
+              [
+                (lam
+                  b
+                  (con bool)
+                  [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+                )
+                [ [ (builtin equalsInteger) arg ] arg ]
+              ]
+            )
+          )
+        )
+        (termbind
+          (strict)
+          (vardecl equalsString (fun (con string) (fun (con string) Bool)))
+          (lam
+            arg
+            (con string)
+            (lam
+              arg
+              (con string)
+              [
+                (lam
+                  b
+                  (con bool)
+                  [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+                )
+                [ [ (builtin equalsString) arg ] arg ]
+              ]
+            )
+          )
+        )
+        (datatypebind
+          (datatype (tyvardecl Unit (type))  Unit_match (vardecl Unit Unit))
+        )
+        (termbind
+          (strict)
+          (vardecl error (all a (type) (fun Unit a)))
+          (abs e (type) (lam thunk Unit (error e)))
+        )
+        (termbind
+          (strict)
+          (vardecl
+            greaterThanByteString
+            (fun (con bytestring) (fun (con bytestring) Bool))
+          )
+          (lam
+            arg
+            (con bytestring)
+            (lam
+              arg
+              (con bytestring)
+              [
+                (lam
+                  b
+                  (con bool)
+                  [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+                )
+                [ [ (builtin greaterThanByteString) arg ] arg ]
+              ]
+            )
+          )
+        )
+        (termbind
+          (strict)
+          (vardecl
+            greaterThanEqInteger (fun (con integer) (fun (con integer) Bool))
+          )
+          (lam
+            arg
+            (con integer)
+            (lam
+              arg
+              (con integer)
+              [
+                (lam
+                  b
+                  (con bool)
+                  [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+                )
+                [ [ (builtin greaterThanEqualsInteger) arg ] arg ]
+              ]
+            )
+          )
+        )
+        (termbind
+          (strict)
+          (vardecl
+            greaterThanInteger (fun (con integer) (fun (con integer) Bool))
+          )
+          (lam
+            arg
+            (con integer)
+            (lam
+              arg
+              (con integer)
+              [
+                (lam
+                  b
+                  (con bool)
+                  [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+                )
+                [ [ (builtin greaterThanInteger) arg ] arg ]
+              ]
+            )
+          )
+        )
+        (termbind
+          (strict)
+          (vardecl
+            lessThanByteString
+            (fun (con bytestring) (fun (con bytestring) Bool))
+          )
+          (lam
+            arg
+            (con bytestring)
+            (lam
+              arg
+              (con bytestring)
+              [
+                (lam
+                  b
+                  (con bool)
+                  [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+                )
+                [ [ (builtin lessThanByteString) arg ] arg ]
+              ]
+            )
+          )
+        )
+        (termbind
+          (strict)
+          (vardecl
+            lessThanEqInteger (fun (con integer) (fun (con integer) Bool))
+          )
+          (lam
+            arg
+            (con integer)
+            (lam
+              arg
+              (con integer)
+              [
+                (lam
+                  b
+                  (con bool)
+                  [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+                )
+                [ [ (builtin lessThanEqualsInteger) arg ] arg ]
+              ]
+            )
+          )
+        )
+        (termbind
+          (strict)
+          (vardecl lessThanInteger (fun (con integer) (fun (con integer) Bool)))
+          (lam
+            arg
+            (con integer)
+            (lam
+              arg
+              (con integer)
+              [
+                (lam
+                  b
+                  (con bool)
+                  [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+                )
+                [ [ (builtin lessThanInteger) arg ] arg ]
+              ]
+            )
+          )
+        )
+        (let
+          (rec)
+          (termbind
+            (nonstrict)
+            (vardecl
+              mapDirect
+              (all a (type) (all b (type) (fun (fun a b) (fun [List a] [List b]))))
+            )
+            (abs
+              a
+              (type)
+              (abs
+                b
+                (type)
+                (lam
+                  f
+                  (fun a b)
+                  (lam
+                    l
+                    [List a]
+                    (let
+                      (nonrec)
+                      (termbind (nonstrict) (vardecl wild [List a]) l)
                       [
-                        { [ { Nil_match a } l ] (fun Unit [List b]) }
-                        (lam thunk Unit { Nil b })
-                      ]
-                      (lam
-                        x
-                        a
-                        (lam
-                          xs
-                          [List a]
+                        [
+                          [
+                            { [ { Nil_match a } l ] (fun Unit [List b]) }
+                            (lam thunk Unit { Nil b })
+                          ]
                           (lam
-                            thunk
-                            Unit
-                            [
-                              [ { Cons b } [ f x ] ]
-                              [ [ { { mapDirect a } b } f ] xs ]
-                            ]
+                            x
+                            a
+                            (lam
+                              xs
+                              [List a]
+                              (lam
+                                thunk
+                                Unit
+                                [
+                                  [ { Cons b } [ f x ] ]
+                                  [ [ { { mapDirect a } b } f ] xs ]
+                                ]
+                              )
+                            )
                           )
-                        )
-                      )
-                    ]
-                    Unit
-                  ]
+                        ]
+                        Unit
+                      ]
+                    )
+                  )
                 )
               )
             )
           )
-        )
-        [
-          [
-            { { mapDirect (con integer) } (con integer) }
-            [ (builtin addInteger) (con integer 1) ]
-          ]
-          [
-            (let
-              (nonrec)
-              (termbind
-                (strict)
-                (vardecl
-                  c
-                  (fun (con integer) (fun [List (con integer)] [List (con integer)]))
-                )
-                { Cons (con integer) }
+          (let
+            (nonrec)
+            (termbind
+              (strict)
+              (vardecl
+                modInteger (fun (con integer) (fun (con integer) (con integer)))
               )
+              (builtin modInteger)
+            )
+            (termbind
+              (strict)
+              (vardecl
+                multiplyInteger
+                (fun (con integer) (fun (con integer) (con integer)))
+              )
+              (builtin multiplyInteger)
+            )
+            (termbind
+              (strict)
+              (vardecl
+                quotientInteger
+                (fun (con integer) (fun (con integer) (con integer)))
+              )
+              (builtin quotientInteger)
+            )
+            (termbind
+              (strict)
+              (vardecl
+                remainderInteger
+                (fun (con integer) (fun (con integer) (con integer)))
+              )
+              (builtin remainderInteger)
+            )
+            (termbind
+              (strict)
+              (vardecl sha2_ (fun (con bytestring) (con bytestring)))
+              (builtin sha2_256)
+            )
+            (termbind
+              (strict)
+              (vardecl sha3_ (fun (con bytestring) (con bytestring)))
+              (builtin sha3_256)
+            )
+            (termbind
+              (strict)
+              (vardecl
+                subtractInteger
+                (fun (con integer) (fun (con integer) (con integer)))
+              )
+              (builtin subtractInteger)
+            )
+            (termbind
+              (strict)
+              (vardecl
+                takeByteString
+                (fun (con integer) (fun (con bytestring) (con bytestring)))
+              )
+              (builtin takeByteString)
+            )
+            (typebind (tyvardecl Integer (type)) (con integer))
+            (termbind
+              (strict)
+              (vardecl trace (fun (con string) Unit))
               (lam
-                n
-                [List (con integer)]
-                [ [ c (con integer 0) ] [ [ c (con integer 1) ] n ] ]
+                arg
+                (con string)
+                [ (lam b (con unit) Unit) [ (builtin trace) arg ] ]
               )
             )
-            { Nil (con integer) }
-          ]
-        ]
+            (typebind (tyvardecl String (type)) (con string))
+            (termbind
+              (strict)
+              (vardecl
+                verifySignature
+                (fun (con bytestring) (fun (con bytestring) (fun (con bytestring) Bool)))
+              )
+              (lam
+                arg
+                (con bytestring)
+                (lam
+                  arg
+                  (con bytestring)
+                  (lam
+                    arg
+                    (con bytestring)
+                    [
+                      (lam
+                        b
+                        (con bool)
+                        [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+                      )
+                      [ [ [ (builtin verifySignature) arg ] arg ] arg ]
+                    ]
+                  )
+                )
+              )
+            )
+            (typebind (tyvardecl ByteString (type)) (con bytestring))
+            [
+              [
+                { { mapDirect (con integer) } (con integer) }
+                [ addInteger (con integer 1) ]
+              ]
+              [
+                { build (con integer) }
+                (abs
+                  a
+                  (type)
+                  (lam
+                    c
+                    (fun (con integer) (fun a a))
+                    (lam
+                      n a [ [ c (con integer 0) ] [ [ c (con integer 1) ] n ] ]
+                    )
+                  )
+                )
+              ]
+            ]
+          )
+        )
       )
     )
   )

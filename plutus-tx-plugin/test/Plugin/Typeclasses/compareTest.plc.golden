@@ -18,15 +18,14 @@
         (lam
           arg
           (con integer)
-          (let
-            (nonrec)
-            (termbind
-              (strict)
-              (vardecl b (con bool))
-              [ [ (builtin equalsInteger) arg ] arg ]
+          [
+            (lam
+              b
+              (con bool)
+              [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
             )
-            [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
-          )
+            [ [ (builtin equalsInteger) arg ] arg ]
+          ]
         )
       )
     )
@@ -39,15 +38,14 @@
         (lam
           arg
           (con integer)
-          (let
-            (nonrec)
-            (termbind
-              (strict)
-              (vardecl b (con bool))
-              [ [ (builtin lessThanEqualsInteger) arg ] arg ]
+          [
+            (lam
+              b
+              (con bool)
+              [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
             )
-            [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
-          )
+            [ [ (builtin lessThanEqualsInteger) arg ] arg ]
+          ]
         )
       )
     )
@@ -60,154 +58,111 @@
       )
     )
     (datatypebind
-      (datatype
-        (tyvardecl Ord (fun (type) (type)))
-        (tyvardecl a (type))
-        Ord_match
-        (vardecl
-          CConsOrd
-          (fun [(lam a (type) (fun a (fun a Bool))) a] (fun (fun a (fun a Ordering)) (fun (fun a (fun a Bool)) (fun (fun a (fun a Bool)) (fun (fun a (fun a Bool)) (fun (fun a (fun a Bool)) (fun (fun a (fun a a)) (fun (fun a (fun a a)) [Ord a]))))))))
-        )
-      )
-    )
-    (datatypebind
       (datatype (tyvardecl Unit (type))  Unit_match (vardecl Unit Unit))
     )
     (termbind
-      (nonstrict)
-      (vardecl fOrdInteger [Ord (con integer)])
-      [
-        [
-          [
+      (strict)
+      (vardecl
+        fOrdData_ccompare (fun (con integer) (fun (con integer) Ordering))
+      )
+      (lam
+        x
+        (con integer)
+        (lam
+          y
+          (con integer)
+          (let
+            (nonrec)
+            (termbind (nonstrict) (vardecl wild Bool) [ [ equalsInteger x ] y ])
             [
               [
                 [
-                  [
-                    [ { CConsOrd (con integer) } equalsInteger ]
-                    (lam
-                      x
-                      (con integer)
-                      (lam
-                        y
-                        (con integer)
-                        [
-                          [
-                            [
-                              {
-                                [ Bool_match [ [ equalsInteger x ] y ] ]
-                                (fun Unit Ordering)
-                              }
-                              (lam thunk Unit EQ)
-                            ]
-                            (lam
-                              thunk
-                              Unit
-                              [
-                                [
-                                  [
-                                    {
-                                      [
-                                        Bool_match [ [ lessThanEqInteger x ] y ]
-                                      ]
-                                      (fun Unit Ordering)
-                                    }
-                                    (lam thunk Unit LT)
-                                  ]
-                                  (lam thunk Unit GT)
-                                ]
-                                Unit
-                              ]
-                            )
-                          ]
-                          Unit
-                        ]
-                      )
-                    )
-                  ]
-                  (lam
-                    arg
-                    (con integer)
-                    (lam
-                      arg
-                      (con integer)
-                      (let
-                        (nonrec)
-                        (termbind
-                          (strict)
-                          (vardecl b (con bool))
-                          [ [ (builtin lessThanInteger) arg ] arg ]
-                        )
-                        [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
-                      )
-                    )
-                  )
+                  {
+                    [ Bool_match [ [ equalsInteger x ] y ] ] (fun Unit Ordering)
+                  }
+                  (lam thunk Unit EQ)
                 ]
-                lessThanEqInteger
-              ]
-              (lam
-                arg
-                (con integer)
                 (lam
-                  arg
-                  (con integer)
+                  thunk
+                  Unit
                   (let
                     (nonrec)
                     (termbind
-                      (strict)
-                      (vardecl b (con bool))
-                      [ [ (builtin greaterThanInteger) arg ] arg ]
+                      (nonstrict)
+                      (vardecl wild Bool)
+                      [ [ lessThanEqInteger x ] y ]
                     )
-                    [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+                    [
+                      [
+                        [
+                          {
+                            [ Bool_match [ [ lessThanEqInteger x ] y ] ]
+                            (fun Unit Ordering)
+                          }
+                          (lam thunk Unit LT)
+                        ]
+                        (lam thunk Unit GT)
+                      ]
+                      Unit
+                    ]
                   )
                 )
-              )
+              ]
+              Unit
             ]
-            (lam
-              arg
-              (con integer)
-              (lam
-                arg
-                (con integer)
-                (let
-                  (nonrec)
-                  (termbind
-                    (strict)
-                    (vardecl b (con bool))
-                    [ [ (builtin greaterThanEqualsInteger) arg ] arg ]
-                  )
-                  [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
-                )
-              )
+          )
+        )
+      )
+    )
+    (termbind
+      (strict)
+      (vardecl
+        fOrdInteger_cmax (fun (con integer) (fun (con integer) (con integer)))
+      )
+      (lam
+        x
+        (con integer)
+        (lam
+          y
+          (con integer)
+          (let
+            (nonrec)
+            (termbind
+              (nonstrict) (vardecl wild Bool) [ [ lessThanEqInteger x ] y ]
             )
-          ]
-          (lam
-            x
-            (con integer)
-            (lam
-              y
-              (con integer)
+            [
               [
                 [
-                  [
-                    {
-                      [ Bool_match [ [ lessThanEqInteger x ] y ] ]
-                      (fun Unit (con integer))
-                    }
-                    (lam thunk Unit y)
-                  ]
-                  (lam thunk Unit x)
+                  {
+                    [ Bool_match [ [ lessThanEqInteger x ] y ] ]
+                    (fun Unit (con integer))
+                  }
+                  (lam thunk Unit y)
                 ]
-                Unit
+                (lam thunk Unit x)
               ]
-            )
+              Unit
+            ]
           )
-        ]
+        )
+      )
+    )
+    (termbind
+      (strict)
+      (vardecl
+        fOrdInteger_cmin (fun (con integer) (fun (con integer) (con integer)))
+      )
+      (lam
+        x
+        (con integer)
         (lam
-          x
+          y
           (con integer)
-          (lam
-            y
-            (con integer)
+          (let
+            (nonrec)
+            (termbind
+              (nonstrict) (vardecl wild Bool) [ [ lessThanEqInteger x ] y ]
+            )
             [
               [
                 [
@@ -223,87 +178,429 @@
             ]
           )
         )
-      ]
+      )
     )
-    [
-      [
-        (let
-          (nonrec)
-          (termbind (strict) (vardecl dOrd [Ord (con integer)]) fOrdInteger)
-          (lam
-            a
-            (con integer)
+    (termbind
+      (strict)
+      (vardecl greaterThanEqInteger (fun (con integer) (fun (con integer) Bool))
+      )
+      (lam
+        arg
+        (con integer)
+        (lam
+          arg
+          (con integer)
+          [
             (lam
               b
-              (con integer)
+              (con bool)
+              [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+            )
+            [ [ (builtin greaterThanEqualsInteger) arg ] arg ]
+          ]
+        )
+      )
+    )
+    (termbind
+      (strict)
+      (vardecl greaterThanInteger (fun (con integer) (fun (con integer) Bool)))
+      (lam
+        arg
+        (con integer)
+        (lam
+          arg
+          (con integer)
+          [
+            (lam
+              b
+              (con bool)
+              [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+            )
+            [ [ (builtin greaterThanInteger) arg ] arg ]
+          ]
+        )
+      )
+    )
+    (termbind
+      (strict)
+      (vardecl lessThanInteger (fun (con integer) (fun (con integer) Bool)))
+      (lam
+        arg
+        (con integer)
+        (lam
+          arg
+          (con integer)
+          [
+            (lam
+              b
+              (con bool)
+              [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+            )
+            [ [ (builtin lessThanInteger) arg ] arg ]
+          ]
+        )
+      )
+    )
+    (datatypebind
+      (datatype
+        (tyvardecl Ord (fun (type) (type)))
+        (tyvardecl a (type))
+        Ord_match
+        (vardecl
+          CConsOrd
+          (fun [(lam a (type) (fun a (fun a Bool))) a] (fun (fun a (fun a Ordering)) (fun (fun a (fun a Bool)) (fun (fun a (fun a Bool)) (fun (fun a (fun a Bool)) (fun (fun a (fun a Bool)) (fun (fun a (fun a a)) (fun (fun a (fun a a)) [Ord a]))))))))
+        )
+      )
+    )
+    (termbind
+      (nonstrict)
+      (vardecl fOrdInteger [Ord (con integer)])
+      [
+        [
+          [
+            [
               [
                 [
                   [
-                    [
-                      {
-                        [
-                          Ordering_match
-                          [
-                            [
-                              [
-                                {
-                                  [ { Ord_match (con integer) } dOrd ]
-                                  (fun (con integer) (fun (con integer) Ordering))
-                                }
-                                (lam
-                                  v
-                                  [(lam a (type) (fun a (fun a Bool))) (con integer)]
-                                  (lam
-                                    v
-                                    (fun (con integer) (fun (con integer) Ordering))
-                                    (lam
-                                      v
-                                      (fun (con integer) (fun (con integer) Bool))
-                                      (lam
-                                        v
-                                        (fun (con integer) (fun (con integer) Bool))
-                                        (lam
-                                          v
-                                          (fun (con integer) (fun (con integer) Bool))
-                                          (lam
-                                            v
-                                            (fun (con integer) (fun (con integer) Bool))
-                                            (lam
-                                              v
-                                              (fun (con integer) (fun (con integer) (con integer)))
-                                              (lam
-                                                v
-                                                (fun (con integer) (fun (con integer) (con integer)))
-                                                v
-                                              )
-                                            )
-                                          )
-                                        )
-                                      )
-                                    )
-                                  )
-                                )
-                              ]
-                              a
-                            ]
-                            b
-                          ]
-                        ]
-                        (fun Unit Ordering)
-                      }
-                      (lam thunk Unit EQ)
-                    ]
-                    (lam thunk Unit LT)
+                    [ { CConsOrd (con integer) } equalsInteger ]
+                    fOrdData_ccompare
                   ]
-                  (lam thunk Unit GT)
+                  lessThanInteger
                 ]
-                Unit
+                lessThanEqInteger
               ]
+              greaterThanInteger
+            ]
+            greaterThanEqInteger
+          ]
+          fOrdInteger_cmax
+        ]
+        fOrdInteger_cmin
+      ]
+    )
+    (termbind
+      (strict)
+      (vardecl addInteger (fun (con integer) (fun (con integer) (con integer))))
+      (builtin addInteger)
+    )
+    (termbind
+      (strict)
+      (vardecl appendString (fun (con string) (fun (con string) (con string))))
+      (builtin append)
+    )
+    (termbind
+      (strict)
+      (vardecl charToString (fun (con char) (con string)))
+      (builtin charToString)
+    )
+    (typebind (tyvardecl Char (type)) (con char))
+    (termbind
+      (strict)
+      (vardecl
+        concatenate
+        (fun (con bytestring) (fun (con bytestring) (con bytestring)))
+      )
+      (builtin concatenate)
+    )
+    (termbind
+      (strict)
+      (vardecl decodeUtf (fun (con bytestring) (con string)))
+      (builtin decodeUtf8)
+    )
+    (termbind
+      (strict)
+      (vardecl
+        divideInteger (fun (con integer) (fun (con integer) (con integer)))
+      )
+      (builtin divideInteger)
+    )
+    (termbind
+      (strict)
+      (vardecl
+        dropByteString
+        (fun (con integer) (fun (con bytestring) (con bytestring)))
+      )
+      (builtin dropByteString)
+    )
+    (termbind
+      (strict) (vardecl emptyByteString (con bytestring)) (con bytestring #)
+    )
+    (termbind (strict) (vardecl emptyString (con string)) (con string ""))
+    (termbind
+      (strict)
+      (vardecl encodeUtf (fun (con string) (con bytestring)))
+      (builtin encodeUtf8)
+    )
+    (termbind
+      (strict)
+      (vardecl
+        equalsByteString (fun (con bytestring) (fun (con bytestring) Bool))
+      )
+      (lam
+        arg
+        (con bytestring)
+        (lam
+          arg
+          (con bytestring)
+          [
+            (lam
+              b
+              (con bool)
+              [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+            )
+            [ [ (builtin equalsByteString) arg ] arg ]
+          ]
+        )
+      )
+    )
+    (termbind
+      (strict)
+      (vardecl equalsString (fun (con string) (fun (con string) Bool)))
+      (lam
+        arg
+        (con string)
+        (lam
+          arg
+          (con string)
+          [
+            (lam
+              b
+              (con bool)
+              [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+            )
+            [ [ (builtin equalsString) arg ] arg ]
+          ]
+        )
+      )
+    )
+    (termbind
+      (strict)
+      (vardecl error (all a (type) (fun Unit a)))
+      (abs e (type) (lam thunk Unit (error e)))
+    )
+    (termbind
+      (strict)
+      (vardecl
+        greaterThanByteString (fun (con bytestring) (fun (con bytestring) Bool))
+      )
+      (lam
+        arg
+        (con bytestring)
+        (lam
+          arg
+          (con bytestring)
+          [
+            (lam
+              b
+              (con bool)
+              [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+            )
+            [ [ (builtin greaterThanByteString) arg ] arg ]
+          ]
+        )
+      )
+    )
+    (termbind
+      (strict)
+      (vardecl
+        lessThanByteString (fun (con bytestring) (fun (con bytestring) Bool))
+      )
+      (lam
+        arg
+        (con bytestring)
+        (lam
+          arg
+          (con bytestring)
+          [
+            (lam
+              b
+              (con bool)
+              [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+            )
+            [ [ (builtin lessThanByteString) arg ] arg ]
+          ]
+        )
+      )
+    )
+    (termbind
+      (strict)
+      (vardecl modInteger (fun (con integer) (fun (con integer) (con integer))))
+      (builtin modInteger)
+    )
+    (termbind
+      (strict)
+      (vardecl
+        multiplyInteger (fun (con integer) (fun (con integer) (con integer)))
+      )
+      (builtin multiplyInteger)
+    )
+    (termbind
+      (strict)
+      (vardecl compare (all a (type) (fun [Ord a] (fun a (fun a Ordering)))))
+      (abs
+        a
+        (type)
+        (lam
+          v
+          [Ord a]
+          (let
+            (nonrec)
+            (termbind (nonstrict) (vardecl v [Ord a]) v)
+            [
+              { [ { Ord_match a } v ] (fun a (fun a Ordering)) }
+              (lam
+                v
+                [(lam a (type) (fun a (fun a Bool))) a]
+                (lam
+                  v
+                  (fun a (fun a Ordering))
+                  (lam
+                    v
+                    (fun a (fun a Bool))
+                    (lam
+                      v
+                      (fun a (fun a Bool))
+                      (lam
+                        v
+                        (fun a (fun a Bool))
+                        (lam
+                          v
+                          (fun a (fun a Bool))
+                          (lam v (fun a (fun a a)) (lam v (fun a (fun a a)) v))
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            ]
+          )
+        )
+      )
+    )
+    (termbind
+      (strict)
+      (vardecl opCompare (all a (type) (fun [Ord a] (fun a (fun a Ordering)))))
+      (abs
+        a
+        (type)
+        (lam
+          dOrd
+          [Ord a]
+          (lam
+            a
+            a
+            (lam
+              b
+              a
+              (let
+                (nonrec)
+                (termbind
+                  (nonstrict)
+                  (vardecl wild Ordering)
+                  [ [ [ { compare a } dOrd ] a ] b ]
+                )
+                [
+                  [
+                    [
+                      [
+                        {
+                          [ Ordering_match [ [ [ { compare a } dOrd ] a ] b ] ]
+                          (fun Unit Ordering)
+                        }
+                        (lam thunk Unit EQ)
+                      ]
+                      (lam thunk Unit LT)
+                    ]
+                    (lam thunk Unit GT)
+                  ]
+                  Unit
+                ]
+              )
             )
           )
         )
-        (con integer 1)
-      ]
+      )
+    )
+    (typebind
+      (tyvardecl Eq (fun (type) (type))) (lam a (type) (fun a (fun a Bool)))
+    )
+    (termbind
+      (strict)
+      (vardecl
+        quotientInteger (fun (con integer) (fun (con integer) (con integer)))
+      )
+      (builtin quotientInteger)
+    )
+    (termbind
+      (strict)
+      (vardecl
+        remainderInteger (fun (con integer) (fun (con integer) (con integer)))
+      )
+      (builtin remainderInteger)
+    )
+    (termbind
+      (strict)
+      (vardecl sha2_ (fun (con bytestring) (con bytestring)))
+      (builtin sha2_256)
+    )
+    (termbind
+      (strict)
+      (vardecl sha3_ (fun (con bytestring) (con bytestring)))
+      (builtin sha3_256)
+    )
+    (termbind
+      (strict)
+      (vardecl
+        subtractInteger (fun (con integer) (fun (con integer) (con integer)))
+      )
+      (builtin subtractInteger)
+    )
+    (termbind
+      (strict)
+      (vardecl
+        takeByteString
+        (fun (con integer) (fun (con bytestring) (con bytestring)))
+      )
+      (builtin takeByteString)
+    )
+    (typebind (tyvardecl Integer (type)) (con integer))
+    (termbind
+      (strict)
+      (vardecl trace (fun (con string) Unit))
+      (lam arg (con string) [ (lam b (con unit) Unit) [ (builtin trace) arg ] ])
+    )
+    (typebind (tyvardecl String (type)) (con string))
+    (termbind
+      (strict)
+      (vardecl
+        verifySignature
+        (fun (con bytestring) (fun (con bytestring) (fun (con bytestring) Bool)))
+      )
+      (lam
+        arg
+        (con bytestring)
+        (lam
+          arg
+          (con bytestring)
+          (lam
+            arg
+            (con bytestring)
+            [
+              (lam
+                b
+                (con bool)
+                [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
+              )
+              [ [ [ (builtin verifySignature) arg ] arg ] arg ]
+            ]
+          )
+        )
+      )
+    )
+    (typebind (tyvardecl ByteString (type)) (con bytestring))
+    [
+      [ [ { opCompare (con integer) } fOrdInteger ] (con integer 1) ]
       (con integer 2)
     ]
   )

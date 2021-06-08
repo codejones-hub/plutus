@@ -1,47 +1,51 @@
 (delay
   (lam
-    case_EmptyRose_7
+    case_EmptyRose_106
     [
-      case_EmptyRose_7
+      case_EmptyRose_106
       (delay
         (lam
-          case_Nil_21
+          case_Nil_112
           (lam
-            case_Cons_22
+            case_Cons_113
             [
               [
-                case_Cons_22
+                case_Cons_113
                 (delay
                   (lam
-                    case_EmptyRose_7
+                    case_EmptyRose_106
                     [
-                      case_EmptyRose_7
-                      (delay (lam case_Nil_14 (lam case_Cons_15 case_Nil_14)))
+                      case_EmptyRose_106
+                      (delay (lam case_Nil_108 (lam case_Cons_109 case_Nil_108))
+                      )
                     ]
                   )
                 )
               ]
               (delay
                 (lam
-                  case_Nil_21
+                  case_Nil_112
                   (lam
-                    case_Cons_22
+                    case_Cons_113
                     [
                       [
-                        case_Cons_22
+                        case_Cons_113
                         (delay
                           (lam
-                            case_EmptyRose_7
+                            case_EmptyRose_106
                             [
-                              case_EmptyRose_7
+                              case_EmptyRose_106
                               (delay
-                                (lam case_Nil_14 (lam case_Cons_15 case_Nil_14))
+                                (lam
+                                  case_Nil_108 (lam case_Cons_109 case_Nil_108)
+                                )
                               )
                             ]
                           )
                         )
                       ]
-                      (delay (lam case_Nil_14 (lam case_Cons_15 case_Nil_14)))
+                      (delay (lam case_Nil_108 (lam case_Cons_109 case_Nil_108))
+                      )
                     ]
                   )
                 )
