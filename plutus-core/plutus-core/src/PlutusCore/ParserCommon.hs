@@ -19,6 +19,7 @@ import           PlutusPrelude
 import           Text.Megaparsec            hiding (ParseError, State, parse)
 import qualified Text.Megaparsec            as Parsec
 import           Text.Megaparsec.Char       (char, letterChar, space1, string)
+import qualified Text.Megaparsec.Char.Lexer as L
 import qualified Text.Megaparsec.Char.Lexer as Lex
 
 import           Control.Monad.State        (MonadState (get, put), StateT, evalStateT)
@@ -113,6 +114,9 @@ inBraces = between lbrace rbrace
 
 isIdentifierChar :: Char -> Bool
 isIdentifierChar c = isAlphaNum c || c == '_' || c == '\''
+
+stringLiteral :: Parser String
+stringLiteral = char '"' >> manyTill L.charLiteral (char '"')
 
 -- | Create a parser that matches the input word and returns its source position.
 -- This is for attaching source positions to parsed terms/programs.

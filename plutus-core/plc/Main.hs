@@ -15,6 +15,7 @@ import           PlutusCore.Evaluation.Machine.ExMemory   (ExCPU (..), ExMemory 
 import qualified PlutusCore.Generators                    as Gen
 import qualified PlutusCore.Generators.Interesting        as Gen
 import qualified PlutusCore.Generators.Test               as Gen
+import           PlutusCore.ParserCommon
 import qualified PlutusCore.Pretty                        as PP
 import qualified PlutusCore.StdLib.Data.Bool              as StdLib
 import qualified PlutusCore.StdLib.Data.ChurchNat         as StdLib
@@ -22,6 +23,7 @@ import qualified PlutusCore.StdLib.Data.Integer           as StdLib
 import qualified PlutusCore.StdLib.Data.Unit              as StdLib
 import qualified UntypedPlutusCore                        as UPLC
 import qualified UntypedPlutusCore.Evaluation.Machine.Cek as Cek
+import           UntypedPlutusCore.NewParser              (parseScoped)
 
 
 import           Codec.Serialise
@@ -425,18 +427,33 @@ getPlcInput (FileInput file) = readFile file
 getPlcInput StdInput         = getContents
 
 -- Read and parse a PLC source program
-parsePlcInput :: Language -> Input -> IO (Program PLC.AlexPosn)
+-- parsePlcInput :: Language -> Input -> IO (Program PLC.AlexPosn)
+-- parsePlcInput language inp = do
+--     bsContents <- BSL.fromStrict . encodeUtf8 . T.pack <$> getPlcInput inp
+--     case language of
+--       TypedPLC   -> handleResult TypedProgram   $ PLC.runQuoteT $ runExceptT (PLC.parseScoped bsContents)
+--       UntypedPLC -> handleResult UntypedProgram $ PLC.runQuoteT $ runExceptT (UPLC.parseScoped bsContents)
+--       where handleResult wrapper =
+--                 \case
+--                   Left errCheck        -> failWith errCheck
+--                   Right (Left errEval) -> failWith errEval
+--                   Right (Right p)      -> return $ wrapper p
+--             failWith (err :: PlcParserError) =  errorWithoutStackTrace $ PP.displayPlcDef err
+
+-- With the new parser: Read and parse a PLC source program
+parsePlcInput :: Language -> Input -> IO (Program SourcePos)
 parsePlcInput language inp = do
     bsContents <- BSL.fromStrict . encodeUtf8 . T.pack <$> getPlcInput inp
     case language of
-      TypedPLC   -> handleResult TypedProgram   $ PLC.runQuoteT $ runExceptT (PLC.parseScoped bsContents)
-      UntypedPLC -> handleResult UntypedProgram $ PLC.runQuoteT $ runExceptT (UPLC.parseScoped bsContents)
+      TypedPLC   -> undefined -- handleResult TypedProgram   $ PLC.runQuoteT $ runExceptT (PLC.parseScoped bsContents)
+      UntypedPLC -> handleResult UntypedProgram $ PLC.runQuoteT $ runExceptT (parseScoped bsContents)
       where handleResult wrapper =
                 \case
                   Left errCheck        -> failWith errCheck
                   Right (Left errEval) -> failWith errEval
                   Right (Right p)      -> return $ wrapper p
             failWith (err :: PlcParserError) =  errorWithoutStackTrace $ PP.displayPlcDef err
+
 
 -- Read a binary-encoded file (eg, CBOR- or Flat-encoded PLC)
 getBinaryInput :: Input -> IO BSL.ByteString
@@ -484,7 +501,6 @@ getProgram language fmt inp =
       Flat flatMode -> do
                prog <- loadASTfromFlat language flatMode inp
                return $ PLC.AlexPn 0 0 0 <$ prog  -- No source locations in CBOR, so we have to make them up.
-
 
 ---------------- Serialise a program using CBOR ----------------
 
@@ -566,7 +582,6 @@ runConvert (ConvertOptions lang inp ifmt outp ofmt mode) = do
 runPrint :: PrintOptions -> IO ()
 runPrint (PrintOptions language inp mode) =
     parsePlcInput language inp >>= print . (getPrintMethod mode)
-
 
 ---------------- Erasure ----------------
 
