@@ -2963,12 +2963,24 @@
                         )
                         (datatypebind
                           (datatype
+                            (tyvardecl Credential (type))
+
+                            Credential_match
+                            (vardecl
+                              PubKeyCredential (fun (con bytestring) Credential)
+                            )
+                            (vardecl
+                              ScriptCredential (fun (con bytestring) Credential)
+                            )
+                          )
+                        )
+                        (datatypebind
+                          (datatype
                             (tyvardecl StakingCredential (type))
 
                             StakingCredential_match
                             (vardecl
-                              StakingHash
-                              (fun (con bytestring) StakingCredential)
+                              StakingHash (fun Credential StakingCredential)
                             )
                             (vardecl
                               StakingPtr
@@ -3069,19 +3081,6 @@
                             (vardecl
                               Interval
                               (fun [LowerBound a] (fun [UpperBound a] [Interval a]))
-                            )
-                          )
-                        )
-                        (datatypebind
-                          (datatype
-                            (tyvardecl Credential (type))
-
-                            Credential_match
-                            (vardecl
-                              PubKeyCredential (fun (con bytestring) Credential)
-                            )
-                            (vardecl
-                              ScriptCredential (fun (con bytestring) Credential)
                             )
                           )
                         )
@@ -7473,6 +7472,56 @@
                                 (termbind
                                   (strict)
                                   (vardecl
+                                    fEqCredential_c
+                                    (fun Credential (fun Credential Bool))
+                                  )
+                                  (lam
+                                    ds
+                                    Credential
+                                    (lam
+                                      ds
+                                      Credential
+                                      [
+                                        [
+                                          { [ Credential_match ds ] Bool }
+                                          (lam
+                                            l
+                                            (con bytestring)
+                                            [
+                                              [
+                                                { [ Credential_match ds ] Bool }
+                                                (lam
+                                                  r
+                                                  (con bytestring)
+                                                  [ [ equalsByteString l ] r ]
+                                                )
+                                              ]
+                                              (lam ipv (con bytestring) False)
+                                            ]
+                                          )
+                                        ]
+                                        (lam
+                                          a
+                                          (con bytestring)
+                                          [
+                                            [
+                                              { [ Credential_match ds ] Bool }
+                                              (lam ipv (con bytestring) False)
+                                            ]
+                                            (lam
+                                              a
+                                              (con bytestring)
+                                              [ [ equalsByteString a ] a ]
+                                            )
+                                          ]
+                                        )
+                                      ]
+                                    )
+                                  )
+                                )
+                                (termbind
+                                  (strict)
+                                  (vardecl
                                     fEqStakingCredential_c
                                     (fun StakingCredential (fun StakingCredential Bool))
                                   )
@@ -7489,7 +7538,7 @@
                                           }
                                           (lam
                                             l
-                                            (con bytestring)
+                                            Credential
                                             [
                                               [
                                                 {
@@ -7498,8 +7547,8 @@
                                                 }
                                                 (lam
                                                   r
-                                                  (con bytestring)
-                                                  [ [ equalsByteString l ] r ]
+                                                  Credential
+                                                  [ [ fEqCredential_c l ] r ]
                                                 )
                                               ]
                                               (lam
@@ -7531,9 +7580,7 @@
                                                     ]
                                                     Bool
                                                   }
-                                                  (lam
-                                                    ipv (con bytestring) False
-                                                  )
+                                                  (lam ipv Credential False)
                                                 ]
                                                 (lam
                                                   a
