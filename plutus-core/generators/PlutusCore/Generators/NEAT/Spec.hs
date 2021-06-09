@@ -511,4 +511,3 @@ bigTestTypeG_NO_LIST s GenOptions{..} t f = testCaseInfo s $ do
   as <- search' genMode genDepth (\a -> noListTypeG a &&& check t a)
   _  <- traverse (f t) as
   return $ show (length as)
-
