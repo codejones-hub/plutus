@@ -26,15 +26,14 @@ import qualified UntypedPlutusCore.Evaluation.Machine.Cek as Cek
 import           UntypedPlutusCore.NewParser              (SourcePos, parseScoped)
 
 
-import           Codec.Serialise
+import           Codec.Serialise                          (DeserialiseFailure (DeserialiseFailure))
 import           Control.DeepSeq                          (NFData, rnf)
-import           Control.Monad
+import           Control.Monad                            (void)
 import           Control.Monad.Trans.Except               (runExcept, runExceptT)
 import           Data.Bifunctor                           (second)
 import qualified Data.ByteString.Lazy                     as BSL
 import           Data.Foldable                            (asum, traverse_)
 import           Data.Function                            ((&))
-import           Data.Functor                             ((<&>))
 import qualified Data.HashMap.Monoidal                    as H
 import           Data.List                                (nub)
 import qualified Data.List                                as List
@@ -44,8 +43,13 @@ import           Data.Text.Encoding                       (encodeUtf8)
 import qualified Data.Text.IO                             as T
 import           Data.Text.Prettyprint.Doc                (Doc, pretty, (<+>))
 import           Data.Traversable                         (for)
-import           Flat
-import           Options.Applicative
+import           Flat                                     (Flat, flat, unflat)
+import           Options.Applicative                      (Alternative (some, (<|>)), Parser, ParserInfo, ReadM,
+                                                           argument, auto, command, customExecParser, flag, flag',
+                                                           fullDesc, header, help, helper, hsubparser, info, long,
+                                                           maybeReader, metavar, option, prefs, progDesc, readerError,
+                                                           short, showDefault, showHelpOnEmpty, str, strOption, value,
+                                                           (<**>))
 import           System.CPUTime                           (getCPUTime)
 import           System.Exit                              (exitFailure, exitSuccess)
 import           System.Mem                               (performGC)
@@ -465,11 +469,11 @@ getBinaryInput (FileInput file) = BSL.readFile file
 loadASTfromCBOR :: Language -> AstNameType -> Input -> IO (Program ())
 loadASTfromCBOR language cborMode inp =
     case (language, cborMode) of
-         (TypedPLC,   Named)    -> getBinaryInput inp <&> PLC.deserialiseRestoringUnitsOrFail >>= handleResult TypedProgram
-         (UntypedPLC, Named)    -> getBinaryInput inp <&> UPLC.deserialiseRestoringUnitsOrFail >>= handleResult UntypedProgram
+         (TypedPLC,   Named)    -> getBinaryInput inp >>= handleResult TypedProgram . PLC.deserialiseRestoringUnitsOrFail
+         (UntypedPLC, Named)    -> getBinaryInput inp >>= handleResult UntypedProgram . UPLC.deserialiseRestoringUnitsOrFail
          (TypedPLC,   DeBruijn) -> typedDeBruijnNotSupportedError
-         (UntypedPLC, DeBruijn) -> getBinaryInput inp <&> UPLC.deserialiseRestoringUnitsOrFail >>=
-                                   mapM fromDeBruijn >>= handleResult UntypedProgram
+         (UntypedPLC, DeBruijn) -> getBinaryInput inp >>=
+                                   mapM fromDeBruijn . UPLC.deserialiseRestoringUnitsOrFail >>= handleResult UntypedProgram
     where handleResult wrapper =
               \case
                Left (DeserialiseFailure offset msg) ->
@@ -480,10 +484,10 @@ loadASTfromCBOR language cborMode inp =
 loadASTfromFlat :: Language -> AstNameType -> Input -> IO (Program ())
 loadASTfromFlat language flatMode inp =
     case (language, flatMode) of
-         (TypedPLC,   Named)    -> getBinaryInput inp <&> unflat >>= handleResult TypedProgram
-         (UntypedPLC, Named)    -> getBinaryInput inp <&> unflat >>= handleResult UntypedProgram
+         (TypedPLC,   Named)    -> getBinaryInput inp >>= handleResult TypedProgram . unflat
+         (UntypedPLC, Named)    -> getBinaryInput inp >>= handleResult UntypedProgram . unflat
          (TypedPLC,   DeBruijn) -> typedDeBruijnNotSupportedError
-         (UntypedPLC, DeBruijn) -> getBinaryInput inp <&> unflat >>= mapM fromDeBruijn >>= handleResult UntypedProgram
+         (UntypedPLC, DeBruijn) -> getBinaryInput inp >>= mapM fromDeBruijn . unflat >>= handleResult UntypedProgram
     where handleResult wrapper =
               \case
                Left e  -> errorWithoutStackTrace $ "Flat deserialisation failure:" ++ show e
@@ -500,7 +504,7 @@ getProgram language fmt inp =
                return $ topSourcePos <$ prog  -- No source locations in CBOR, so we have to make them up.
       Flat flatMode -> do
                prog <- loadASTfromFlat language flatMode inp
-               return $ topSourcePos 0 0 0 <$ prog  -- No source locations in CBOR, so we have to make them up.
+               return $ topSourcePos <$ prog  -- No source locations in CBOR, so we have to make them up.
 
 ---------------- Serialise a program using CBOR ----------------
 
@@ -509,7 +513,7 @@ serialiseProgramCBOR (TypedProgram p)   = PLC.serialiseOmittingUnits p
 serialiseProgramCBOR (UntypedProgram p) = UPLC.serialiseOmittingUnits p
 
 -- | Convert names to de Bruijn indices and then serialise
-serialiseDbProgramCBOR :: Program () -> IO (BSL.ByteString)
+serialiseDbProgramCBOR :: Program () -> IO BSL.ByteString
 serialiseDbProgramCBOR (TypedProgram _)   = typedDeBruijnNotSupportedError
 serialiseDbProgramCBOR (UntypedProgram p) = UPLC.serialiseOmittingUnits <$> toDeBruijn p
 
@@ -529,7 +533,7 @@ serialiseProgramFlat (TypedProgram p)   = BSL.fromStrict $ flat p
 serialiseProgramFlat (UntypedProgram p) = BSL.fromStrict $ flat p
 
 -- | Convert names to de Bruijn indices and then serialise
-serialiseDbProgramFlat :: Flat a => Program a -> IO (BSL.ByteString)
+serialiseDbProgramFlat :: Flat a => Program a -> IO BSL.ByteString
 serialiseDbProgramFlat (TypedProgram _)   = typedDeBruijnNotSupportedError
 serialiseDbProgramFlat (UntypedProgram p) = BSL.fromStrict . flat <$> toDeBruijn p
 
@@ -581,7 +585,7 @@ runConvert (ConvertOptions lang inp ifmt outp ofmt mode) = do
 
 runPrint :: PrintOptions -> IO ()
 runPrint (PrintOptions language inp mode) =
-    parsePlcInput language inp >>= print . (getPrintMethod mode)
+    parsePlcInput language inp >>= print . getPrintMethod mode
 
 ---------------- Erasure ----------------
 
@@ -605,7 +609,7 @@ runErase (EraseOptions inp ifmt outp ofmt mode) = do
 -- | Apply one script to a list of others.
 runApply :: ApplyOptions -> IO ()
 runApply (ApplyOptions language inputfiles ifmt outp ofmt mode) = do
-  scripts <- mapM (getProgram language ifmt) (map FileInput inputfiles)
+  scripts <- mapM (getProgram language ifmt . FileInput) inputfiles
   let appliedScript =
           case language of  -- Annoyingly, we've got a list which could in principle contain both typed and untyped programs
             TypedPLC ->
@@ -627,9 +631,9 @@ data TypedTermExample = TypedTermExample
     (PLC.Term PLC.TyName PLC.Name PLC.DefaultUni PLC.DefaultFun ())
 data SomeTypedExample = SomeTypeExample TypeExample | SomeTypedTermExample TypedTermExample
 
-data UntypedTermExample = UntypedTermExample
+newtype UntypedTermExample = UntypedTermExample
     (UPLC.Term PLC.Name PLC.DefaultUni PLC.DefaultFun ())
-data SomeUntypedExample = SomeUntypedTermExample UntypedTermExample
+newtype SomeUntypedExample = SomeUntypedTermExample UntypedTermExample
 
 data SomeExample = SomeTypedExample SomeTypedExample | SomeUntypedExample SomeUntypedExample
 
@@ -751,7 +755,7 @@ timeEval n evaluate prog
     | n <= 0 = errorWithoutStackTrace "Error: the number of repetitions should be at least 1"
     | otherwise = do
   (results, times) <- unzip . tail <$> for (replicate (fromIntegral (n+1)) prog) (timeOnce evaluate)
-  let mean = (fromIntegral $ sum times) / (fromIntegral n) :: Double
+  let mean = fromIntegral (sum times) / fromIntegral n :: Double
       runs :: String = if n==1 then "run" else "runs"
   printf "Mean evaluation time (%d %s): %s\n" n runs (formatTime_picoseconds mean)
   pure results
@@ -760,7 +764,7 @@ timeEval n evaluate prog
             let result = eval prg
                 !_ = rnf result
             end <- getCPUTime
-            pure $ (result, end - start)
+            pure (result, end - start)
 
 
 ---------------- Printing budgets and costs ----------------
@@ -799,7 +803,7 @@ printBudgetStateTally term model (Cek.CekExTally costs) = do
           traverse_ (\(b,cost) -> putStrLn $ printf "%-20s %s" (show b) (budgetToString cost :: String)) builtinsAndCosts
           putStrLn ""
           putStrLn $ "Total budget spent: " ++ printf (budgetToString totalCost)
-          putStrLn $ "Predicted execution time: " ++ (formatTime_picoseconds totalTime)
+          putStrLn $ "Predicted execution time: " ++ formatTime_picoseconds totalTime
     Unit -> pure ()
   where
         getSpent k =
@@ -817,7 +821,7 @@ printBudgetStateTally term model (Cek.CekExTally costs) = do
         -- ^ Total builtin evaluation time (according to the models) in picoseconds (units depend on BuiltinCostModel.costMultiplier)
         getCPU b = let ExCPU b' = _exBudgetCPU b in fromIntegral b'::Double
         totalCost = getSpent Cek.BStartup <> totalComputeCost <> builtinCosts
-        totalTime = (getCPU $ getSpent Cek.BStartup) + getCPU totalComputeCost + getCPU builtinCosts
+        totalTime = getCPU (getSpent Cek.BStartup) + getCPU totalComputeCost + getCPU builtinCosts
 
 class PrintBudgetState cost where
     printBudgetState :: UPLC.Term PLC.Name PLC.DefaultUni PLC.DefaultFun () -> CekModel -> cost -> IO ()
@@ -891,7 +895,7 @@ runEval (EvalOptions language inp ifmt evalMode printMode budgetMode timingMode 
 
     where handleResult result =
               case result of
-                Right v  -> (print $ getPrintMethod printMode v) >> exitSuccess
+                Right v  -> print (getPrintMethod printMode v) >> exitSuccess
                 Left err -> print err *> exitFailure
           handleResultSilently = \case
                 Right _  -> exitSuccess

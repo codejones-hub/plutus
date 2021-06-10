@@ -76,6 +76,7 @@ library
         PlutusCore.Normalize
         PlutusCore.Normalize.Internal
         PlutusCore.Parser
+        PlutusCore.ParserCommon
         PlutusCore.Pretty
         PlutusCore.Quote
         PlutusCore.Rename
@@ -187,7 +188,6 @@ library
         PlutusCore.Mark
         PlutusCore.Parsable
         PlutusCore.Parser.Internal
-        PlutusCore.ParserCommon
         PlutusCore.Pretty.Classic
         PlutusCore.Pretty.ConfigName
         PlutusCore.Pretty.ConfigName
