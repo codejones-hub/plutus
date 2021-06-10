@@ -46,15 +46,14 @@ import           ErrorCode
 import           PlutusPrelude
 
 import           UntypedPlutusCore.Core
-import           UntypedPlutusCore.Subst
 
 import           PlutusCore.Constant
+import           PlutusCore.DeBruijn
 import           PlutusCore.Evaluation.Machine.ExBudget
 import           PlutusCore.Evaluation.Machine.ExMemory
 import           PlutusCore.Evaluation.Machine.Exception
 import           PlutusCore.Evaluation.Machine.MachineParameters
 import           PlutusCore.Evaluation.Result
-import           PlutusCore.Name
 import           PlutusCore.Pretty
 
 import           UntypedPlutusCore.Evaluation.Machine.Cek.CekMachineCosts (CekMachineCosts (..))
@@ -70,6 +69,7 @@ import qualified Data.DList                                               as DLi
 import           Data.Hashable                                            (Hashable)
 import qualified Data.Kind                                                as GHC
 import           Data.Proxy
+import           Data.RandomAccessList.SkewBinary                         as Skew
 import           Data.STRef
 import           Data.Semigroup                                           (stimes)
 import           Data.Text.Prettyprint.Doc
@@ -181,13 +181,13 @@ instance Show (BuiltinRuntime (CekValue uni fun)) where
 data CekValue uni fun =
     -- This bang gave us a 1-2% speed-up at the time of writing.
     VCon !(Some (ValueOf uni))
-  | VDelay (Term Name uni fun ()) (CekValEnv uni fun)
-  | VLamAbs Name (Term Name uni fun ()) (CekValEnv uni fun)
+  | VDelay (Term DeBruijn uni fun ()) (CekValEnv uni fun)
+  | VLamAbs (Term DeBruijn uni fun ()) (CekValEnv uni fun)
   | VBuiltin            -- A partial builtin application, accumulating arguments for eventual full application.
       !fun                   -- So that we know, for what builtin we're calculating the cost.
                              -- TODO: any chance we could sneak this into 'BuiltinRuntime'
                              -- where we have a partially instantiated costing function anyway?
-      (Term Name uni fun ()) -- This must be lazy. It represents the partial application of the
+      (Term DeBruijn uni fun ()) -- This must be lazy. It represents the partial application of the
                              -- builtin function that we're going to run when it's fully saturated.
                              -- We need the 'Term' to be able to return it in case full saturation
                              -- is never achieved and a partial application needs to be returned
@@ -200,7 +200,7 @@ data CekValue uni fun =
                                             -- Check the docs of 'BuiltinRuntime' for details.
     deriving (Show)
 
-type CekValEnv uni fun = UniqueMap TermUnique (CekValue uni fun)
+type CekValEnv uni fun = Skew.RAList (CekValue uni fun)
 
 -- | The CEK machine is parameterized over a @spendBudget@ function that has (roughly) the same type
 -- as the one from the 'SpendBudget' class (and so the @SpendBudget@ instance for 'CekM'
@@ -370,13 +370,13 @@ newtype CekCarryingM term uni fun s a = CekCarryingM
     { unCekCarryingM :: ST s a
     } deriving newtype (Functor, Applicative, Monad)
 
-type CekM uni fun = CekCarryingM (Term Name uni fun ()) uni fun
+type CekM uni fun = CekCarryingM (Term DeBruijn uni fun ()) uni fun
 
 -- | The CEK machine-specific 'EvaluationException'.
 type CekEvaluationExceptionCarrying term fun =
     EvaluationException CekUserError (MachineError fun) term
 
-type CekEvaluationException uni fun = CekEvaluationExceptionCarrying (Term Name uni fun ()) fun
+type CekEvaluationException uni fun = CekEvaluationExceptionCarrying (Term DeBruijn uni fun ()) fun
 
 -- | The set of constraints we need to be able to print things in universes, which we need in order to throw exceptions.
 type PrettyUni uni fun = (GShow uni, Closed uni, Pretty fun, Typeable uni, Typeable fun, Everywhere uni PrettyConst)
@@ -422,13 +422,13 @@ throwingDischarged l t = throwingWithCause l t . Just . dischargeCekValue
 -- catching 'Term's outside of it.
 withCekValueErrors
     :: CekCarryingM (CekValue uni fun) uni fun s a
-    -> CekCarryingM (Term Name uni fun ()) uni fun s a
+    -> CekCarryingM (Term DeBruijn uni fun ()) uni fun s a
 withCekValueErrors = coerce
 
 -- | Enable throwing/catching 'Term's within the received action and
 -- catching 'CekValue's outside of it.
 withTermErrors
-    :: CekCarryingM (Term Name uni fun ()) uni fun s a
+    :: CekCarryingM (Term DeBruijn uni fun ()) uni fun s a
     -> CekCarryingM (CekValue uni fun) uni fun s a
 withTermErrors = coerce
 
@@ -479,28 +479,37 @@ emitCek str =
 -- see Note [Scoping].
 -- | Instantiate all the free variables of a term by looking them up in an environment.
 -- Mutually recursive with dischargeCekVal.
-dischargeCekValEnv :: CekValEnv uni fun -> Term Name uni fun () -> Term Name uni fun ()
-dischargeCekValEnv valEnv =
-    -- We recursively discharge the environments of Cek values, but we will gradually end up doing
-    -- this to terms which have no free variables remaining, at which point we won't call this
-    -- substitution function any more and so we will terminate.
-    termSubstFreeNames $ \name -> do
-        val <- lookupName name valEnv
-        Just $ dischargeCekValue val
+dischargeCekValEnv :: forall uni fun. CekValEnv uni fun -> Term DeBruijn uni fun () -> Term DeBruijn uni fun ()
+dischargeCekValEnv valEnv = go 1
+  where
+   go :: Word -> Term DeBruijn uni fun () -> Term DeBruijn uni fun ()
+   go !lvl = \case
+    var@(Var _ name) -> let n = coerce name :: Word
+                       in if n <= lvl
+                          -- bound variable so leave it alone
+                          then var
+                          -- -1 because index is 0-based but our debruijn is 1-based
+                          else dischargeCekValue $ valEnv `Skew.index` (n - 1 - lvl)
+    LamAbs ann name body -> LamAbs ann name $ go (lvl+1) body
+    Apply ann fun arg    -> Apply ann (go lvl fun) $ go lvl arg
+    Delay ann term       -> Delay ann $ go lvl term
+    Force ann term       -> Force ann $ go lvl term
+    t -> t
 
 -- | Convert a 'CekValue' into a 'Term' by replacing all bound variables with the terms
 -- they're bound to (which themselves have to be obtain by recursively discharging values).
-dischargeCekValue :: CekValue uni fun -> Term Name uni fun ()
+dischargeCekValue :: CekValue uni fun -> Term DeBruijn uni fun ()
 dischargeCekValue = \case
-    VCon     val           -> Constant () val
-    VDelay   body env      -> dischargeCekValEnv env $ Delay () body
+    VCon     val          -> Constant () val
+    VDelay   body env     -> dischargeCekValEnv env $ Delay () body
     -- 'computeCek' turns @LamAbs _ name body@ into @VLamAbs name body env@ where @env@ is an
     -- argument of 'computeCek' and hence we need to start discharging outside of the reassembled
     -- lambda, otherwise @name@ could clash with the names that we have in @env@.
-    VLamAbs  name body env -> dischargeCekValEnv env $ LamAbs () name body
+    -- TODO: (DeBruijn 0) is a placeholder until we get rid of 'name's from LamAbs
+    VLamAbs body env      -> LamAbs () (DeBruijn 0) $ dischargeCekValEnv env body
     -- We only discharge a value when (a) it's being returned by the machine,
     -- or (b) it's needed for an error message.
-    VBuiltin _ term env _  -> dischargeCekValEnv env term
+    VBuiltin _ term env _ -> dischargeCekValEnv env term
 
 instance (Closed uni, GShow uni, uni `Everywhere` PrettyConst, Pretty fun) =>
             PrettyBy PrettyConfigPlc (CekValue uni fun) where
@@ -517,7 +526,7 @@ instance AsConstant (CekValue uni fun) where
 
 data Frame uni fun
     = FrameApplyFun (CekValue uni fun)                         -- ^ @[V _]@
-    | FrameApplyArg (CekValEnv uni fun) (Term Name uni fun ()) -- ^ @[_ N]@
+    | FrameApplyArg (CekValEnv uni fun) (Term DeBruijn uni fun ()) -- ^ @[_ N]@
     | FrameForce                                               -- ^ @(force _)@
     deriving (Show)
 
@@ -563,16 +572,18 @@ runCekM (MachineParameters costs runtime) (ExBudgetMode getExBudgetInfo) emittin
 
 -- | Extend an environment with a variable name, the value the variable stands for
 -- and the environment the value is defined in.
-extendEnv :: Name -> CekValue uni fun -> CekValEnv uni fun -> CekValEnv uni fun
-extendEnv = insertByName
+{-# INLINE extendEnv #-}
+extendEnv :: CekValue uni fun -> CekValEnv uni fun -> CekValEnv uni fun
+extendEnv = Skew.Cons
 
--- | Look up a variable name in the environment.
-lookupVarName :: forall uni fun s . (PrettyUni uni fun) => Name -> CekValEnv uni fun -> CekM uni fun s (CekValue uni fun)
-lookupVarName varName varEnv =
-    case lookupName varName varEnv of
-        Nothing  -> throwingWithCause _MachineError OpenTermEvaluatedMachineError $ Just var where
-            var = Var () varName
-        Just val -> pure val
+-- FIXME: reenable when SkewBinary has a safe indexing/lookup
+-- -- | Look up a variable name in the environment.
+-- lookupVarName :: forall uni fun s . (PrettyUni uni fun) => DeBruijn -> CekValEnv uni fun -> CekM uni fun s (CekValue uni fun)
+-- lookupVarName varName varEnv =
+--     case lookupName' varName varEnv of
+--         Nothing  -> throwingWithCause _MachineError OpenTermEvaluatedMachineError $ Just var where
+--             var = Var () varName
+--         Just val -> pure val
 
 -- | Take pieces of a possibly partial builtin application and either create a 'CekValue' using
 -- 'makeKnown' or a partial builtin application depending on whether the built-in function is
@@ -580,7 +591,7 @@ lookupVarName varName varEnv =
 evalBuiltinApp
     :: (GivenCekReqs uni fun s, PrettyUni uni fun)
     => fun
-    -> Term Name uni fun ()
+    -> Term DeBruijn uni fun ()
     -> CekValEnv uni fun
     -> BuiltinRuntime (CekValue uni fun)
     -> CekM uni fun s (CekValue uni fun)
@@ -598,8 +609,8 @@ enterComputeCek
     . (Ix fun, PrettyUni uni fun, GivenCekReqs uni fun s, uni `Everywhere` ExMemoryUsage)
     => Context uni fun
     -> CekValEnv uni fun
-    -> Term Name uni fun ()
-    -> CekM uni fun s (Term Name uni fun ())
+    -> Term DeBruijn uni fun ()
+    -> CekM uni fun s (Term DeBruijn uni fun ())
 enterComputeCek = computeCek (toWordArray 0) where
     -- | The computing part of the CEK machine.
     -- Either
@@ -611,19 +622,20 @@ enterComputeCek = computeCek (toWordArray 0) where
         :: WordArray
         -> Context uni fun
         -> CekValEnv uni fun
-        -> Term Name uni fun ()
-        -> CekM uni fun s (Term Name uni fun ())
+        -> Term DeBruijn uni fun ()
+        -> CekM uni fun s (Term DeBruijn uni fun ())
     -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
     computeCek !unbudgetedSteps ctx env (Var _ varName) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BVar unbudgetedSteps
-        val <- lookupVarName varName env
+        -- -1 because index is 0-based but our debruijn is 1-based
+        let val = Skew.index env (coerce varName - 1)
         returnCek unbudgetedSteps' ctx val
     computeCek !unbudgetedSteps ctx _ (Constant _ val) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BConst unbudgetedSteps
         returnCek unbudgetedSteps' ctx (VCon val)
-    computeCek !unbudgetedSteps ctx env (LamAbs _ name body) = do
+    computeCek !unbudgetedSteps ctx env (LamAbs _ _name body) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BLamAbs unbudgetedSteps
-        returnCek unbudgetedSteps' ctx (VLamAbs name body env)
+        returnCek unbudgetedSteps' ctx (VLamAbs body env)
     computeCek !unbudgetedSteps ctx env (Delay _ body) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BDelay unbudgetedSteps
         returnCek unbudgetedSteps' ctx (VDelay body env)
@@ -655,7 +667,7 @@ enterComputeCek = computeCek (toWordArray 0) where
       * 'FrameApplyFun': call 'applyEvaluate' to attempt to apply the function
           stored in the frame to an argument.
     -}
-    returnCek :: WordArray -> Context uni fun -> CekValue uni fun -> CekM uni fun s (Term Name uni fun ())
+    returnCek :: WordArray -> Context uni fun -> CekValue uni fun -> CekM uni fun s (Term DeBruijn uni fun ())
     --- Instantiate all the free variable of the resulting term in case there are any.
     -- . ◅ V           ↦  [] V
     returnCek !unbudgetedSteps [] val = do
@@ -681,7 +693,7 @@ enterComputeCek = computeCek (toWordArray 0) where
         :: WordArray
         -> Context uni fun
         -> CekValue uni fun
-        -> CekM uni fun s (Term Name uni fun ())
+        -> CekM uni fun s (Term DeBruijn uni fun ())
     forceEvaluate !unbudgetedSteps ctx (VDelay body env) = computeCek unbudgetedSteps ctx env body
     forceEvaluate !unbudgetedSteps ctx (VBuiltin fun term env (BuiltinRuntime sch f exF)) = do
         let term' = Force () term
@@ -712,9 +724,9 @@ enterComputeCek = computeCek (toWordArray 0) where
         -> Context uni fun
         -> CekValue uni fun   -- lhs of application
         -> CekValue uni fun   -- rhs of application
-        -> CekM uni fun s (Term Name uni fun ())
-    applyEvaluate !unbudgetedSteps ctx (VLamAbs name body env) arg =
-        computeCek unbudgetedSteps ctx (extendEnv name arg env) body
+        -> CekM uni fun s (Term DeBruijn uni fun ())
+    applyEvaluate !unbudgetedSteps ctx (VLamAbs body env) arg =
+        computeCek unbudgetedSteps ctx (extendEnv arg env) body
     -- Annotating @f@ and @exF@ with bangs gave us some speed-up, but only until we added a bang to
     -- 'VCon'. After that the bangs here were making things a tiny bit slower and so we removed them.
     applyEvaluate !unbudgetedSteps ctx (VBuiltin fun term env (BuiltinRuntime sch f exF)) arg = do
@@ -768,9 +780,9 @@ runCek
     => MachineParameters CekMachineCosts CekValue uni fun
     -> ExBudgetMode cost uni fun
     -> Bool
-    -> Term Name uni fun ()
-    -> (Either (CekEvaluationException uni fun) (Term Name uni fun ()), cost, [String])
+    -> Term DeBruijn uni fun ()
+    -> (Either (CekEvaluationException uni fun) (Term DeBruijn uni fun ()), cost, [String])
 runCek params mode emitting term =
     runCekM params mode emitting $ do
         spendBudgetCek BStartup (cekStartupCost ?cekCosts)
-        enterComputeCek [] mempty term
+        enterComputeCek [] Skew.Nil term
