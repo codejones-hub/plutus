@@ -15,7 +15,7 @@ import           PlutusCore.Evaluation.Machine.ExMemory   (ExCPU (..), ExMemory 
 import qualified PlutusCore.Generators                    as Gen
 import qualified PlutusCore.Generators.Interesting        as Gen
 import qualified PlutusCore.Generators.Test               as Gen
-import           PlutusCore.ParserCommon
+import           PlutusCore.ParserCommon                  (topSourcePos)
 import qualified PlutusCore.Pretty                        as PP
 import qualified PlutusCore.StdLib.Data.Bool              as StdLib
 import qualified PlutusCore.StdLib.Data.ChurchNat         as StdLib
@@ -23,7 +23,7 @@ import qualified PlutusCore.StdLib.Data.Integer           as StdLib
 import qualified PlutusCore.StdLib.Data.Unit              as StdLib
 import qualified UntypedPlutusCore                        as UPLC
 import qualified UntypedPlutusCore.Evaluation.Machine.Cek as Cek
-import           UntypedPlutusCore.NewParser              (parseScoped)
+import           UntypedPlutusCore.NewParser              (SourcePos, parseScoped)
 
 
 import           Codec.Serialise
@@ -491,16 +491,16 @@ loadASTfromFlat language flatMode inp =
 
 
 -- Read either a PLC file or a CBOR file, depending on 'fmt'
-getProgram :: Language -> Format -> Input  -> IO (Program PLC.AlexPosn)
+getProgram :: Language -> Format -> Input  -> IO (Program SourcePos)
 getProgram language fmt inp =
     case fmt of
       Plc  -> parsePlcInput language inp
       Cbor cborMode -> do
                prog <- loadASTfromCBOR language cborMode inp
-               return $ PLC.AlexPn 0 0 0 <$ prog  -- No source locations in CBOR, so we have to make them up.
+               return $ topSourcePos <$ prog  -- No source locations in CBOR, so we have to make them up.
       Flat flatMode -> do
                prog <- loadASTfromFlat language flatMode inp
-               return $ PLC.AlexPn 0 0 0 <$ prog  -- No source locations in CBOR, so we have to make them up.
+               return $ topSourcePos 0 0 0 <$ prog  -- No source locations in CBOR, so we have to make them up.
 
 ---------------- Serialise a program using CBOR ----------------
 

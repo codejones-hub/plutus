@@ -130,6 +130,7 @@ library
         UntypedPlutusCore.Evaluation.Machine.Cek
         UntypedPlutusCore.Parser
         UntypedPlutusCore.Rename
+        UntypedPlutusCore.NewParser
 
         Common
         Crypto
