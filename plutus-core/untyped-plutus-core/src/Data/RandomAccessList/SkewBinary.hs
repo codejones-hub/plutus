@@ -97,18 +97,22 @@ index :: RAList a -> Word -> a
 index Nil _  = error "out of bounds"
 index (BHead w t ts) !i  =
     if i < w
-    then indexTree w i t
+    then indexTree t i w
     else index ts (i-w)
   where
-    indexTree :: Word -> Word -> Tree a -> a
-    indexTree 1 0 (Leaf x) = x
-    indexTree _ _ (Leaf _) = error "out of bounds"
-    indexTree _ 0 (Node x _ _) = x
-    indexTree treeSize offset (Node _ t1 t2 ) =
-        -- unsafeShiftR 1 is faster than `div w 2`
-        let halfSize = unsafeShiftR treeSize 1
-        in if offset <= halfSize
-           then indexTree halfSize (offset - 1) t1
-           else indexTree halfSize (offset - 1 - halfSize) t2
+    indexTree :: Tree a -> Word -> Word -> a
+    indexTree = \case
+        Leaf x -> const $ const x
+        Node x t1 t2 -> \case
+            0 -> const x
+            offset -> (\ f treeSize ->
+                         let halfSize = unsafeShiftR treeSize 1
+                         in (if offset <= halfSize
+                             then f t1 1
+                             else f t2 (1+halfSize)
+                            ) halfSize
+                     )
+                     (\ t' -> indexTree t' . (offset -))
+
 
 -- TODO: safeIndex
