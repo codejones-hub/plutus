@@ -124,6 +124,8 @@ extra-deps:
     - iohk-monitoring
     - tracer-transformers
     - plugins/backend-ekg
+- git: https://github.com/bezirg/unordered-intmap
+  commit: 2fafacf8e7e35e0d810570a581381a51706bfef1
 
 allow-newer: true
 

@@ -526,7 +526,8 @@ benchmark env-bench
         random >= 1.2.0,
         containers -any,
         -- broken for ral-0.2 conflic with  cardano-binary:recursion-schemes
-        ral == 0.1
+        ral == 0.1,
+        unordered-intmap >= 0.1.2
 
 test-suite skew-binary-test
     type: exitcode-stdio-1.0
