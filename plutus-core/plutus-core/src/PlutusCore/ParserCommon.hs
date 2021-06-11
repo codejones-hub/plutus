@@ -17,7 +17,6 @@ import           PlutusCore.Error           (ParseError (..))
 import qualified PlutusCore.Parsable        as PLC
 import           PlutusPrelude
 import           Text.Megaparsec            hiding (ParseError, State, parse)
-import qualified Text.Megaparsec            as Parsec
 import           Text.Megaparsec.Char       (char, letterChar, space1, string)
 import qualified Text.Megaparsec.Char.Lexer as L
 import qualified Text.Megaparsec.Char.Lexer as Lex
@@ -30,39 +29,8 @@ import           Data.Proxy                 (Proxy (Proxy))
 newtype ParserState = ParserState { identifiers :: M.Map T.Text PLC.Unique }
     deriving (Show)
 
--- data ParseError = UnknownBuiltinType T.Text
---                 | BuiltinTypeNotAStar T.Text
---                 | InvalidConstant T.Text T.Text
---                 deriving (Eq, Ord, Show)
-
--- instance HasErrorCode (ParseError ann) where
---       errorCode UnknownBuiltinType {}  = ErrorCode 5
---       errorCode BuiltinTypeNotAStar {} = ErrorCode 52
---       errorCode InvalidBuiltinConstant {}     = ErrorCode 4
-
-type Error ann = Parsec.ParseError Char (ParseError ann)
-
-instance ShowErrorComponent (ParseError ann) where
-    showErrorComponent (LexErr str) =
-        "Lexing error: " ++ str
-    showErrorComponent (Unexpected tk) =
-        "Unexpected token " ++ show tk
-    showErrorComponent (UnknownBuiltinType ann ty) =
-        "Unknown built-in type at " ++ show ann ++ " : " ++ T.unpack ty
-    showErrorComponent (BuiltinTypeNotAStar ann ty) =
-        "Expected a type of kind star (to later parse a constant), but got: "
-        ++ T.unpack ty
-        ++ " at "
-        ++ show ann
-    showErrorComponent (UnknownBuiltinFunction ann fn) =
-        "Unknown built-in type at " ++ show ann ++ " : " ++ T.unpack fn
-    showErrorComponent (InvalidBuiltinConstant ann ty con) =
-        "Invalid constant at "
-        ++ show ann
-        ++ " : "
-        ++ T.unpack con
-        ++ " of type "
-        ++ T.unpack ty
+type Parser ann = ParsecT (ParseError SourcePos) T.Text (StateT ParserState PLC.Quote)
+instance (Stream s, PLC.MonadQuote m) => PLC.MonadQuote (ParsecT e s m)
 
 topSourcePos :: SourcePos
 topSourcePos = initialPos "top"
@@ -85,53 +53,50 @@ intern n = do
             put $ ParserState identifiers'
             return fresh
 
-type Parser ann = ParsecT (ParseError ann) T.Text (StateT ParserState PLC.Quote)
-instance (Stream s, PLC.MonadQuote m) => PLC.MonadQuote (ParsecT e s m)
-
-parse :: Parser ann a -> String -> T.Text -> Either (ParseErrorBundle T.Text (ParseError ann)) a
+parse :: Parser SourcePos a -> String -> T.Text -> Either (ParseErrorBundle T.Text (ParseError SourcePos)) a
 parse p file str = PLC.runQuote $ parseQuoted p file str
 
-parseQuoted :: Parser ann a -> String -> T.Text -> PLC.Quote
-                   (Either (ParseErrorBundle T.Text (ParseError ann)) a)
+parseQuoted :: Parser SourcePos a -> String -> T.Text -> PLC.Quote
+                   (Either (ParseErrorBundle T.Text (ParseError SourcePos)) a)
 parseQuoted p file str = flip evalStateT initial $ runParserT p file str
 
-whitespace :: Parser ann ()
+whitespace :: Parser SourcePos ()
 whitespace = Lex.space space1 (Lex.skipLineComment "--") (Lex.skipBlockCommentNested "{-" "-}")
 
-lexeme :: Parser ann a -> Parser ann a
+lexeme :: Parser SourcePos a -> Parser SourcePos a
 lexeme = Lex.lexeme whitespace
 
-symbol :: T.Text -> Parser ann T.Text
+symbol :: T.Text -> Parser SourcePos T.Text
 symbol = Lex.symbol whitespace
 
-lparen :: Parser ann T.Text
+lparen :: Parser SourcePos T.Text
 lparen = symbol "("
-rparen :: Parser ann T.Text
+rparen :: Parser SourcePos T.Text
 rparen = symbol ")"
 
-lbracket :: Parser ann T.Text
+lbracket :: Parser SourcePos T.Text
 lbracket = symbol "["
-rbracket :: Parser ann T.Text
+rbracket :: Parser SourcePos T.Text
 rbracket = symbol "]"
 
-lbrace :: Parser ann T.Text
+lbrace :: Parser SourcePos T.Text
 lbrace = symbol "{"
-rbrace :: Parser ann T.Text
+rbrace :: Parser SourcePos T.Text
 rbrace = symbol "}"
 
-inParens :: Parser ann a -> Parser ann a
+inParens :: Parser SourcePos a -> Parser SourcePos a
 inParens = between lparen rparen
 
-inBrackets :: Parser ann a -> Parser ann a
+inBrackets :: Parser SourcePos a -> Parser SourcePos a
 inBrackets = between lbracket rbracket
 
-inBraces :: Parser ann a-> Parser ann a
+inBraces :: Parser SourcePos a-> Parser SourcePos a
 inBraces = between lbrace rbrace
 
 isIdentifierChar :: Char -> Bool
 isIdentifierChar c = isAlphaNum c || c == '_' || c == '\''
 
-stringLiteral :: Parser ann String
+stringLiteral :: Parser SourcePos String
 stringLiteral = char '"' >> manyTill L.charLiteral (char '"')
 
 -- | Create a parser that matches the input word and returns its source position.
@@ -139,14 +104,14 @@ stringLiteral = char '"' >> manyTill L.charLiteral (char '"')
 -- getSourcePos is not cheap, don't call it on matching of every token.
 wordPos ::
     -- | The word to match
-    T.Text -> Parser ann SourcePos
+    T.Text -> Parser SourcePos SourcePos
 wordPos w = lexeme $ try $ getSourcePos <* symbol w
 
-builtinFunction :: (Bounded fun, Enum fun, Pretty fun) => Parser fun ann
+builtinFunction :: (Bounded fun, Enum fun, Pretty fun) => Parser SourcePos fun
 builtinFunction = lexeme $ choice $ map parseBuiltin [minBound .. maxBound]
     where parseBuiltin builtin = try $ string (display builtin) >> pure builtin
 
-version :: Parser ann (PLC.Version SourcePos)
+version :: Parser SourcePos (PLC.Version SourcePos)
 version = lexeme $ do
     p <- getSourcePos
     x <- Lex.decimal
@@ -155,17 +120,17 @@ version = lexeme $ do
     void $ char '.'
     PLC.Version p x y <$> Lex.decimal
 
-name :: Parser ann PLC.Name
+name :: Parser SourcePos PLC.Name
 name = lexeme $ try $ do
     void $ lookAhead letterChar
     str <- takeWhileP (Just "identifier") isIdentifierChar
     PLC.Name str <$> intern str
 
-tyName :: Parser ann PLC.TyName
+tyName :: Parser SourcePos PLC.TyName
 tyName = PLC.TyName <$> name
 
 -- | Turn a parser that can succeed without consuming any input into one that fails in this case.
-enforce :: Parser ann a -> Parser ann a
+enforce :: Parser SourcePos a -> Parser SourcePos a
 enforce p = do
     (input, x) <- match p
     guard . not $ T.null input
@@ -180,19 +145,21 @@ enforce p = do
 -- Note that this also fails on @(con string \"yes (no)\")@ as well as @con unit ()@, so it really
 -- should be fixed somehow.
 -- (For @con unit ()@, @kwxm suggested replacing it with @unitval@ or @one@ or *)
-closedChunk :: Parser ann T.Text
+closedChunk :: Parser SourcePos T.Text
 closedChunk = T.pack <$> manyTill anySingle end where
     end = enforce whitespace <|> void (lookAhead $ char ')')
 
 -- | Parse a type tag by feeding the output of 'closedChunk' to 'PLC.parse'.
 builtinTypeTag
-    :: forall uni ann.
+    :: forall uni.
     PLC.Parsable (PLC.SomeTypeIn (PLC.Kinded uni))
-    => Parser ann (PLC.SomeTypeIn (PLC.Kinded uni))
+    => Parser SourcePos (PLC.SomeTypeIn (PLC.Kinded uni))
 builtinTypeTag = do
     uniText <- closedChunk
     case PLC.parse uniText of
-        Nothing  -> customFailure $ UnknownBuiltinType @ann uniText
+        Nothing  -> do
+            ann <- wordPos uniText
+            customFailure $ UnknownBuiltinType ann uniText
         Just uni -> pure uni
 
 -- | Parse a constant by parsing a type tag first and using the type-specific parser of constants.
@@ -205,21 +172,25 @@ builtinTypeTag = do
 -- for things like quoted strings that can contain escape sequences.
 -- @thealmarty will hopefully deal with these in SCP-2251.
 constant
-    :: forall uni ann.
+    :: forall uni.
        ( PLC.Parsable (PLC.SomeTypeIn (PLC.Kinded uni))
        , PLC.Closed uni, uni `PLC.Everywhere` PLC.Parsable
        )
-    => Parser ann (PLC.Some (PLC.ValueOf uni))
+    => Parser SourcePos (PLC.Some (PLC.ValueOf uni))
 constant = do
     -- We use 'match' for remembering the textual representation of the parsed type tag,
     -- so that we can show it in the error message if the constant fails to parse.
     (uniText, PLC.SomeTypeIn (PLC.Kinded uni)) <- match builtinTypeTag
     -- See Note [Decoding universes].
     case PLC.checkStar @uni uni of
-        Nothing -> customFailure $ BuiltinTypeNotAStar ann uniText
+        Nothing -> do
+            ann <- wordPos uniText
+            customFailure $ BuiltinTypeNotAStar ann uniText
         Just PLC.Refl -> do
             conText <- closedChunk
             case PLC.bring (Proxy @PLC.Parsable) uni $ PLC.parse conText of
-                Nothing  -> customFailure $ InvalidBuiltinConstant @ann uniText conText
+                Nothing  -> do
+                    ann <- wordPos uniText
+                    customFailure $ InvalidBuiltinConstant ann uniText conText
                 Just con -> pure . PLC.Some $ PLC.ValueOf uni con
 
