@@ -89,7 +89,7 @@ instance (PP.PrettyBy PP.PrettyConfigPlc (Program a)) where
 -- support for this is lacking elsewhere at the moment.
 type UntypedProgramDeBruijn a = UPLC.Program UPLC.DeBruijn PLC.DefaultUni PLC.DefaultFun a
 
-type PlcParserError = PLC.Error PLC.DefaultUni PLC.DefaultFun PLC.AlexPosn
+type PlcParserError = PLC.Error PLC.DefaultUni PLC.DefaultFun SourcePos
 
 
 ---------------- Types for commands and arguments ----------------
@@ -450,7 +450,7 @@ parsePlcInput language inp = do
     bsContents <- BSL.fromStrict . encodeUtf8 . T.pack <$> getPlcInput inp
     case language of
       TypedPLC   -> undefined -- handleResult TypedProgram   $ PLC.runQuoteT $ runExceptT (PLC.parseScoped bsContents)
-      UntypedPLC -> handleResult UntypedProgram $ PLC.runQuoteT $ runExceptT (parseScoped bsContents)
+      UntypedPLC -> handleResult UntypedProgram (parseScoped bsContents)
       where handleResult wrapper =
                 \case
                   Left errCheck        -> failWith errCheck
