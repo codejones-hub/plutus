@@ -131,6 +131,7 @@ library
         UntypedPlutusCore.Evaluation.Machine.Cek
         UntypedPlutusCore.Parser
         UntypedPlutusCore.Rename
+        UntypedPlutusCore.Check.Uniques
 
         Common
         Crypto
@@ -212,7 +213,6 @@ library
         PlutusIR.TypeCheck.Internal
 
         UntypedPlutusCore.Analysis.Definitions
-        UntypedPlutusCore.Check.Uniques
         UntypedPlutusCore.Core
         UntypedPlutusCore.Core.Instance
         UntypedPlutusCore.Core.Instance.CBOR
