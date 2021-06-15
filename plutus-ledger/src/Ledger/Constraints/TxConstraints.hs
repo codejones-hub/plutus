@@ -29,7 +29,7 @@ import           PlutusTx.Prelude
 
 import           Plutus.V1.Ledger.Crypto   (PubKeyHash)
 import qualified Plutus.V1.Ledger.Interval as I
-import           Plutus.V1.Ledger.Scripts  (Datum (..), DatumHash, MonetaryPolicyHash, Redeemer, ValidatorHash)
+import           Plutus.V1.Ledger.Scripts  (Datum (..), DatumHash, MonetaryPolicyHash, Redeemer (..), ValidatorHash)
 import           Plutus.V1.Ledger.Slot     (SlotRange)
 import           Plutus.V1.Ledger.Tx       (TxOutRef)
 import           Plutus.V1.Ledger.Value    (TokenName, Value, isZero)
@@ -46,7 +46,7 @@ data TxConstraint =
     | MustProduceAtLeast Value
     | MustSpendPubKeyOutput TxOutRef
     | MustSpendScriptOutput TxOutRef Redeemer
-    | MustForgeValue MonetaryPolicyHash TokenName Integer
+    | MustForgeValue MonetaryPolicyHash Redeemer TokenName Integer
     | MustPayToPubKey PubKeyHash Value
     | MustPayToOtherScript ValidatorHash Datum Value
     | MustHashDatum DatumHash Datum
@@ -69,8 +69,8 @@ instance Pretty TxConstraint where
             hang 2 $ vsep ["must spend pubkey output:", pretty ref]
         MustSpendScriptOutput ref red ->
             hang 2 $ vsep ["must spend script output:", pretty ref, pretty red]
-        MustForgeValue mps tn i ->
-            hang 2 $ vsep ["must forge value:", pretty mps, pretty tn <+> pretty i]
+        MustForgeValue mps red tn i ->
+            hang 2 $ vsep ["must forge value:", pretty mps, pretty red, pretty tn <+> pretty i]
         MustPayToPubKey pk v ->
             hang 2 $ vsep ["must pay to pubkey:", pretty pk, pretty v]
         MustPayToOtherScript vlh dv vl ->
@@ -210,7 +210,8 @@ mustForgeValue = foldMap valueConstraint . (AssocMap.toList . Value.getValue) wh
 {-# INLINABLE mustForgeCurrency #-}
 -- | Create the given amount of the currency
 mustForgeCurrency :: forall i o. MonetaryPolicyHash -> TokenName -> Integer -> TxConstraints i o
-mustForgeCurrency mps tn = singleton . MustForgeValue mps tn
+-- TODO: pass up?
+mustForgeCurrency mps tn = singleton . MustForgeValue mps (Redeemer $ PlutusTx.toData ()) tn
 
 {-# INLINABLE mustSpendAtLeast #-}
 -- | Requirement to spend inputs with at least the given value
@@ -272,8 +273,8 @@ requiredSignatories = foldMap f . txConstraints where
 {-# INLINABLE requiredMonetaryPolicies #-}
 requiredMonetaryPolicies :: forall i o. TxConstraints i o -> [MonetaryPolicyHash]
 requiredMonetaryPolicies = foldMap f . txConstraints where
-    f (MustForgeValue mps _ _) = [mps]
-    f _                        = []
+    f (MustForgeValue mps _ _ _) = [mps]
+    f _                          = []
 
 {-# INLINABLE requiredDatums #-}
 requiredDatums :: forall i o. TxConstraints i o -> [Datum]

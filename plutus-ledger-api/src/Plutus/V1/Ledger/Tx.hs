@@ -28,11 +28,16 @@ module Plutus.V1.Ledger.Tx(
     forgeScripts,
     signatures,
     datumWitnesses,
+    redeemers,
     lookupSignature,
     lookupDatum,
+    lookupRedeemer,
     addSignature,
     forge,
     fee,
+    ScriptTag (..),
+    RedeemerPtr (..),
+    Redeemers,
     -- ** Hashing transactions
     txId,
     -- ** Stripped transactions
@@ -58,6 +63,8 @@ module Plutus.V1.Ledger.Tx(
     TxIn(..),
     inRef,
     inType,
+    inRedeemerPtr,
+    inRedeemer,
     inScripts,
     validRange,
     pubKeyTxIn,
@@ -137,6 +144,7 @@ data Tx = Tx {
     -- ^ The scripts that must be run to check forging conditions.
     txSignatures   :: Map PubKey Signature,
     -- ^ Signatures of this transaction.
+    txRedeemers    :: Redeemers,
     txData         :: Map DatumHash Datum
     -- ^ Datum objects recorded on this transaction.
     } deriving stock (Show, Eq, Generic)
@@ -168,11 +176,12 @@ instance Semigroup Tx where
         txValidRange = txValidRange tx1 /\ txValidRange tx2,
         txForgeScripts = txForgeScripts tx1 <> txForgeScripts tx2,
         txSignatures = txSignatures tx1 <> txSignatures tx2,
+        txRedeemers = txRedeemers tx1 <> txRedeemers tx2,
         txData = txData tx1 <> txData tx2
         }
 
 instance Monoid Tx where
-    mempty = Tx mempty mempty mempty mempty mempty top mempty mempty mempty
+    mempty = Tx mempty mempty mempty mempty mempty top mempty mempty mempty mempty
 
 instance BA.ByteArrayAccess Tx where
     length        = BA.length . Write.toStrictByteString . encode
@@ -222,6 +231,11 @@ forgeScripts = lens g s where
     g = txForgeScripts
     s tx fs = tx { txForgeScripts = fs }
 
+redeemers :: Lens' Tx Redeemers
+redeemers = lens g s where
+    g = txRedeemers
+    s tx reds = tx { txRedeemers = reds }
+
 datumWitnesses :: Lens' Tx (Map DatumHash Datum)
 datumWitnesses = lens g s where
     g = txData
@@ -232,6 +246,9 @@ lookupSignature s Tx{txSignatures} = Map.lookup s txSignatures
 
 lookupDatum :: Tx -> DatumHash -> Maybe Datum
 lookupDatum Tx{txData} h = Map.lookup h txData
+
+lookupRedeemer :: Tx -> RedeemerPtr -> Maybe Redeemer
+lookupRedeemer tx p = Map.lookup p (txRedeemers tx)
 
 -- | Check that all values in a transaction are non-negative.
 validValuesTx :: Tx -> Bool
@@ -265,6 +282,20 @@ txId tx = TxId $ BA.convert h' where
     h' :: Digest SHA256
     h' = hash h
 
+-- | A tag indicating the type of script that we are pointing to.
+-- NOTE: Cert/Reward are not supported right now.
+data ScriptTag = Spend | Mint | Cert | Reward
+    deriving stock (Show, Eq, Ord, Generic)
+    deriving anyclass (Serialise, ToJSON, FromJSON, NFData)
+
+-- | A redeemer pointer is a pair of a script type tag t and an index i, picking out the ith
+-- script of type t in the transaction.
+data RedeemerPtr = RedeemerPtr ScriptTag Integer
+    deriving stock (Show, Eq, Ord, Generic)
+    deriving anyclass (Serialise, ToJSON, FromJSON, ToJSONKey, FromJSONKey, NFData)
+
+type Redeemers = Map RedeemerPtr Redeemer
+
 -- | A reference to a transaction output. This is a
 -- pair of a transaction reference, and an index indicating which of the outputs
 -- of that transaction we are referring to.
@@ -292,7 +323,7 @@ txOutRefs t = mkOut <$> zip [0..] (txOutputs t) where
 -- | The type of a transaction input.
 data TxInType =
       -- TODO: these should all be hashes, with the validators and data segregated to the side
-      ConsumeScriptAddress !Validator !Redeemer !Datum -- ^ A transaction input that consumes a script address with the given validator, redeemer, and datum.
+      ConsumeScriptAddress !Validator !Datum -- ^ A transaction input that consumes a script address with the given validator, redeemer, and datum.
     | ConsumePublicKeyAddress -- ^ A transaction input that consumes a public key address.
     deriving stock (Show, Eq, Ord, Generic)
     deriving anyclass (Serialise, ToJSON, FromJSON, NFData)
@@ -309,8 +340,8 @@ instance Pretty TxIn where
     pretty TxIn{txInRef,txInType} =
                 let rest =
                         case txInType of
-                            Just (ConsumeScriptAddress _ redeemer _) ->
-                                pretty redeemer
+                            Just (ConsumeScriptAddress _ _) ->
+                                mempty
                             _ -> mempty
                 in hang 2 $ vsep ["-" <+> pretty txInRef, rest]
 
@@ -324,21 +355,29 @@ inType :: Lens' TxIn (Maybe TxInType)
 inType = lens txInType s where
     s txi t = txi { txInType = t }
 
+inRedeemerPtr :: Tx -> TxIn -> Maybe RedeemerPtr
+inRedeemerPtr Tx{txInputs} txin = RedeemerPtr Spend . fromIntegral <$> Set.lookupIndex txin txInputs
+
+inRedeemer :: Tx -> TxIn -> Maybe Redeemer
+inRedeemer tx txin = do
+    p <- inRedeemerPtr tx txin
+    lookupRedeemer tx p
+
 -- | Validator, redeemer, and data scripts of a transaction input that spends a
 --   "pay to script" output.
-inScripts :: TxIn -> Maybe (Validator, Redeemer, Datum)
-inScripts TxIn{ txInType = t } = case t of
-    Just (ConsumeScriptAddress v r d) -> Just (v, r, d)
-    Just ConsumePublicKeyAddress      -> Nothing
-    Nothing                           -> Nothing
+inScripts :: Tx -> TxIn -> Maybe (Validator, Redeemer, Datum)
+inScripts tx txin = do
+    ConsumeScriptAddress v d <- txInType txin
+    r <- inRedeemer tx txin
+    pure (v, r, d)
 
 -- | A transaction input that spends a "pay to public key" output, given the witness.
 pubKeyTxIn :: TxOutRef -> TxIn
 pubKeyTxIn r = TxIn r (Just ConsumePublicKeyAddress)
 
 -- | A transaction input that spends a "pay to script" output, given witnesses.
-scriptTxIn :: TxOutRef -> Validator -> Redeemer -> Datum -> TxIn
-scriptTxIn ref v r d = TxIn ref . Just $ ConsumeScriptAddress v r d
+scriptTxIn :: TxOutRef -> Validator -> Datum -> TxIn
+scriptTxIn ref v d = TxIn ref . Just $ ConsumeScriptAddress v d
 
 -- | Filter to get only the pubkey inputs.
 pubKeyTxIns :: Fold (Set.Set TxIn) TxIn

@@ -21,8 +21,8 @@ key :: PubKeyHash
 key = error ()
 
 -- BLOCK1
-oneAtATimePolicy :: ScriptContext -> Bool
-oneAtATimePolicy ctx =
+oneAtATimePolicy :: () -> ScriptContext -> Bool
+oneAtATimePolicy _ ctx =
     -- 'ownCurrencySymbol' lets us get our own hash (= currency symbol)
     -- from the context
     let ownSymbol = ownCurrencySymbol ctx

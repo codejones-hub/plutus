@@ -62,16 +62,14 @@ instance (ToJSON (DatumType a)) => ToJSON (TypedScriptTxIn a) where
 -- | Create a 'TypedScriptTxIn' from a correctly-typed validator, redeemer, and output ref.
 makeTypedScriptTxIn
     :: forall inn
-    . (IsData (RedeemerType inn), IsData (DatumType inn))
+    . (IsData (DatumType inn))
     => TypedValidator inn
-    -> RedeemerType inn
     -> TypedScriptTxOutRef inn
     -> TypedScriptTxIn inn
-makeTypedScriptTxIn si r tyRef@(TypedScriptTxOutRef ref TypedScriptTxOut{tyTxOutData=d}) =
+makeTypedScriptTxIn si tyRef@(TypedScriptTxOutRef ref TypedScriptTxOut{tyTxOutData=d}) =
     let vs = validatorScript si
-        rs = Redeemer (toData r)
         ds = Datum (toData d)
-        txInType = ConsumeScriptAddress vs rs ds
+        txInType = ConsumeScriptAddress vs ds
     in TypedScriptTxIn @inn (TxIn ref (Just txInType)) tyRef
 
 txInValue :: TypedScriptTxIn a -> Value.Value
@@ -205,24 +203,22 @@ checkDatum _ (Datum d) =
 -- | Create a 'TypedScriptTxIn' from an existing 'TxIn' by checking the types of its parts.
 typeScriptTxIn
     :: forall inn m
-    . ( IsData (RedeemerType inn)
-      , IsData (DatumType inn)
+    . ( IsData (DatumType inn)
       , MonadError ConnectionError m)
     => (TxOutRef -> Maybe TxOutTx)
     -> TypedValidator inn
     -> TxIn
     -> m (TypedScriptTxIn inn)
 typeScriptTxIn lookupRef si TxIn{txInRef,txInType} = do
-    (rs, ds) <- case txInType of
-        Just (ConsumeScriptAddress _ rs ds) -> pure (rs, ds)
-        Just x                              -> throwError $ WrongInType x
-        Nothing                             -> throwError MissingInType
+    ds <- case txInType of
+        Just (ConsumeScriptAddress _ ds) -> pure ds
+        Just x                           -> throwError $ WrongInType x
+        Nothing                          -> throwError MissingInType
     -- It would be nice to typecheck the validator script here (we used to do that when we
     -- had typed on-chain code), but we can't do that with untyped code!
-    rsVal <- checkRedeemer si rs
     _ <- checkDatum si ds
     typedOut <- typeScriptTxOutRef @inn lookupRef si txInRef
-    pure $ makeTypedScriptTxIn si rsVal typedOut
+    pure $ makeTypedScriptTxIn si typedOut
 
 -- | Create a 'PubKeyTxIn' from an existing 'TxIn' by checking that it has the right payment type.
 typePubKeyTxIn

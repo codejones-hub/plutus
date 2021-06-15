@@ -45,6 +45,7 @@ import           Control.Monad.State
 
 import           Data.Aeson                       (FromJSON, ToJSON)
 import           Data.Foldable                    (traverse_)
+import           Data.List                        (elemIndex)
 import           Data.Map                         (Map)
 import qualified Data.Map                         as Map
 import           Data.Semigroup                   (First (..))
@@ -66,9 +67,10 @@ import qualified Ledger.Typed.Tx                  as Typed
 import           Plutus.V1.Ledger.Address         (Address (..), pubKeyHashAddress)
 import qualified Plutus.V1.Ledger.Address         as Address
 import           Plutus.V1.Ledger.Crypto          (PubKeyHash)
-import           Plutus.V1.Ledger.Scripts         (Datum (..), DatumHash, MonetaryPolicy, MonetaryPolicyHash, Validator,
-                                                   datumHash, monetaryPolicyHash)
-import           Plutus.V1.Ledger.Tx              (Tx, TxOut (..), TxOutRef, TxOutTx (..))
+import           Plutus.V1.Ledger.Scripts         (Datum (..), DatumHash, MonetaryPolicy, MonetaryPolicyHash,
+                                                   Redeemer (..), Validator, datumHash, monetaryPolicyHash)
+import           Plutus.V1.Ledger.Tx              (RedeemerPtr (..), ScriptTag (..), Tx, TxOut (..), TxOutRef,
+                                                   TxOutTx (..))
 import qualified Plutus.V1.Ledger.Tx              as Tx
 import           Plutus.V1.Ledger.Value           (Value)
 import qualified Plutus.V1.Ledger.Value           as Value
@@ -215,6 +217,10 @@ data ConstraintProcessingState =
     ConstraintProcessingState
         { cpsUnbalancedTx              :: UnbalancedTx
         -- ^ The unbalanced transaction that we're building
+        , cpsInRedeemers               :: Map.Map Tx.TxIn Redeemer
+        -- ^ Redeemers for inputs. These must be added to the transaction at the end
+        --   since the way they are represented depends on the order of the set of inputs.
+        , cpsMintRedeemers             :: Map.Map MonetaryPolicyHash Redeemer
         , cpsValueSpentBalancesInputs  :: ValueSpentBalances
         -- ^ Balance of the values given and required for the transaction's
         --   inputs
@@ -237,6 +243,8 @@ totalMissingValue ConstraintProcessingState{cpsValueSpentBalancesInputs, cpsValu
 
 makeLensesFor
     [ ("cpsUnbalancedTx", "unbalancedTx")
+    , ("cpsInRedeemers", "inRedeemers")
+    , ("cpsMintRedeemers", "mintRedeemers")
     , ("cpsValueSpentBalancesInputs", "valueSpentInputs")
     , ("cpsValueSpentBalancesOutputs", "valueSpentOutputs")
     ] ''ConstraintProcessingState
@@ -244,6 +252,8 @@ makeLensesFor
 initialState :: ConstraintProcessingState
 initialState = ConstraintProcessingState
     { cpsUnbalancedTx = emptyUnbalancedTx
+    , cpsInRedeemers = mempty
+    , cpsMintRedeemers = mempty
     , cpsValueSpentBalancesInputs = ValueSpentBalances mempty mempty
     , cpsValueSpentBalancesOutputs = ValueSpentBalances mempty mempty
     }
@@ -287,6 +297,8 @@ processLookupsAndConstraints lookups TxConstraints{txConstraints, txOwnInputs, t
             traverse_ processConstraint txConstraints
             traverse_ addOwnInput txOwnInputs
             traverse_ addOwnOutput txOwnOutputs
+            addTxInRedeemers
+            addMintingRedeemers
             addMissingValueSpent
             updateUtxoIndex
 
@@ -323,6 +335,34 @@ addMissingValueSpent = do
             pk <- asks slOwnPubkey >>= maybe (throwError OwnPubKeyMissing) pure
             unbalancedTx . tx . Tx.outputs %= (Tx.TxOut{txOutAddress=pubKeyHashAddress pk,txOutValue=missing,txOutDatumHash=Nothing} :)
 
+addTxInRedeemers
+    :: ( MonadState ConstraintProcessingState m )
+    => m ()
+addTxInRedeemers = do
+    reds <- use inRedeemers
+    txSoFar <- use (unbalancedTx . tx)
+    let ins = Tx.txInputs txSoFar
+    iforM_ ins $ \i txin -> do
+        -- TODO: errors
+        let ptr = RedeemerPtr Spend (fromIntegral i)
+        red <- case Map.lookup txin reds of
+            Just red -> pure red
+            Nothing  -> RedeemerNotFound ptr
+        unbalancedTx . tx . Tx.redeemers . at ptr .= Just red
+
+addMintingRedeemers
+    :: ( MonadState ConstraintProcessingState m )
+    => m ()
+addMintingRedeemers = do
+    reds <- use mintRedeemers
+    txSoFar <- use (unbalancedTx . tx)
+    let mpss = monetaryPolicyHash <$> Set.toList (Tx.txForgeScripts txSoFar)
+    iforM_ reds $ \mpsHash red -> do
+        -- TODO: errors
+        let Just i = elemIndex mpsHash mpss
+            ptr = RedeemerPtr Mint (fromIntegral i)
+        unbalancedTx . tx . Tx.redeemers . at ptr .= Just red
+
 updateUtxoIndex
     :: ( MonadReader (ScriptLookups a) m
        , MonadState ConstraintProcessingState m
@@ -350,9 +390,13 @@ addOwnInput InputConstraint{icRedeemer, icTxOutRef} = do
         either (throwError . TypeCheckFailed) pure
         $ runExcept @ConnectionError
         $ Typed.typeScriptTxOutRef (`Map.lookup` slTxOutputs) inst icTxOutRef
-    let txIn = Typed.makeTypedScriptTxIn inst icRedeemer typedOutRef
+
+    let tyTxIn = Typed.makeTypedScriptTxIn inst typedOutRef
+        txIn = Typed.tyTxInTxIn tyTxIn
         vl   = Tx.txOutValue $ Typed.tyTxOutTxOut $ Typed.tyTxOutRefOut typedOutRef
-    unbalancedTx . tx . Tx.inputs %= Set.insert (Typed.tyTxInTxIn txIn)
+
+    unbalancedTx . tx . Tx.inputs %= Set.insert txIn
+    inRedeemers . at txIn .= Just (Redeemer $ toData icRedeemer)
     valueSpentInputs <>= provided vl
 
 -- | Add a typed output and return its value.
@@ -380,6 +424,7 @@ data MkTxError =
     | DatumNotFound DatumHash
     | MonetaryPolicyNotFound MonetaryPolicyHash
     | ValidatorHashNotFound Address
+    | RedeemerNotFound RedeemerPtr
     | OwnPubKeyMissing
     | TypedValidatorMissing
     | DatumWrongHash DatumHash Datum
@@ -446,7 +491,7 @@ processConstraint
 processConstraint = \case
     MustIncludeDatum dv ->
         let theHash = datumHash dv in
-        unbalancedTx . tx . Tx.datumWitnesses %= set (at theHash) (Just dv)
+        unbalancedTx . tx . Tx.datumWitnesses . at theHash .= Just dv
     MustValidateIn slotRange ->
         unbalancedTx . tx . Tx.validRange %= (slotRange /\)
     MustBeSignedBy pk ->
@@ -474,13 +519,14 @@ processConstraint = \case
                 -- TODO: When witnesses are properly segregated we can
                 --       probably get rid of the 'slOtherData' map and of
                 --       'lookupDatum'
-                let input = Tx.scriptTxIn txo validator red dataValue
+                let input = Tx.scriptTxIn txo validator dataValue
                 unbalancedTx . tx . Tx.inputs %= Set.insert input
-                unbalancedTx . tx . Tx.datumWitnesses %= set (at dvh) (Just dataValue)
+                unbalancedTx . tx . Tx.datumWitnesses . at dvh .= Just dataValue
+                inRedeemers . at input .= Just red
                 valueSpentInputs <>= provided (Tx.txOutValue (txOutTxOut txOutTx))
             _                 -> throwError (TxOutRefWrongType txo)
 
-    MustForgeValue mpsHash tn i -> do
+    MustForgeValue mpsHash red tn i -> do
         monetaryPolicyScript <- lookupMonetaryPolicy mpsHash
         let value = Value.singleton (Value.mpsSymbol mpsHash) tn
         -- If i is negative we are burning tokens. The tokens burned must
@@ -493,16 +539,17 @@ processConstraint = \case
 
         unbalancedTx . tx . Tx.forgeScripts %= Set.insert monetaryPolicyScript
         unbalancedTx . tx . Tx.forge <>= value i
+        mintRedeemers . at mpsHash .= Just red
     MustPayToPubKey pk vl -> do
         unbalancedTx . tx . Tx.outputs %= (Tx.TxOut{txOutAddress=pubKeyHashAddress pk,txOutValue=vl,txOutDatumHash=Nothing} :)
         valueSpentOutputs <>= provided vl
     MustPayToOtherScript vlh dv vl -> do
         let addr = Address.scriptHashAddress vlh
             theHash = datumHash dv
-        unbalancedTx . tx . Tx.datumWitnesses %= set (at theHash) (Just dv)
+        unbalancedTx . tx . Tx.datumWitnesses . at theHash .= Just dv
         unbalancedTx . tx . Tx.outputs %= (Tx.scriptTxOut' vl addr dv :)
         valueSpentOutputs <>= provided vl
     MustHashDatum dvh dv -> do
         unless (datumHash dv == dvh)
             (throwError $ DatumWrongHash dvh dv)
-        unbalancedTx . tx . Tx.datumWitnesses %= set (at dvh) (Just dv)
+        unbalancedTx . tx . Tx.datumWitnesses . at dvh .= Just dv

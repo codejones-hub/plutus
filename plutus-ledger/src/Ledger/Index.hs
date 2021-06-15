@@ -41,6 +41,7 @@ import           Prelude                          hiding (lookup)
 import           Codec.Serialise                  (Serialise)
 import           Control.DeepSeq                  (NFData)
 import           Control.Lens                     (toListOf, view, (^.))
+import           Control.Lens.Indexed             (iforM_)
 import           Control.Monad
 import           Control.Monad.Except             (ExceptT, MonadError (..), runExcept, runExceptT)
 import           Control.Monad.Reader             (MonadReader (..), ReaderT (..), ask)
@@ -113,6 +114,10 @@ data ValidationError =
     -- ^ For pay-to-script outputs: the validator script provided in the transaction input does not match the hash specified in the transaction output.
     | InvalidDatumHash Datum DatumHash
     -- ^ For pay-to-script outputs: the datum provided in the transaction input does not match the hash specified in the transaction output.
+    | MissingInput TxIn
+    -- ^ For pay-to-script outputs: we couldn't find the tx input in the transaction (bug)
+    | MissingRedeemer RedeemerPtr
+    -- ^ For scripts that take redeemers: no redeemer was provided for this script.
     | InvalidSignature PubKey Signature
     -- ^ For pay-to-pubkey outputs: the signature of the transaction input does not match the public key of the transaction output.
     | ValueNotPreserved V.Value V.Value
@@ -218,7 +223,7 @@ checkValidInputs getInputs tx = do
     let tid = txId tx
         sigs = tx ^. signatures
     outs <- lkpOutputs (getInputs tx)
-    matches <- traverse (uncurry (matchInputOutput tid sigs)) outs
+    matches <- traverse (uncurry (matchInputOutput tx tid sigs)) outs
     vld     <- mkTxInfo tx
     traverse_ (checkMatch vld) matches
 
@@ -257,19 +262,22 @@ checkForgingAuthorised tx =
 checkForgingScripts :: forall m . ValidationMonad m => Tx -> m ()
 checkForgingScripts tx = do
     txinfo <- mkTxInfo tx
-    let mpss = Set.toList (txForgeScripts tx)
-        mkVd :: Integer -> ScriptContext
-        mkVd i =
-            let cs :: V.CurrencySymbol
-                cs = V.mpsSymbol $ monetaryPolicyHash $ mpss !! fromIntegral i
-            in ScriptContext { scriptContextPurpose = Minting cs, scriptContextTxInfo = txinfo }
-    forM_ (mpss `zip` (mkVd <$> [0..])) $ \(vl, ptx') ->
-        let vd = Context $ toData ptx'
-        in case runExcept $ runMonetaryPolicyScript vd vl of
+    iforM_ (Set.toList (txForgeScripts tx)) $ \i vl -> do
+        let cs :: V.CurrencySymbol
+            cs = V.mpsSymbol $ monetaryPolicyHash vl
+            ctx :: Context
+            ctx = Context $ toData $ ScriptContext { scriptContextPurpose = Minting cs, scriptContextTxInfo = txinfo }
+            ptr :: RedeemerPtr
+            ptr = RedeemerPtr Mint (fromIntegral i)
+        red <- case lookupRedeemer tx ptr of
+            Just r  -> pure r
+            Nothing -> throwError $ MissingRedeemer ptr
+
+        case runExcept $ runMonetaryPolicyScript ctx vl red of
             Left e  -> do
-                tell [mpsValidationEvent vd vl (Left e)]
+                tell [mpsValidationEvent ctx vl red (Left e)]
                 throwError $ ScriptFailure e
-            res -> tell [mpsValidationEvent vd vl res]
+            res -> tell [mpsValidationEvent ctx vl red res]
 
 -- | A matching pair of transaction input and transaction output, ensuring that they are of matching types also.
 data InOutMatch =
@@ -283,8 +291,10 @@ data InOutMatch =
 
 -- | Match a transaction input with the output that it consumes, ensuring that
 --   both are of the same type (pubkey or pay-to-script).
-matchInputOutput :: ValidationMonad m
-    => TxId
+matchInputOutput
+    :: ValidationMonad m
+    => Tx
+    -> TxId
     -- ^ Hash of the transaction that is being verified
     -> Map.Map PubKey Signature
     -- ^ Signatures provided with the transaction
@@ -293,10 +303,16 @@ matchInputOutput :: ValidationMonad m
     -> TxOut
     -- ^ The unspent transaction output we are trying to unlock
     -> m InOutMatch
-matchInputOutput txid mp txin txo = case (txInType txin, txOutDatumHash txo, txOutAddress txo) of
-    (Just (ConsumeScriptAddress v r d), Just dh, Address{addressCredential=ScriptCredential vh}) -> do
+matchInputOutput tx txid mp txin txo = case (txInType txin, txOutDatumHash txo, txOutAddress txo) of
+    (Just (ConsumeScriptAddress v d), Just dh, Address{addressCredential=ScriptCredential vh}) -> do
         unless (datumHash d == dh) $ throwError $ InvalidDatumHash d dh
         unless (validatorHash v == vh) $ throwError $ InvalidScriptHash v vh
+        p <- case inRedeemerPtr tx txin of
+            Just r  -> pure r
+            Nothing -> throwError $ MissingInput txin
+        r <- case lookupRedeemer tx p of
+            Just r  -> pure r
+            Nothing -> throwError $ MissingRedeemer p
 
         pure $ ScriptMatch (txInRef txin) v r d
     (Just ConsumePublicKeyAddress, Nothing, Address{addressCredential=PubKeyCredential pkh}) ->
@@ -408,10 +424,10 @@ validatorScriptValidationEvent ctx validator datum redeemer result =
         , sveType = ValidatorScript
         }
 
-mpsValidationEvent :: Context -> MonetaryPolicy -> Either ScriptError [String] -> ScriptValidationEvent
-mpsValidationEvent ctx mps result =
+mpsValidationEvent :: Context -> MonetaryPolicy -> Redeemer -> Either ScriptError [String] -> ScriptValidationEvent
+mpsValidationEvent ctx mps red result =
     ScriptValidationEvent
-        { sveScript = applyMonetaryPolicyScript ctx mps
+        { sveScript = applyMonetaryPolicyScript ctx mps red
         , sveResult = result
         , sveType = MonetaryPolicyScript
         }
