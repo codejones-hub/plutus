@@ -1,5 +1,9 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+
+{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing      #-}
+{-# OPTIONS_GHC -fno-warn-orphans             #-}
+{-# OPTIONS_GHC -fno-warn-unused-matches      #-}
 
 module Plutus.Benchmark.Knights where
 
