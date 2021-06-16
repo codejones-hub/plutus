@@ -501,7 +501,7 @@ dischargeCekValEnv valEnv = go 1
 dischargeCekValue :: CekValue uni fun -> Term DeBruijn uni fun ()
 dischargeCekValue = \case
     VCon     val          -> Constant () val
-    VDelay   body env     -> dischargeCekValEnv env $ Delay () body
+    VDelay   body env     -> Delay () $ dischargeCekValEnv env body
     -- 'computeCek' turns @LamAbs _ name body@ into @VLamAbs name body env@ where @env@ is an
     -- argument of 'computeCek' and hence we need to start discharging outside of the reassembled
     -- lambda, otherwise @name@ could clash with the names that we have in @env@.

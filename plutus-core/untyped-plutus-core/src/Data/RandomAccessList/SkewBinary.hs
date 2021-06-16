@@ -21,14 +21,14 @@ After benchmarking using plutus-core:env-bench and plutus-benchmark:nofib,
 it seems that the best options are:
 
 - no sub-tree size caching
-- strict on the RAList spine, but lazy on the Tree
+- strict on the spines
 -}
 
 -- | A complete binary tree.
 -- Note: the size of the tree is not stored/cached,
 -- unless it appears as a root tree in 'RAList', which the size is stored inside the Cons.
 data Tree a = Leaf a
-            | Node a (Tree a) (Tree a)
+            | Node a !(Tree a) !(Tree a)
             deriving (Eq, Show)
 
 -- | A strict list of complete binary trees accompanied by their size.
@@ -36,7 +36,7 @@ data Tree a = Leaf a
 -- Note: this list is strict in its spine, unlike the Prelude list
 data RAList a = BHead
                {-# UNPACK #-} !Word -- ^ the size of the head tree
-               (Tree a) -- ^ the head tree
+               !(Tree a) -- ^ the head tree
                !(RAList a) -- ^ the tail trees
              | Nil
              -- the derived Eq instance is correct,
@@ -93,26 +93,19 @@ tail :: RAList a -> RAList a
 tail = snd . fromMaybe (error "empty RAList") . uncons
 
 -- 0-based
+-- O(log n)
 index :: RAList a -> Word -> a
-index Nil _  = error "out of bounds"
-index (BHead w t ts) !i  =
-    if i < w
-    then indexTree t i w
-    else index ts (i-w)
+index (BHead w0 t ts) !i0
+  | i0 >= w0 = index ts (i0 - w0)
+  | otherwise = go w0 i0 t
   where
-    indexTree :: Tree a -> Word -> Word -> a
-    indexTree = \case
-        Leaf x -> const $ const x
-        Node x t1 t2 -> \case
-            0 -> const x
-            offset -> (\ f treeSize ->
-                         let halfSize = unsafeShiftR treeSize 1
-                         in (if offset <= halfSize
-                             then f t1 1
-                             else f t2 (1+halfSize)
-                            ) halfSize
-                     )
-                     (\ t' -> indexTree t' . (offset -))
-
+    go _ _ (Leaf x) = x
+    go _ 0 (Node x _ _) = x
+    go w i (Node _ l r) =
+      let halfSize = unsafeShiftR w 1
+      in if i <= halfSize
+         then go halfSize (i-1) l
+         else go halfSize (i-1-halfSize) r
+index Nil _ = error "skew list out of bounds"
 
 -- TODO: safeIndex

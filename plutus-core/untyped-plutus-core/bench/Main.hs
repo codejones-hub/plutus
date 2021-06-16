@@ -2,10 +2,8 @@
 module Main where
 
 import           Criterion.Main
-import           Data.Function
 import           Data.Semigroup
 import           System.Random
-import           Unsafe.Coerce
 
 import qualified Data.IntMap.Strict               as I
 import qualified Data.RAList                      as R
