@@ -87,5 +87,5 @@ mkListBMs ns = bgroup "List" [mkListBM n | n <- ns]
 
 
 main :: Haskell.IO ()
-main = defaultMainWith (defaultConfig { C.csvFile = Just "cek-lists.cvs" }) $ [mkListBMs [0,10..1000]]
+main = defaultMainWith (defaultConfig { C.csvFile = Just "cek-lists.csv" }) $ [mkListBMs [0,10..1000]]
 
