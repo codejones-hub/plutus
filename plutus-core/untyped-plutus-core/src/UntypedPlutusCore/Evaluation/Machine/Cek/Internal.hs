@@ -67,14 +67,15 @@ import           Data.Array
 import           Data.DList                                               (DList)
 import qualified Data.DList                                               as DList
 import           Data.Hashable                                            (Hashable)
+import qualified Data.IntMap                                              as I
 import qualified Data.Kind                                                as GHC
 import           Data.Proxy
-import           Data.RandomAccessList.SkewBinary                         as Skew
 import           Data.STRef
 import           Data.Semigroup                                           (stimes)
 import           Data.Text.Prettyprint.Doc
 import           Data.Word64Array.Word8
 import           Universe
+import           Unsafe.Coerce
 
 {- Note [Compilation peculiarities]
 READ THIS BEFORE TOUCHING ANYTHING IN THIS FILE
@@ -200,7 +201,10 @@ data CekValue uni fun =
                                             -- Check the docs of 'BuiltinRuntime' for details.
     deriving (Show)
 
-type CekValEnv uni fun = Skew.RAList (CekValue uni fun)
+type CekValEnv uni fun = (I.IntMap (CekValue uni fun) , Level)
+
+newtype Level = Level { unLevel :: Int}
+    deriving Show
 
 -- | The CEK machine is parameterized over a @spendBudget@ function that has (roughly) the same type
 -- as the one from the 'SpendBudget' class (and so the @SpendBudget@ instance for 'CekM'
@@ -480,7 +484,7 @@ emitCek str =
 -- | Instantiate all the free variables of a term by looking them up in an environment.
 -- Mutually recursive with dischargeCekVal.
 dischargeCekValEnv :: forall uni fun. CekValEnv uni fun -> Term DeBruijn uni fun () -> Term DeBruijn uni fun ()
-dischargeCekValEnv valEnv = go 1
+dischargeCekValEnv (valEnv, !envLvl) = go 1
   where
    go :: Word -> Term DeBruijn uni fun () -> Term DeBruijn uni fun ()
    go !lvl = \case
@@ -489,7 +493,7 @@ dischargeCekValEnv valEnv = go 1
                           -- bound variable so leave it alone
                           then var
                           -- -1 because index is 0-based but our debruijn is 1-based
-                          else dischargeCekValue $ valEnv `Skew.index` (n - 1 - lvl)
+                          else dischargeCekValue $ valEnv I.! (coerce envLvl + unsafeCoerce (lvl  - coerce name))
     LamAbs ann name body -> LamAbs ann name $ go (lvl+1) body
     Apply ann fun arg    -> Apply ann (go lvl fun) $ go lvl arg
     Delay ann term       -> Delay ann $ go lvl term
@@ -572,18 +576,17 @@ runCekM (MachineParameters costs runtime) (ExBudgetMode getExBudgetInfo) emittin
 
 -- | Extend an environment with a variable name, the value the variable stands for
 -- and the environment the value is defined in.
-{-# INLINE extendEnv #-}
 extendEnv :: CekValue uni fun -> CekValEnv uni fun -> CekValEnv uni fun
-extendEnv = Skew.Cons
+extendEnv v (e,!lvl) =
+    (I.insert (unLevel lvl) v e, Level (unLevel lvl+1))
 
--- FIXME: reenable when SkewBinary has a safe indexing/lookup
--- -- | Look up a variable name in the environment.
--- lookupVarName :: forall uni fun s . (PrettyUni uni fun) => DeBruijn -> CekValEnv uni fun -> CekM uni fun s (CekValue uni fun)
--- lookupVarName varName varEnv =
---     case lookupName' varName varEnv of
---         Nothing  -> throwingWithCause _MachineError OpenTermEvaluatedMachineError $ Just var where
---             var = Var () varName
---         Just val -> pure val
+--- | Look up a variable name in the environment.
+lookupVarName :: forall uni fun s . (PrettyUni uni fun) => DeBruijn -> CekValEnv uni fun -> CekM uni fun s (CekValue uni fun)
+lookupVarName varName (varEnv, !envLvl) =
+    case I.lookup (coerce envLvl - unsafeCoerce (coerce varName :: Word)) varEnv of
+        Nothing  -> throwingWithCause _MachineError OpenTermEvaluatedMachineError $ Just var where
+            var = Var () varName
+        Just val -> pure val
 
 -- | Take pieces of a possibly partial builtin application and either create a 'CekValue' using
 -- 'makeKnown' or a partial builtin application depending on whether the built-in function is
@@ -628,7 +631,7 @@ enterComputeCek = computeCek (toWordArray 0) where
     computeCek !unbudgetedSteps ctx env (Var _ varName) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BVar unbudgetedSteps
         -- -1 because index is 0-based but our debruijn is 1-based
-        let val = Skew.index env (coerce varName - 1)
+        val <- lookupVarName varName env
         returnCek unbudgetedSteps' ctx val
     computeCek !unbudgetedSteps ctx _ (Constant _ val) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BConst unbudgetedSteps
@@ -785,4 +788,4 @@ runCek
 runCek params mode emitting term =
     runCekM params mode emitting $ do
         spendBudgetCek BStartup (cekStartupCost ?cekCosts)
-        enterComputeCek [] Skew.Nil term
+        enterComputeCek [] (mempty, Level 0) term
