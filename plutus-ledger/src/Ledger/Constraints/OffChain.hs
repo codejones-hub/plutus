@@ -27,6 +27,9 @@ module Ledger.Constraints.OffChain(
     -- * Constraints resolution
     , SomeLookupsAndConstraints(..)
     , UnbalancedTx(..)
+    , tx
+    , requiredSignatories
+    , utxoIndex
     , emptyUnbalancedTx
     , MkTxError(..)
     , mkTx
@@ -292,7 +295,7 @@ processLookupsAndConstraints lookups TxConstraints{txConstraints, txOwnInputs, t
 
 -- | Turn a 'TxConstraints' value into an unbalanced transaction that satisfies
 --   the constraints. To use this in a contract, see
---   'Plutus.Contract.Effects.WriteTx.submitTxConstraints'
+--   'Plutus.Contract.submitTxConstraints'
 --   and related functions.
 mkTx
     :: ( IsData (DatumType a)
