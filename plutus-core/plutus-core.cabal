@@ -132,6 +132,9 @@ library
         UntypedPlutusCore.Parser
         UntypedPlutusCore.Rename
         UntypedPlutusCore.Check.Uniques
+        UntypedPlutusCore.Core.Type
+        UntypedPlutusCore.Core.Instance.CBOR
+
 
         Common
         Crypto
@@ -215,7 +218,6 @@ library
         UntypedPlutusCore.Analysis.Definitions
         UntypedPlutusCore.Core
         UntypedPlutusCore.Core.Instance
-        UntypedPlutusCore.Core.Instance.CBOR
         UntypedPlutusCore.Core.Instance.Eq
         UntypedPlutusCore.Core.Instance.Flat
         UntypedPlutusCore.Core.Instance.Pretty
@@ -225,7 +227,6 @@ library
         UntypedPlutusCore.Core.Instance.Pretty.Readable
         UntypedPlutusCore.Core.Instance.Recursive
         UntypedPlutusCore.Core.Plated
-        UntypedPlutusCore.Core.Type
         UntypedPlutusCore.Evaluation.Machine.Cek.CekMachineCosts
         UntypedPlutusCore.Evaluation.Machine.Cek.ExBudgetMode
         UntypedPlutusCore.Evaluation.Machine.Cek.Internal
@@ -405,8 +406,10 @@ test-suite untyped-plutus-core-test
 
 executable plc
     import: lang
-    main-is: Main.hs
-    hs-source-dirs: executables/plc
+    main-is: plc/Main.hs
+    hs-source-dirs: executables
+    other-modules:
+        Common
     build-depends:
         plutus-core -any,
         base <5,
@@ -414,6 +417,7 @@ executable plc
         deepseq -any,
         flat -any,
         monoidal-containers -any,
+        mtl -any,
         optparse-applicative -any,
         prettyprinter -any,
         serialise -any,
@@ -423,8 +427,10 @@ executable plc
 
 executable uplc
     import: lang
-    main-is: Main.hs
-    hs-source-dirs: executables/uplc
+    main-is: uplc/Main.hs
+    hs-source-dirs: executables
+    other-modules:
+        Common
     build-depends:
         plutus-core -any,
         base <5,
@@ -432,6 +438,7 @@ executable uplc
         deepseq -any,
         flat -any,
         monoidal-containers -any,
+        mtl -any,
         optparse-applicative -any,
         prettyprinter -any,
         serialise -any,
