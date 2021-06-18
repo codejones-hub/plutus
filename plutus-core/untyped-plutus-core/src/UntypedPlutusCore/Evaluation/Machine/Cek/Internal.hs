@@ -20,6 +20,8 @@
 {-# LANGUAGE TypeFamilies             #-}
 {-# LANGUAGE TypeOperators            #-}
 {-# LANGUAGE UndecidableInstances     #-}
+{-# OPTIONS_GHC -ddump-simpl -ddump-to-file -dsuppress-uniques -dsuppress-coercions -dsuppress-type-applications -dsuppress-unfoldings -dsuppress-idinfo -dumpdir /tmp/dumps #-}
+
 
 module UntypedPlutusCore.Evaluation.Machine.Cek.Internal
     -- See Note [Compilation peculiarities].
@@ -182,8 +184,8 @@ instance Show (BuiltinRuntime (CekValue uni fun)) where
 data CekValue uni fun =
     -- This bang gave us a 1-2% speed-up at the time of writing.
     VCon !(Some (ValueOf uni))
-  | VDelay (Term DeBruijn uni fun ()) (CekValEnv uni fun)
-  | VLamAbs (Term DeBruijn uni fun ()) (CekValEnv uni fun)
+  | VDelay (Term DeBruijn uni fun ()) {-# UNPACK #-} !(CekValEnv uni fun)
+  | VLamAbs (Term DeBruijn uni fun ()) {-# UNPACK #-} !(CekValEnv uni fun)
   | VBuiltin            -- A partial builtin application, accumulating arguments for eventual full application.
       !fun                   -- So that we know, for what builtin we're calculating the cost.
                              -- TODO: any chance we could sneak this into 'BuiltinRuntime'
@@ -201,7 +203,8 @@ data CekValue uni fun =
                                             -- Check the docs of 'BuiltinRuntime' for details.
     deriving (Show)
 
-type CekValEnv uni fun = (I.IntMap (CekValue uni fun) , Level)
+data CekValEnv uni fun = CekValEnv (I.IntMap (CekValue uni fun)) !Level
+    deriving Show
 
 newtype Level = Level { unLevel :: Int}
     deriving Show
@@ -484,7 +487,7 @@ emitCek str =
 -- | Instantiate all the free variables of a term by looking them up in an environment.
 -- Mutually recursive with dischargeCekVal.
 dischargeCekValEnv :: forall uni fun. CekValEnv uni fun -> Term DeBruijn uni fun () -> Term DeBruijn uni fun ()
-dischargeCekValEnv (valEnv, !envLvl) = go 1
+dischargeCekValEnv !(CekValEnv valEnv envLvl) = go 1
   where
    go :: Word -> Term DeBruijn uni fun () -> Term DeBruijn uni fun ()
    go !lvl = \case
@@ -577,12 +580,12 @@ runCekM (MachineParameters costs runtime) (ExBudgetMode getExBudgetInfo) emittin
 -- | Extend an environment with a variable name, the value the variable stands for
 -- and the environment the value is defined in.
 extendEnv :: CekValue uni fun -> CekValEnv uni fun -> CekValEnv uni fun
-extendEnv v (e,!lvl) =
-    (I.insert (unLevel lvl) v e, Level (unLevel lvl+1))
+extendEnv v !(CekValEnv e lvl) =
+    (CekValEnv (I.insert (unLevel lvl) v e) (Level (unLevel lvl+1)))
 
 --- | Look up a variable name in the environment.
 lookupVarName :: forall uni fun s . (PrettyUni uni fun) => DeBruijn -> CekValEnv uni fun -> CekM uni fun s (CekValue uni fun)
-lookupVarName varName (varEnv, !envLvl) =
+lookupVarName varName (CekValEnv varEnv envLvl) =
     case I.lookup (coerce envLvl - unsafeCoerce (coerce varName :: Word)) varEnv of
         Nothing  -> throwingWithCause _MachineError OpenTermEvaluatedMachineError $ Just var where
             var = Var () varName
@@ -628,7 +631,7 @@ enterComputeCek = computeCek (toWordArray 0) where
         -> Term DeBruijn uni fun ()
         -> CekM uni fun s (Term DeBruijn uni fun ())
     -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
-    computeCek !unbudgetedSteps ctx env (Var _ varName) = do
+    computeCek !unbudgetedSteps ctx !env (Var _ varName) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BVar unbudgetedSteps
         -- -1 because index is 0-based but our debruijn is 1-based
         val <- lookupVarName varName env
@@ -636,29 +639,29 @@ enterComputeCek = computeCek (toWordArray 0) where
     computeCek !unbudgetedSteps ctx _ (Constant _ val) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BConst unbudgetedSteps
         returnCek unbudgetedSteps' ctx (VCon val)
-    computeCek !unbudgetedSteps ctx env (LamAbs _ _name body) = do
+    computeCek !unbudgetedSteps ctx !env (LamAbs _ _name body) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BLamAbs unbudgetedSteps
         returnCek unbudgetedSteps' ctx (VLamAbs body env)
-    computeCek !unbudgetedSteps ctx env (Delay _ body) = do
+    computeCek !unbudgetedSteps ctx !env (Delay _ body) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BDelay unbudgetedSteps
         returnCek unbudgetedSteps' ctx (VDelay body env)
     -- s ; ρ ▻ lam x L  ↦  s ◅ lam x (L , ρ)
-    computeCek !unbudgetedSteps ctx env (Force _ body) = do
+    computeCek !unbudgetedSteps ctx !env (Force _ body) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BForce unbudgetedSteps
         computeCek unbudgetedSteps' (FrameForce : ctx) env body
     -- s ; ρ ▻ [L M]  ↦  s , [_ (M,ρ)]  ; ρ ▻ L
-    computeCek !unbudgetedSteps ctx env (Apply _ fun arg) = do
+    computeCek !unbudgetedSteps ctx !env (Apply _ fun arg) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BApply unbudgetedSteps
         computeCek unbudgetedSteps' (FrameApplyArg env arg : ctx) env fun
     -- s ; ρ ▻ abs α L  ↦  s ◅ abs α (L , ρ)
     -- s ; ρ ▻ con c  ↦  s ◅ con c
     -- s ; ρ ▻ builtin bn  ↦  s ◅ builtin bn arity arity [] [] ρ
-    computeCek !unbudgetedSteps ctx env term@(Builtin _ bn) = do
+    computeCek !unbudgetedSteps ctx !env term@(Builtin _ bn) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BBuiltin unbudgetedSteps
         meaning <- lookupBuiltin bn ?cekRuntime
         returnCek unbudgetedSteps' ctx (VBuiltin bn term env meaning)
     -- s ; ρ ▻ error A  ↦  <> A
-    computeCek !_ _ _ (Error _) =
+    computeCek !_ _ !_ (Error _) =
         throwing_ _EvaluationFailure
 
     {- | The returning phase of the CEK machine.
@@ -788,4 +791,4 @@ runCek
 runCek params mode emitting term =
     runCekM params mode emitting $ do
         spendBudgetCek BStartup (cekStartupCost ?cekCosts)
-        enterComputeCek [] (mempty, Level 0) term
+        enterComputeCek [] (CekValEnv mempty (Level 0)) term
