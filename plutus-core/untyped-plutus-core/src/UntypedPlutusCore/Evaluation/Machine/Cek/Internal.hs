@@ -198,7 +198,7 @@ data CekValue uni fun =
                              -- discharged values and discharging is expensive, so we don't want to
                              -- do it unless we really have to. Making this field strict resulted
                              -- in a 3-4.5% slowdown at the time of writing.
-      (CekValEnv uni fun)    -- For discharging.
+      {-# UNPACK #-} !(CekValEnv uni fun)    -- For discharging.
       !(BuiltinRuntime (CekValue uni fun))  -- The partial application and its costing function.
                                             -- Check the docs of 'BuiltinRuntime' for details.
     deriving (Show)
