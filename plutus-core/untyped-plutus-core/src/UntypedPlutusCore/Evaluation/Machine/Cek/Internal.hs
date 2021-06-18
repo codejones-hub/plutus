@@ -533,7 +533,7 @@ instance AsConstant (CekValue uni fun) where
 
 data Frame uni fun
     = FrameApplyFun (CekValue uni fun)                         -- ^ @[V _]@
-    | FrameApplyArg (CekValEnv uni fun) (Term DeBruijn uni fun ()) -- ^ @[_ N]@
+    | FrameApplyArg {-# UNPACK #-} !(CekValEnv uni fun) (Term DeBruijn uni fun ()) -- ^ @[_ N]@
     | FrameForce                                               -- ^ @(force _)@
     deriving (Show)
 
@@ -601,7 +601,7 @@ evalBuiltinApp
     -> CekValEnv uni fun
     -> BuiltinRuntime (CekValue uni fun)
     -> CekM uni fun s (CekValue uni fun)
-evalBuiltinApp fun term env runtime@(BuiltinRuntime sch x cost) = case sch of
+evalBuiltinApp fun term !env runtime@(BuiltinRuntime sch x cost) = case sch of
     TypeSchemeResult _ -> do
         spendBudgetCek (BBuiltinApp fun) cost
         flip unWithEmitterT emitCek $ makeKnown x
