@@ -21,7 +21,7 @@ import           Control.Exception
 import           Control.Monad.Except
 import           Criterion.Main
 import qualified Criterion.Types                          as C
-
+import           Data.ByteString.Lazy                     as BSL
 
 type PlainTerm = UPLC.Term Name DefaultUni DefaultFun ()
 
@@ -86,6 +86,29 @@ mkListBMs :: [Integer] -> Benchmark
 mkListBMs ns = bgroup "List" [mkListBM n | n <- ns]
 
 
-main :: Haskell.IO ()
-main = defaultMainWith (defaultConfig { C.csvFile = Just "cek-lists.csv" }) $ [mkListBMs [0,10..1000]]
 
+writeCBOR :: Haskell.IO ()
+writeCBOR =
+  let prog = Tx.getPlc $ $$(Tx.compile [|| go ||]) `Tx.applyCode` Tx.liftCode 999
+      bs = case runExcept @UPLC.FreeVariableError $ runQuoteT $ UPLC.unDeBruijnProgram prog of
+             Left e  -> throw e
+             Right t -> UPLC.serialiseOmittingUnits t
+  in  BSL.putStr bs
+-- main :: Haskell.IO ()
+-- main = defaultMainWith (defaultConfig { C.csvFile = Just "cek-lists.csv" }) $ [mkListBMs [0,10..1000]]
+
+main :: Haskell.IO ()
+main = writeCBOR
+
+
+{- (t+1e-4)/compute ~ 3.7e-8
+    t ~ 3.7e-8*compute -1e-4
+-}
+
+{- (t+1.4e-4)/compute ~ 3.4e-8
+    t ~ 3.4e-8*compute -1.4e-4 -}
+
+{- We do need to get the builtins cost
+
+
+That's like  930,915,744ps, or 931 microseconds -}

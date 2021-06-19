@@ -186,6 +186,7 @@ benchmark cek-calibration
        cek-calibration
     build-depends:
         base -any
+      , bytestring -any
       , plutus-core -any
       , plutus-tx -any
       , plutus-tx-plugin -any
