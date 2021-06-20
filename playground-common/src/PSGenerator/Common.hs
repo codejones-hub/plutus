@@ -18,10 +18,10 @@ import           Language.PureScript.Bridge                (BridgePart, Language
 import           Language.PureScript.Bridge.Builder        (BridgeData)
 import           Language.PureScript.Bridge.PSTypes        (psArray, psInt, psNumber, psString)
 import           Language.PureScript.Bridge.TypeParameters (A)
-import           Ledger                                    (Address, Datum, DatumHash, MonetaryPolicy, OnChainTx,
-                                                            PubKey, PubKeyHash, Redeemer, Signature, Tx, TxId, TxIn,
-                                                            TxInType, TxOut, TxOutRef, TxOutTx, UtxoIndex,
-                                                            ValidationPhase, Validator)
+import           Ledger                                    (Address, Datum, DatumHash, MintingPolicy, OnChainTx, PubKey,
+                                                            PubKeyHash, Redeemer, Signature, Tx, TxId, TxIn, TxInType,
+                                                            TxOut, TxOutRef, TxOutTx, UtxoIndex, ValidationPhase,
+                                                            Validator)
 import           Ledger.Ada                                (Ada)
 import           Ledger.Constraints.OffChain               (MkTxError, UnbalancedTx)
 import           Ledger.Credential                         (Credential, StakingCredential)
@@ -30,6 +30,7 @@ import           Ledger.Index                              (ScriptType, ScriptVa
 import           Ledger.Interval                           (Extended, Interval, LowerBound, UpperBound)
 import           Ledger.Scripts                            (ScriptError)
 import           Ledger.Slot                               (Slot)
+import           Ledger.Time                               (POSIXTime)
 import           Ledger.Typed.Tx                           (ConnectionError, WrongOutTypeError)
 import           Ledger.Value                              (CurrencySymbol, TokenName, Value)
 import           Playground.Types                          (ContractCall, FunctionSchema, KnownCurrency)
@@ -195,7 +196,7 @@ validatorHashBridge = do
 
 mpsHashBridge :: BridgePart
 mpsHashBridge = do
-    typeName ^== "MonetaryPolicyHash"
+    typeName ^== "MintingPolicyHash"
     typeModule ^== "Plutus.V1.Ledger.Scripts"
     pure psString
 
@@ -232,6 +233,7 @@ servantBridge = headersBridge <|> headerBridge
 ledgerTypes :: [SumType 'Haskell]
 ledgerTypes =
     [ (equal <*> (genericShow <*> mkSumType)) (Proxy @Slot)
+    , (equal <*> (genericShow <*> mkSumType)) (Proxy @POSIXTime)
     , (equal <*> (genericShow <*> mkSumType)) (Proxy @Ada)
     , (equal <*> (genericShow <*> mkSumType)) (Proxy @Tx)
     , (order <*> (genericShow <*> mkSumType)) (Proxy @TxId)
@@ -251,7 +253,7 @@ ledgerTypes =
     , (functor <*> (equal <*> (genericShow <*> mkSumType)))
           (Proxy @(UpperBound A))
     , (genericShow <*> (order <*> mkSumType)) (Proxy @CurrencySymbol)
-    , (genericShow <*> (order <*> mkSumType)) (Proxy @MonetaryPolicy)
+    , (genericShow <*> (order <*> mkSumType)) (Proxy @MintingPolicy)
     , (genericShow <*> (order <*> mkSumType)) (Proxy @Redeemer)
     , (genericShow <*> (order <*> mkSumType)) (Proxy @Signature)
     , (genericShow <*> (order <*> mkSumType)) (Proxy @TokenName)

@@ -12,7 +12,7 @@ module Plutus.Contracts.Uniswap.Trace(
     , wallets
     ) where
 
-import           Control.Monad                     (forM_, void, when)
+import           Control.Monad                     (forM_, when)
 import           Control.Monad.Freer.Error         (throwError)
 import qualified Data.Map                          as Map
 import qualified Data.Monoid                       as Monoid
@@ -64,7 +64,7 @@ uniswapTrace = do
 setupTokens :: Contract (Maybe (Semigroup.Last Currency.OneShotCurrency)) Currency.CurrencySchema Currency.CurrencyError ()
 setupTokens = do
     ownPK <- pubKeyHash <$> ownPubKey
-    cur   <- Currency.forgeContract ownPK [(tn, fromIntegral (length wallets) * amount) | tn <- tokenNames]
+    cur   <- Currency.mintContract ownPK [(tn, fromIntegral (length wallets) * amount) | tn <- tokenNames]
     let cs = Currency.currencySymbol cur
         v  = mconcat [Value.singleton cs tn amount | tn <- tokenNames]
     forM_ wallets $ \w -> do
@@ -73,7 +73,6 @@ setupTokens = do
             tx <- submitTx $ mustPayToPubKey pkh v
             awaitTxConfirmed $ txId tx
     tell $ Just $ Semigroup.Last cur
-    void $ waitNSlots 10
   where
     amount = 1000000
 

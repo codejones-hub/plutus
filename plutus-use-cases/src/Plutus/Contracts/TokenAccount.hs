@@ -1,16 +1,15 @@
-{-# LANGUAGE ConstraintKinds    #-}
-{-# LANGUAGE DataKinds          #-}
-{-# LANGUAGE DeriveAnyClass     #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE DerivingVia        #-}
-{-# LANGUAGE FlexibleContexts   #-}
-{-# LANGUAGE NamedFieldPuns     #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE TemplateHaskell    #-}
-{-# LANGUAGE TypeApplications   #-}
-{-# LANGUAGE TypeFamilies       #-}
-{-# LANGUAGE TypeOperators      #-}
+{-# LANGUAGE ConstraintKinds   #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE DeriveAnyClass    #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE DerivingVia       #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE TypeOperators     #-}
 -- | Plutus implementation of an account that can be unlocked with a token.
 --   Whoever owns the token can spend the outputs locked by the contract.
 --   (A suitable token can be created with the 'Plutus.Contracts.Currency'
@@ -231,7 +230,7 @@ newAccount
     -- ^ Public key of the token's initial owner
     -> Contract w s e Account
 newAccount tokenName pk = mapError (review _TokenAccountError) $ do
-    cur <- Currency.forgeContract pk [(tokenName, 1)]
+    cur <- Currency.mintContract pk [(tokenName, 1)]
     let sym = Currency.currencySymbol cur
     pure $ Account $ Value.assetClass sym tokenName
 
