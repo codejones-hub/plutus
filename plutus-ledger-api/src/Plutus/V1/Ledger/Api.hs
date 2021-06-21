@@ -17,6 +17,8 @@ module Plutus.V1.Ledger.Api (
     , evaluateScriptCounting
     -- * Serialising scripts
     , plutusScriptEnvelopeType
+    , plutusDatumEnvelopeType
+    , plutusRedeemerEnvelopeType
     -- * Data
     , Data (..)
     , IsData (..)
@@ -57,8 +59,8 @@ module Plutus.V1.Ledger.Api (
     -- *** Newtypes for script/datum types and hash types
     , Validator (..)
     , ValidatorHash (..)
-    , MonetaryPolicy (..)
-    , MonetaryPolicyHash (..)
+    , MintingPolicy (..)
+    , MintingPolicyHash (..)
     , Redeemer (..)
     , RedeemerHash (..)
     , Datum (..)
@@ -75,6 +77,7 @@ import           Data.ByteString.Lazy                             (fromStrict)
 import           Data.ByteString.Short
 import           Data.Either
 import           Data.Maybe                                       (isJust)
+import           Data.Text                                        (Text)
 import qualified Data.Text                                        as Text
 import           Data.Text.Prettyprint.Doc
 import           Data.Tuple
@@ -92,7 +95,7 @@ import qualified PlutusCore.DeBruijn                              as PLC
 import           PlutusCore.Evaluation.Machine.CostModelInterface (CostModelParams, applyCostModelParams)
 import           PlutusCore.Evaluation.Machine.ExBudget           (ExBudget (..))
 import qualified PlutusCore.Evaluation.Machine.ExBudget           as PLC
-import           PlutusCore.Evaluation.Machine.ExMemory           (ExCPU (..), ExMemory (..))
+import           PlutusCore.Evaluation.Machine.ExMemory           (ExCPU (..), ExMemory (..), Scalable (..))
 import           PlutusCore.Evaluation.Machine.MachineParameters
 import qualified PlutusCore.MkPlc                                 as PLC
 import           PlutusCore.Pretty
@@ -101,8 +104,17 @@ import qualified PlutusTx.Lift                                    as PlutusTx
 import qualified UntypedPlutusCore                                as UPLC
 import qualified UntypedPlutusCore.Evaluation.Machine.Cek         as UPLC
 
-plutusScriptEnvelopeType :: Text.Text
+plutusScriptEnvelopeType :: Text
 plutusScriptEnvelopeType = "PlutusV1Script"
+
+-- | It was discussed with the Ledger team that the envelope types for 'Datum'
+-- and 'Redeemer' should be in plutus-ledger-api.
+--
+-- For now, those types will be generic and versioning might be included in
+-- the future.
+plutusDatumEnvelopeType, plutusRedeemerEnvelopeType  :: Text
+plutusDatumEnvelopeType = "ScriptDatum"
+plutusRedeemerEnvelopeType = "ScriptRedeemer"
 
 {- Note [Abstract types in the ledger API]
 We need to support old versions of the ledger API as we update the code that it depends on. You
@@ -120,6 +132,14 @@ internally. That means we don't lose anything by exposing all the details: we're
 anything, we're just going to create new versions.
 -}
 
+{- | Internally the evaluator uses costs which approximate execution times in
+picoseconds.  This gives huge numbers which are unsuitable for users so we
+expose nanosecond-based costs to the ledger and scale them up and down to and
+from picoseconds for internal use.  The maximum possible cost from the viewpoint
+of the ledger will be 9223372036854776 units. -}
+costScaleFactor :: Integer
+costScaleFactor = 1000
+
 -- | Check if a 'Script' is "valid". At the moment this just means "deserialises correctly", which in particular
 -- implies that it is (almost certainly) an encoded script and cannot be interpreted as some other kind of encoded data.
 validateScript :: SerializedScript -> Bool
@@ -131,7 +151,7 @@ validateCostModelParams = isJust . applyCostModelParams PLC.defaultCekCostModel
 data VerboseMode = Verbose | Quiet
     deriving (Eq)
 
-type LogOutput = [Text.Text]
+type LogOutput = [Text]
 
 -- | Scripts to the ledger are serialised bytestrings.
 type SerializedScript = ShortByteString
@@ -185,7 +205,7 @@ evaluateScriptRestricting verbose cmdata budget p args = swap $ runWriter @LogOu
     let (res, _, logs) =
             UPLC.runCek
                 (toMachineParameters model)
-                (UPLC.restricting $ PLC.ExRestrictingBudget budget)
+                (UPLC.restricting $ PLC.ExRestrictingBudget (scaleUp costScaleFactor budget))
                 (verbose == Verbose)
                 appliedTerm
 
@@ -215,4 +235,4 @@ evaluateScriptCounting verbose cmdata p args = swap $ runWriter @LogOutput $ run
 
     tell $ Prelude.map Text.pack logs
     liftEither $ first CekError $ void res
-    pure final
+    pure $ scaleDown costScaleFactor final

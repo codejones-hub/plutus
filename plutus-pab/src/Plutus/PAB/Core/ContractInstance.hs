@@ -51,7 +51,7 @@ import           Plutus.Contract.Trace.RequestHandler             (RequestHandle
 import           Plutus.PAB.Core.ContractInstance.RequestHandlers (ContractInstanceMsg (..))
 
 import           Wallet.Effects                                   (ChainIndexEffect, ContractRuntimeEffect,
-                                                                   WalletEffect)
+                                                                   NodeClientEffect, WalletEffect)
 import           Wallet.Emulator.LogMessages                      (TxBalanceMsg)
 
 import           Plutus.Contract                                  (AddressChangeRequest (..))
@@ -86,6 +86,7 @@ activateContractSTM runAppBackend a@ContractActivationArgs{caID, caWallet} = do
     activeContractInstanceId <- ContractInstanceId <$> uuidNextRandom
     logDebug @(ContractInstanceMsg t) $ InitialisingContract caID activeContractInstanceId
     initialState <- Contract.initialState @t activeContractInstanceId caID
+    Contract.putStartInstance @t a activeContractInstanceId
     Contract.putState @t a activeContractInstanceId initialState
     s <- startSTMInstanceThread @t @m runAppBackend a activeContractInstanceId
     ask >>= void . liftIO . STM.atomically . InstanceState.insertInstance activeContractInstanceId s
@@ -128,9 +129,9 @@ stmRequestHandler ::
     forall effs.
     ( Member ChainIndexEffect effs
     , Member WalletEffect effs
+    , Member NodeClientEffect effs
     , Member (LogMsg RequestHandlerLogMsg) effs
     , Member (LogObserve (LogMessage Text.Text)) effs
-    , Member (LogMsg TxBalanceMsg) effs
     , Member (Reader ContractInstanceId) effs
     , Member (Reader BlockchainEnv) effs
     , Member (Reader InstanceState) effs
@@ -186,6 +187,7 @@ type AppBackendConstraints t m effs =
     , Member ChainIndexEffect effs
     , Member WalletEffect effs
     , Member ContractRuntimeEffect effs
+    , Member NodeClientEffect effs
     , Member (LogMsg RequestHandlerLogMsg) effs
     , Member (LogObserve (LogMessage Text.Text)) effs
     , Member (LogMsg TxBalanceMsg) effs
@@ -256,10 +258,10 @@ respondToRequestsSTM ::
     forall t effs.
     ( Member ChainIndexEffect effs
     , Member WalletEffect effs
+    , Member NodeClientEffect effs
     , Member (LogMsg RequestHandlerLogMsg) effs
     , Member (LogObserve (LogMessage Text.Text)) effs
     , Member (LogMsg (ContractInstanceMsg t)) effs
-    , Member (LogMsg TxBalanceMsg) effs
     , Member (Reader ContractInstanceId) effs
     , Member (Reader BlockchainEnv) effs
     , Member (Reader InstanceState) effs
