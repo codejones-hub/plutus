@@ -121,7 +121,6 @@
           "Cardano/CLI/Shelley/Run/Transaction"
           "Cardano/CLI/Shelley/Script"
           "Cardano/CLI/Mary/RenderValue"
-          "Cardano/CLI/Mary/TxOutParser"
           "Cardano/CLI/Mary/ValueParser"
           "Cardano/CLI/TopHandler"
           ];

@@ -113,6 +113,7 @@
           "Cardano/Api/SerialiseJSON"
           "Cardano/Api/SerialiseRaw"
           "Cardano/Api/SerialiseTextEnvelope"
+          "Cardano/Api/SerialiseUsing"
           "Cardano/Api/Shelley/Genesis"
           "Cardano/Api/SpecialByron"
           "Cardano/Api/StakePoolMetadata"
@@ -176,6 +177,7 @@
             "Test/Cardano/Api/Gen"
             "Test/Cardano/Api/Genesis"
             "Test/Cardano/Api/Json"
+            "Test/Cardano/Api/KeysByron"
             "Test/Cardano/Api/Ledger"
             "Test/Cardano/Api/Metadata"
             "Test/Cardano/Api/Typed/Bech32"
@@ -188,6 +190,7 @@
             "Test/Cardano/Api/Typed/RawBytes"
             "Test/Cardano/Api/Typed/Script"
             "Test/Cardano/Api/Typed/Value"
+            "Test/Cardano/Crypto/Seed/Gen"
             "Test/Tasty/Hedgehog/Group"
             ];
           hsSourceDirs = [ "test" ];
