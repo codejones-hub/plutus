@@ -71,6 +71,7 @@ data Action
   | UpdateFromStorage
   | UpdateFollowerApps (Map MarloweParams MarloweData)
   | UpdateContract PlutusAppId ContractHistory
+  | RedeemPayments PlutusAppId
   | AdvanceTimedoutSteps
   | TemplateAction Template.Action
   | ContractHomeAction ContractHome.Action
@@ -91,6 +92,7 @@ instance actionIsEvent :: IsEvent Action where
   toEvent UpdateFromStorage = Nothing
   toEvent (UpdateFollowerApps _) = Nothing
   toEvent (UpdateContract _ _) = Nothing
+  toEvent (RedeemPayments _) = Nothing
   toEvent AdvanceTimedoutSteps = Nothing
   toEvent (TemplateAction templateAction) = toEvent templateAction
   toEvent (ContractHomeAction contractAction) = toEvent contractAction
