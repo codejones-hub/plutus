@@ -64,6 +64,9 @@
           "PlutusTx/Evaluation"
           "PlutusTx/Applicative"
           "PlutusTx/Bool"
+          "PlutusTx/ByteString"
+          "PlutusTx/ByteString/Internal"
+          "PlutusTx/ByteString/Instances"
           "PlutusTx/IsData"
           "PlutusTx/IsData/Class"
           "PlutusTx/Eq"
@@ -90,6 +93,8 @@
           "PlutusTx/Plugin/Utils"
           "PlutusTx/Utils"
           "PlutusTx/String"
+          "PlutusTx/String/Internal"
+          "PlutusTx/String/Instances"
           ];
         hsSourceDirs = [ "src" ];
         };
