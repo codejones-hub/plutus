@@ -20,6 +20,7 @@ module PlutusTx.Compiler.Builtins (
     , errorFunc) where
 
 import                qualified PlutusTx.Builtins             as Builtins
+import                qualified PlutusTx.ByteString           as ByteString
 import                qualified PlutusTx.String               as String
 
 import                          PlutusTx.Compiler.Error
@@ -178,6 +179,7 @@ builtinNames = [
     , 'Builtins.emptyByteString
     , 'Builtins.decodeUtf8
     , 'Builtins.encodeUtf8
+    , 'ByteString.stringToBuiltinByteString
 
     , 'Builtins.verifySignature
 
