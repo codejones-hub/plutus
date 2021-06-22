@@ -49,6 +49,8 @@
           (hsPkgs."lens" or (errorHandler.buildDepError "lens"))
           (hsPkgs."ghc-prim" or (errorHandler.buildDepError "ghc-prim"))
           (hsPkgs."aeson" or (errorHandler.buildDepError "aeson"))
+          (hsPkgs."hashable" or (errorHandler.buildDepError "hashable"))
+          (hsPkgs."memory" or (errorHandler.buildDepError "memory"))
           ];
         buildable = true;
         modules = [
