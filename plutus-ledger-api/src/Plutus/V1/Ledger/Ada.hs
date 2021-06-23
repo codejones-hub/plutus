@@ -32,7 +32,6 @@ import           Data.Fixed
 
 import           Codec.Serialise.Class            (Serialise)
 import           Data.Aeson                       (FromJSON, ToJSON)
-import qualified Data.ByteString                  as BS
 import           Data.Tagged
 import           Data.Text.Prettyprint.Doc.Extras
 import           GHC.Generics                     (Generic)

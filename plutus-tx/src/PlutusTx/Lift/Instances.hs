@@ -98,15 +98,6 @@ instance uni `PLC.Includes` BS.ByteString => Typeable uni ByteString where
 instance uni `PLC.Includes` BS.ByteString => Lift uni ByteString where
     lift b = liftBuiltin $ toHaskellByteString b
 
-instance PLC.DefaultUni `PLC.Contains` Plutus.String where knownUni = undefined
-
-instance uni `PLC.Includes` Plutus.String => Typeable uni Plutus.String where
-    typeRep = typeRepBuiltin
-
-instance uni `PLC.Includes` Plutus.String => Lift uni Plutus.String where
-    lift = liftBuiltin
-
-
 -- Standard types
 -- These need to be in a separate file for TH staging reasons
 
