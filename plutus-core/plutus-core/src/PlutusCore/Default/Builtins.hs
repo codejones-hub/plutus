@@ -66,8 +66,6 @@ data DefaultFun
     | EqualsString
     | EncodeUtf8
     | DecodeUtf8
-    | FromHaskellByteString
-    | ToHaskellByteString
     | Trace
     | Nop1  -- TODO. These are only used for costing calibration and shouldn't be included in the defaults.
     | Nop2
@@ -77,39 +75,37 @@ data DefaultFun
 -- TODO: do we really want function names to be pretty-printed differently to what they are named as
 -- constructors of 'DefaultFun'?
 instance Pretty DefaultFun where
-    pretty AddInteger            = "addInteger"
-    pretty SubtractInteger       = "subtractInteger"
-    pretty MultiplyInteger       = "multiplyInteger"
-    pretty DivideInteger         = "divideInteger"
-    pretty QuotientInteger       = "quotientInteger"
-    pretty ModInteger            = "modInteger"
-    pretty RemainderInteger      = "remainderInteger"
-    pretty LessThanInteger       = "lessThanInteger"
-    pretty LessThanEqInteger     = "lessThanEqualsInteger"
-    pretty GreaterThanInteger    = "greaterThanInteger"
-    pretty GreaterThanEqInteger  = "greaterThanEqualsInteger"
-    pretty EqInteger             = "equalsInteger"
-    pretty Concatenate           = "concatenate"
-    pretty TakeByteString        = "takeByteString"
-    pretty DropByteString        = "dropByteString"
-    pretty EqByteString          = "equalsByteString"
-    pretty LtByteString          = "lessThanByteString"
-    pretty GtByteString          = "greaterThanByteString"
-    pretty SHA2                  = "sha2_256"
-    pretty SHA3                  = "sha3_256"
-    pretty VerifySignature       = "verifySignature"
-    pretty IfThenElse            = "ifThenElse"
-    pretty CharToString          = "charToString"
-    pretty Append                = "append"
-    pretty EqualsString          = "equalsString"
-    pretty EncodeUtf8            = "encodeUtf8"
-    pretty DecodeUtf8            = "decodeUtf8"
-    pretty FromHaskellByteString = "fromHaskellByteString"
-    pretty ToHaskellByteString   = "toHaskellByteString"
-    pretty Trace                 = "trace"
-    pretty Nop1                  = "nop1"
-    pretty Nop2                  = "nop2"
-    pretty Nop3                  = "nop3"
+    pretty AddInteger           = "addInteger"
+    pretty SubtractInteger      = "subtractInteger"
+    pretty MultiplyInteger      = "multiplyInteger"
+    pretty DivideInteger        = "divideInteger"
+    pretty QuotientInteger      = "quotientInteger"
+    pretty ModInteger           = "modInteger"
+    pretty RemainderInteger     = "remainderInteger"
+    pretty LessThanInteger      = "lessThanInteger"
+    pretty LessThanEqInteger    = "lessThanEqualsInteger"
+    pretty GreaterThanInteger   = "greaterThanInteger"
+    pretty GreaterThanEqInteger = "greaterThanEqualsInteger"
+    pretty EqInteger            = "equalsInteger"
+    pretty Concatenate          = "concatenate"
+    pretty TakeByteString       = "takeByteString"
+    pretty DropByteString       = "dropByteString"
+    pretty EqByteString         = "equalsByteString"
+    pretty LtByteString         = "lessThanByteString"
+    pretty GtByteString         = "greaterThanByteString"
+    pretty SHA2                 = "sha2_256"
+    pretty SHA3                 = "sha3_256"
+    pretty VerifySignature      = "verifySignature"
+    pretty IfThenElse           = "ifThenElse"
+    pretty CharToString         = "charToString"
+    pretty Append               = "append"
+    pretty EqualsString         = "equalsString"
+    pretty EncodeUtf8           = "encodeUtf8"
+    pretty DecodeUtf8           = "decodeUtf8"
+    pretty Trace                = "trace"
+    pretty Nop1                 = "nop1"
+    pretty Nop2                 = "nop2"
+    pretty Nop3                 = "nop3"
 
 instance ExMemoryUsage DefaultFun where
     memoryUsage _ = 1
@@ -230,14 +226,6 @@ instance uni ~ DefaultUni => ToBuiltinMeaning uni DefaultFun where
     toBuiltinMeaning DecodeUtf8 =
         makeBuiltinMeaning
             (BSC.unpack :: BS.ByteString -> String)
-            mempty  -- TODO: budget.
-    toBuiltinMeaning FromHaskellByteString =
-        makeBuiltinMeaning
-            id
-            mempty  -- TODO: budget.
-    toBuiltinMeaning ToHaskellByteString =
-        makeBuiltinMeaning
-            id
             mempty  -- TODO: budget.
     toBuiltinMeaning Trace =
         makeBuiltinMeaning
