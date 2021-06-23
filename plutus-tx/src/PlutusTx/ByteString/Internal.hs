@@ -42,11 +42,11 @@ newtype ByteString = ByteString { unByteString :: BS.ByteString }
   deriving newtype (Haskell.Show, Haskell.Eq, Haskell.Ord, Haskell.Semigroup, Haskell.Monoid)
   deriving newtype (Hashable, Serialise, NFData, BA.ByteArrayAccess, BA.ByteArray)
 
-{-# NOINLINE fromHaskellByteString #-}
+{-# INLINABLE fromHaskellByteString #-}
 fromHaskellByteString :: BS.ByteString -> ByteString
 fromHaskellByteString = ByteString
 
-{-# NOINLINE toHaskellByteString #-}
+{-# INLINABLE toHaskellByteString #-}
 toHaskellByteString :: ByteString -> BS.ByteString
 toHaskellByteString = unByteString
 

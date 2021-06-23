@@ -288,12 +288,12 @@ defineBuiltinTerms = do
     do
         let term = mkBuiltin PLC.EncodeUtf8
         defineBuiltinTerm 'Builtins.encodeUtf8 term [str]
-    do
-        let term = mkBuiltin PLC.FromHaskellByteString
-        defineBuiltinTerm 'Builtins.fromHaskellByteString term [bs]
-    do
-        let term = mkBuiltin PLC.ToHaskellByteString
-        defineBuiltinTerm 'Builtins.toHaskellByteString term [bs]
+    -- do
+    --     let term = mkBuiltin PLC.FromHaskellByteString
+    --     defineBuiltinTerm 'Builtins.fromHaskellByteString term [bs]
+    -- do
+    --     let term = mkBuiltin PLC.ToHaskellByteString
+    --     defineBuiltinTerm 'Builtins.toHaskellByteString term [bs]
 
     -- Integer builtins
     do
