@@ -51,7 +51,7 @@ import           Data.Aeson.Types         hiding (Error, Value)
 import qualified Data.Foldable            as F
 import           Data.Scientific          (Scientific, floatingOrInteger)
 import           Data.Text                (pack)
-import           Data.Text.Encoding       (decodeUtf8, encodeUtf8)
+import           Data.Text.Encoding       as Text (decodeUtf8, encodeUtf8)
 import           Deriving.Aeson
 import           Language.Marlowe.Pretty  (Pretty (..))
 import           Ledger                   (PubKeyHash (..), Slot (..), ValidatorHash)
@@ -808,44 +808,44 @@ instance ToJSON State where
 
 instance FromJSON Party where
   parseJSON = withObject "Party" (\v ->
-        (PK . PubKeyHash <$> (JSON.decodeByteString =<< (v .: "pk_hash")))
-    <|> (Role . Val.TokenName . encodeUtf8 <$> (v .: "role_token"))
+        (PK . PubKeyHash . fromHaskellByteString <$> (JSON.decodeByteString =<< (v .: "pk_hash")))
+    <|> (Role . Val.tokenName . Text.encodeUtf8 <$> (v .: "role_token"))
                                  )
 instance ToJSON Party where
     toJSON (PK pkh) = object
-        [ "pk_hash" .= (JSON.String $ JSON.encodeByteString $ getPubKeyHash pkh) ]
+        [ "pk_hash" .= (JSON.String $ JSON.encodeByteString $ toHaskellByteString $ getPubKeyHash pkh) ]
     toJSON (Role (Val.TokenName name)) = object
-        [ "role_token" .= (JSON.String $ decodeUtf8 name) ]
+        [ "role_token" .= (JSON.String $ Text.decodeUtf8 $ toHaskellByteString name) ]
 
 
 instance FromJSON ChoiceId where
   parseJSON = withObject "ChoiceId" (\v ->
-       ChoiceId <$> (encodeUtf8 <$> (v .: "choice_name"))
+       ChoiceId <$> (fromHaskellByteString . Text.encodeUtf8 <$> (v .: "choice_name"))
                 <*> (v .: "choice_owner")
                                     )
 
 instance ToJSON ChoiceId where
-  toJSON (ChoiceId name party) = object [ "choice_name" .= (JSON.String $ decodeUtf8 name)
+  toJSON (ChoiceId name party) = object [ "choice_name" .= (JSON.String $ Text.decodeUtf8 $ toHaskellByteString name)
                                         , "choice_owner" .= party
                                         ]
 
 
 instance FromJSON Token where
   parseJSON = withObject "Token" (\v ->
-       Token <$> (CurrencySymbol <$> (JSON.decodeByteString =<< (v .: "currency_symbol")))
-             <*> (Val.TokenName . encodeUtf8 <$> (v .: "token_name"))
+       Token <$> (Val.currencySymbol <$> (JSON.decodeByteString =<< (v .: "currency_symbol")))
+             <*> (Val.tokenName . Text.encodeUtf8 <$> (v .: "token_name"))
                                  )
 
 instance ToJSON Token where
   toJSON (Token currSym tokName) = object
-      [ "currency_symbol" .= (JSON.String $ JSON.encodeByteString $ unCurrencySymbol currSym)
-      , "token_name" .= (JSON.String $ decodeUtf8 $ unTokenName tokName)
+      [ "currency_symbol" .= (JSON.String $ JSON.encodeByteString $ toHaskellByteString $ unCurrencySymbol currSym)
+      , "token_name" .= (JSON.String $ Text.decodeUtf8 $ toHaskellByteString $ unTokenName tokName)
       ]
 
 instance FromJSON ValueId where
-    parseJSON = withText "ValueId" $ return . ValueId . encodeUtf8
+    parseJSON = withText "ValueId" $ return . ValueId . fromHaskellByteString . Text.encodeUtf8
 instance ToJSON ValueId where
-    toJSON (ValueId x) = JSON.String (decodeUtf8 x)
+    toJSON (ValueId x) = JSON.String (Text.decodeUtf8 $ toHaskellByteString x)
 
 
 instance FromJSON (Value Observation) where
