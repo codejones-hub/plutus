@@ -181,8 +181,8 @@ instance Show (BuiltinRuntime (CekValue uni fun)) where
 data CekValue uni fun =
     -- This bang gave us a 1-2% speed-up at the time of writing.
     VCon !(Some (ValueOf uni))
-  | VDelay (Term Name uni fun ()) !(CekValEnv uni fun)
-  | VLamAbs Name (Term Name uni fun ()) !(CekValEnv uni fun)
+  | VDelay !(Term Name uni fun ()) !(CekValEnv uni fun)
+  | VLamAbs !Name !(Term Name uni fun ()) !(CekValEnv uni fun)
   | VBuiltin            -- A partial builtin application, accumulating arguments for eventual full application.
       !fun                   -- So that we know, for what builtin we're calculating the cost.
                              -- TODO: any chance we could sneak this into 'BuiltinRuntime'
@@ -657,17 +657,17 @@ enterComputeCek = computeCek (toWordArray 0) where
     returnCek :: WordArray -> Context uni fun -> CekValue uni fun -> CekM uni fun s (Term Name uni fun ())
     --- Instantiate all the free variable of the resulting term in case there are any.
     -- . ◅ V           ↦  [] V
-    returnCek !unbudgetedSteps NilContext val = do
+    returnCek !unbudgetedSteps NilContext !val = do
         spendAccumulatedBudget unbudgetedSteps
         pure $ dischargeCekValue val
     -- s , {_ A} ◅ abs α M  ↦  s ; ρ ▻ M [ α / A ]*
-    returnCek !unbudgetedSteps (FrameForce ctx) fun = forceEvaluate unbudgetedSteps ctx fun
+    returnCek !unbudgetedSteps (FrameForce ctx) !fun = forceEvaluate unbudgetedSteps ctx fun
     -- s , [_ (M,ρ)] ◅ V  ↦  s , [V _] ; ρ ▻ M
-    returnCek !unbudgetedSteps (FrameApplyArg argVarEnv arg ctx) fun =
+    returnCek !unbudgetedSteps (FrameApplyArg argVarEnv arg ctx) !fun =
         computeCek unbudgetedSteps (FrameApplyFun fun ctx) argVarEnv arg
     -- s , [(lam x (M,ρ)) _] ◅ V  ↦  s ; ρ [ x  ↦  V ] ▻ M
     -- FIXME: add rule for VBuiltin once it's in the specification.
-    returnCek !unbudgetedSteps (FrameApplyFun fun ctx) arg =
+    returnCek !unbudgetedSteps (FrameApplyFun fun ctx) !arg =
         applyEvaluate unbudgetedSteps ctx fun arg
 
     -- | @force@ a term and proceed.
@@ -681,8 +681,8 @@ enterComputeCek = computeCek (toWordArray 0) where
         -> Context uni fun
         -> CekValue uni fun
         -> CekM uni fun s (Term Name uni fun ())
-    forceEvaluate !unbudgetedSteps ctx (VDelay body env) = computeCek unbudgetedSteps ctx env body
-    forceEvaluate !unbudgetedSteps ctx (VBuiltin fun term env (BuiltinRuntime sch f exF)) = do
+    forceEvaluate !unbudgetedSteps !ctx (VDelay body env) = computeCek unbudgetedSteps ctx env body
+    forceEvaluate !unbudgetedSteps !ctx (VBuiltin fun term env (BuiltinRuntime sch f exF)) = do
         let term' = Force () term
         case sch of
             -- It's only possible to force a builtin application if the builtin expects a type
@@ -696,7 +696,7 @@ enterComputeCek = computeCek (toWordArray 0) where
                 returnCek unbudgetedSteps ctx res
             _ ->
                 throwingWithCause _MachineError BuiltinTermArgumentExpectedMachineError (Just term')
-    forceEvaluate !_ _ val =
+    forceEvaluate !_ !_ !val =
         throwingDischarged _MachineError NonPolymorphicInstantiationMachineError val
 
     -- | Apply a function to an argument and proceed.
@@ -712,11 +712,11 @@ enterComputeCek = computeCek (toWordArray 0) where
         -> CekValue uni fun   -- lhs of application
         -> CekValue uni fun   -- rhs of application
         -> CekM uni fun s (Term Name uni fun ())
-    applyEvaluate !unbudgetedSteps ctx (VLamAbs name body env) arg =
+    applyEvaluate !unbudgetedSteps !ctx (VLamAbs name body env) !arg =
         computeCek unbudgetedSteps ctx (extendEnv name arg env) body
     -- Annotating @f@ and @exF@ with bangs gave us some speed-up, but only until we added a bang to
     -- 'VCon'. After that the bangs here were making things a tiny bit slower and so we removed them.
-    applyEvaluate !unbudgetedSteps ctx (VBuiltin fun term env (BuiltinRuntime sch f exF)) arg = do
+    applyEvaluate !unbudgetedSteps !ctx (VBuiltin fun term env (BuiltinRuntime sch f exF)) !arg = do
         let term' = Apply () term $ dischargeCekValue arg
         case sch of
             -- It's only possible to apply a builtin application if the builtin expects a term
@@ -733,7 +733,7 @@ enterComputeCek = computeCek (toWordArray 0) where
                 returnCek unbudgetedSteps ctx res
             _ ->
                 throwingWithCause _MachineError UnexpectedBuiltinTermArgumentMachineError (Just term')
-    applyEvaluate !_ _ val _ =
+    applyEvaluate !_ !_ !val !_ =
         throwingDischarged _MachineError NonFunctionalApplicationMachineError val
 
     -- | Spend the budget that has been accumulated for a number of machine steps.
