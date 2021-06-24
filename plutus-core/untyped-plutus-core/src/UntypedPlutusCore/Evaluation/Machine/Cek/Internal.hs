@@ -515,13 +515,12 @@ instance AsConstant (CekValue uni fun) where
     asConstant (VCon val) = pure val
     asConstant term       = throwNotAConstant term
 
-data Frame uni fun
-    = FrameApplyFun (CekValue uni fun)                         -- ^ @[V _]@
-    | FrameApplyArg (CekValEnv uni fun) (Term Name uni fun ()) -- ^ @[_ N]@
-    | FrameForce                                               -- ^ @(force _)@
+data Context uni fun
+    = FrameApplyFun !(CekValue uni fun) !(Context uni fun)                         -- ^ @[V _]@
+    | FrameApplyArg !(CekValEnv uni fun) !(Term Name uni fun ()) !(Context uni fun) -- ^ @[_ N]@
+    | FrameForce !(Context uni fun)                                              -- ^ @(force _)@
+    | NilContext
     deriving (Show)
-
-type Context uni fun = [Frame uni fun]
 
 toExMemory :: (Closed uni, uni `Everywhere` ExMemoryUsage) => CekValue uni fun -> ExMemory
 toExMemory = \case
@@ -630,11 +629,11 @@ enterComputeCek = computeCek (toWordArray 0) where
     -- s ; ρ ▻ lam x L  ↦  s ◅ lam x (L , ρ)
     computeCek !unbudgetedSteps ctx env (Force _ body) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BForce unbudgetedSteps
-        computeCek unbudgetedSteps' (FrameForce : ctx) env body
+        computeCek unbudgetedSteps' (FrameForce ctx) env body
     -- s ; ρ ▻ [L M]  ↦  s , [_ (M,ρ)]  ; ρ ▻ L
     computeCek !unbudgetedSteps ctx env (Apply _ fun arg) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BApply unbudgetedSteps
-        computeCek unbudgetedSteps' (FrameApplyArg env arg : ctx) env fun
+        computeCek unbudgetedSteps' (FrameApplyArg env arg ctx) env fun
     -- s ; ρ ▻ abs α L  ↦  s ◅ abs α (L , ρ)
     -- s ; ρ ▻ con c  ↦  s ◅ con c
     -- s ; ρ ▻ builtin bn  ↦  s ◅ builtin bn arity arity [] [] ρ
@@ -658,17 +657,17 @@ enterComputeCek = computeCek (toWordArray 0) where
     returnCek :: WordArray -> Context uni fun -> CekValue uni fun -> CekM uni fun s (Term Name uni fun ())
     --- Instantiate all the free variable of the resulting term in case there are any.
     -- . ◅ V           ↦  [] V
-    returnCek !unbudgetedSteps [] val = do
+    returnCek !unbudgetedSteps NilContext val = do
         spendAccumulatedBudget unbudgetedSteps
         pure $ dischargeCekValue val
     -- s , {_ A} ◅ abs α M  ↦  s ; ρ ▻ M [ α / A ]*
-    returnCek !unbudgetedSteps (FrameForce : ctx) fun = forceEvaluate unbudgetedSteps ctx fun
+    returnCek !unbudgetedSteps (FrameForce ctx) fun = forceEvaluate unbudgetedSteps ctx fun
     -- s , [_ (M,ρ)] ◅ V  ↦  s , [V _] ; ρ ▻ M
-    returnCek !unbudgetedSteps (FrameApplyArg argVarEnv arg : ctx) fun =
-        computeCek unbudgetedSteps (FrameApplyFun fun : ctx) argVarEnv arg
+    returnCek !unbudgetedSteps (FrameApplyArg argVarEnv arg ctx) fun =
+        computeCek unbudgetedSteps (FrameApplyFun fun ctx) argVarEnv arg
     -- s , [(lam x (M,ρ)) _] ◅ V  ↦  s ; ρ [ x  ↦  V ] ▻ M
     -- FIXME: add rule for VBuiltin once it's in the specification.
-    returnCek !unbudgetedSteps (FrameApplyFun fun : ctx) arg =
+    returnCek !unbudgetedSteps (FrameApplyFun fun ctx) arg =
         applyEvaluate unbudgetedSteps ctx fun arg
 
     -- | @force@ a term and proceed.
@@ -773,4 +772,4 @@ runCek
 runCek params mode emitting term =
     runCekM params mode emitting $ do
         spendBudgetCek BStartup (cekStartupCost ?cekCosts)
-        enterComputeCek [] mempty term
+        enterComputeCek NilContext mempty term
