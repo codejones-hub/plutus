@@ -881,9 +881,9 @@ runCek
     => MachineParameters CekMachineCosts CekValue uni fun
     -> ExBudgetMode cost uni fun
     -> Bool
-    -> Term Name uni fun ()
-    -> (Either (CekEvaluationException uni fun) (Term Name uni fun ()), cost, [String])
+    -> ETerm uni fun
+    -> (Either (CekEvaluationException uni fun) (ETerm uni fun), cost, [String])
 runCek params mode emitting term =
     runCekM params mode emitting $ do
         spendBudgetCek BStartup (cekStartupCost ?cekCosts)
-        etermToTerm <$> enterComputeCek [] mempty (termToETerm term)
+        enterComputeCek [] mempty term
