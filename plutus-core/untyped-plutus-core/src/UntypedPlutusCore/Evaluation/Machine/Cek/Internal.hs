@@ -181,8 +181,8 @@ instance Show (BuiltinRuntime (CekValue uni fun)) where
 data CekValue uni fun =
     -- This bang gave us a 1-2% speed-up at the time of writing.
     VCon !(Some (ValueOf uni))
-  | VDelay (Term Name uni fun ()) (CekValEnv uni fun)
-  | VLamAbs Name (Term Name uni fun ()) (CekValEnv uni fun)
+  | VDelay (Term Name uni fun ()) !(CekValEnv uni fun)
+  | VLamAbs Name (Term Name uni fun ()) !(CekValEnv uni fun)
   | VBuiltin            -- A partial builtin application, accumulating arguments for eventual full application.
       !fun                   -- So that we know, for what builtin we're calculating the cost.
                              -- TODO: any chance we could sneak this into 'BuiltinRuntime'
@@ -195,7 +195,7 @@ data CekValue uni fun =
                              -- discharged values and discharging is expensive, so we don't want to
                              -- do it unless we really have to. Making this field strict resulted
                              -- in a 3-4.5% slowdown at the time of writing.
-      (CekValEnv uni fun)    -- For discharging.
+      !(CekValEnv uni fun)    -- For discharging.
       !(BuiltinRuntime (CekValue uni fun))  -- The partial application and its costing function.
                                             -- Check the docs of 'BuiltinRuntime' for details.
     deriving (Show)
@@ -480,7 +480,7 @@ emitCek str =
 -- | Instantiate all the free variables of a term by looking them up in an environment.
 -- Mutually recursive with dischargeCekVal.
 dischargeCekValEnv :: CekValEnv uni fun -> Term Name uni fun () -> Term Name uni fun ()
-dischargeCekValEnv valEnv =
+dischargeCekValEnv !valEnv =
     -- We recursively discharge the environments of Cek values, but we will gradually end up doing
     -- this to terms which have no free variables remaining, at which point we won't call this
     -- substitution function any more and so we will terminate.
@@ -517,7 +517,7 @@ instance AsConstant (CekValue uni fun) where
 
 data Frame uni fun
     = FrameApplyFun (CekValue uni fun)                         -- ^ @[V _]@
-    | FrameApplyArg (CekValEnv uni fun) (Term Name uni fun ()) -- ^ @[_ N]@
+    | FrameApplyArg !(CekValEnv uni fun) (Term Name uni fun ()) -- ^ @[_ N]@
     | FrameForce                                               -- ^ @(force _)@
     deriving (Show)
 
@@ -614,7 +614,7 @@ enterComputeCek = computeCek (toWordArray 0) where
         -> Term Name uni fun ()
         -> CekM uni fun s (Term Name uni fun ())
     -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
-    computeCek !unbudgetedSteps ctx env (Var _ varName) = do
+    computeCek !unbudgetedSteps ctx !env (Var _ varName) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BVar unbudgetedSteps
         val <- lookupVarName varName env
         returnCek unbudgetedSteps' ctx val
