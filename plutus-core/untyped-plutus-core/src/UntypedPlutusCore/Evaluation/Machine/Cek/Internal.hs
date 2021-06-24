@@ -613,7 +613,7 @@ enterComputeCek = computeCek (toWordArray 0) where
         -> Term Name uni fun ()
         -> CekM uni fun s (Term Name uni fun ())
     -- s ; ρ ▻ {L A}  ↦ s , {_ A} ; ρ ▻ L
-    computeCek !unbudgetedSteps ctx env (Var _ varName) = do
+    computeCek !unbudgetedSteps !ctx env (Var _ varName) = do
         !unbudgetedSteps' <- stepAndMaybeSpend BVar unbudgetedSteps
         val <- lookupVarName varName env
         returnCek unbudgetedSteps' ctx val
