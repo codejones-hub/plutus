@@ -516,8 +516,8 @@ instance AsConstant (CekValue uni fun) where
     asConstant term       = throwNotAConstant term
 
 data Context uni fun
-    = FrameApplyFun !(CekValue uni fun) !(Context uni fun)                         -- ^ @[V _]@
-    | FrameApplyArg !(CekValEnv uni fun) !(Term Name uni fun ()) !(Context uni fun) -- ^ @[_ N]@
+    = FrameApplyFun (CekValue uni fun) !(Context uni fun)                         -- ^ @[V _]@
+    | FrameApplyArg (CekValEnv uni fun) (Term Name uni fun ()) !(Context uni fun) -- ^ @[_ N]@
     | FrameForce !(Context uni fun)                                              -- ^ @(force _)@
     | NilContext
     deriving (Show)
