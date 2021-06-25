@@ -38,6 +38,7 @@ let
     materialized =
       if stdenv.hostPlatform.isLinux then ./materialized-linux
       else if stdenv.hostPlatform.isDarwin then ./materialized-darwin
+      else if stdenv.hostPlatform.isWindows then ./materialized-windows
       else builtins.error "Don't have materialized files for this platform";
     # If true, we check that the generated files are correct. Set in the CI so we don't make mistakes.
     inherit checkMaterialization;
@@ -57,8 +58,12 @@ let
       "https://github.com/input-output-hk/hedgehog-extras"."8bcd3c9dc22cc44f9fcfe161f4638a384fc7a187" = "12viwpahjdfvlqpnzdgjp40nw31rvyznnab1hml9afpaxd6ixh70";
     };
     modules = [
+      ({pkgs, ...}: {
+        reinstallableLibGhc = pkgs.stdenv.hostPlatform.isWindows;
+      } // lib.mkIf pkgs.stdenv.hostPlatform.isWindows {
+        packages.Win32.components.library.build-tools = lib.mkForce [];
+      })
       {
-        reinstallableLibGhc = false;
         packages = {
           # See https://github.com/input-output-hk/plutus/issues/1213 and
           # https://github.com/input-output-hk/plutus/pull/2865.
