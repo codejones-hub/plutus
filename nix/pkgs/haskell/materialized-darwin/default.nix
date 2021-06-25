@@ -731,6 +731,7 @@
         flat = ./.plan.nix/flat.nix;
         marlowe = ./.plan.nix/marlowe.nix;
         plutus-use-cases = ./.plan.nix/plutus-use-cases.nix;
+        plutus-ghc-stub = ./.plan.nix/plutus-ghc-stub.nix;
         cardano-cli = ./.plan.nix/cardano-cli.nix;
         purescript-bridge = ./.plan.nix/purescript-bridge.nix;
         plutus-playground-server = ./.plan.nix/plutus-playground-server.nix;
@@ -828,6 +829,7 @@
           "plutus-use-cases" = {
             flags = { "defer-plugin-errors" = lib.mkOverride 900 false; };
             };
+          "plutus-ghc-stub" = { flags = {}; };
           "cardano-cli" = {
             flags = { "unexpected_thunks" = lib.mkOverride 900 false; };
             };
