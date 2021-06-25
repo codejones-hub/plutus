@@ -32,7 +32,7 @@ import           Language.Haskell.Interpreter (InterpreterError, InterpreterResu
 import           Ledger.Ada                   (adaValueOf, lovelaceValueOf)
 import           Ledger.Blockchain            (OnChainTx (..))
 import           Ledger.Scripts               (ValidatorHash (ValidatorHash))
-import           Ledger.Value                 (TokenName (TokenName), Value)
+import           Ledger.Value                 (Value, tokenName)
 import qualified Playground.Interpreter       as PI
 import           Playground.Types             (CompilationResult (CompilationResult),
                                                ContractCall (AddBlocks, AddBlocksUntil, CallEndpoint, PayToWallet),
@@ -44,6 +44,7 @@ import           Playground.Types             (CompilationResult (CompilationRes
                                                resultRollup, simulatorWalletBalance, simulatorWalletWallet, sourceCode,
                                                walletKeys, wallets)
 import           Playground.Usecases          (crowdFunding, errorHandling, game, vesting)
+import qualified PlutusTx.ByteString          as PlutusTx
 import           Schema                       (FormSchema (FormSchemaUnit, FormSchemaValue))
 import           System.Environment           (lookupEnv)
 import           Test.Tasty                   (TestTree, testGroup)
@@ -299,13 +300,13 @@ knownCurrencyTest =
             [ "import Playground.Contract"
             , "import Data.Text"
             , "import Data.List.NonEmpty (NonEmpty ((:|)))"
-            , "import Ledger.Value (TokenName(TokenName))"
+            , "import Ledger.Value (tokenName)"
             , "import Ledger.Scripts (ValidatorHash (..))"
             , "import Playground.Types (KnownCurrency (..))"
             , "import PlutusTx.Prelude"
             , ""
             , "myCurrency :: KnownCurrency"
-            , "myCurrency = KnownCurrency (ValidatorHash \"\") \"MyCurrency\" (TokenName \"MyToken\" :| [])"
+            , "myCurrency = KnownCurrency (ValidatorHash $ fromHaskellByteString \"\") \"MyCurrency\" (tokenName \"MyToken\" :| [])"
             , "$(mkKnownCurrencies ['myCurrency])"
             , ""
             , "schemas = []"
@@ -314,9 +315,9 @@ knownCurrencyTest =
     expectedCurrencies =
         [ adaCurrency
         , KnownCurrency
-              (ValidatorHash "")
+              (ValidatorHash $ PlutusTx.fromHaskellByteString "")
               "MyCurrency"
-              (TokenName "MyToken" :| [])
+              (tokenName "MyToken" :| [])
         ]
     hasKnownCurrency (Right (InterpreterResult _ (CompilationResult _ currencies))) =
         assertEqual "" expectedCurrencies currencies
