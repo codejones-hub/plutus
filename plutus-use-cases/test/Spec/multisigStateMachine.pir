@@ -5558,6 +5558,114 @@
                                 (termbind
                                   (strict)
                                   (vardecl
+                                    appEndo
+                                    (all a (type) (fun [(lam a (type) (fun a a)) a] [(lam a (type) (fun a a)) a]))
+                                  )
+                                  (abs
+                                    a
+                                    (type)
+                                    (lam ds [(lam a (type) (fun a a)) a] ds)
+                                  )
+                                )
+                                (termbind
+                                  (strict)
+                                  (vardecl
+                                    fGeneric1TYPEDual
+                                    (all a (type) (fun [(lam a (type) a) a] [(lam a (type) a) a]))
+                                  )
+                                  (abs a (type) (lam x [(lam a (type) a) a] x))
+                                )
+                                (termbind
+                                  (strict)
+                                  (vardecl
+                                    foldl
+                                    (all t (fun (type) (type)) (all b (type) (all a (type) (fun [(lam t (fun (type) (type)) (all m (type) (all a (type) (fun [Monoid m] (fun (fun a m) (fun [t a] m)))))) t] (fun (fun b (fun a b)) (fun b (fun [t a] b)))))))
+                                  )
+                                  (abs
+                                    t
+                                    (fun (type) (type))
+                                    (abs
+                                      b
+                                      (type)
+                                      (abs
+                                        a
+                                        (type)
+                                        (lam
+                                          dFoldable
+                                          [(lam t (fun (type) (type)) (all m (type) (all a (type) (fun [Monoid m] (fun (fun a m) (fun [t a] m)))))) t]
+                                          (let
+                                            (nonrec)
+                                            (termbind
+                                              (nonstrict)
+                                              (vardecl
+                                                dMonoid
+                                                [Monoid [(lam a (type) a) [(lam a (type) (fun a a)) b]]]
+                                              )
+                                              [
+                                                {
+                                                  fMonoidDual
+                                                  [(lam a (type) (fun a a)) b]
+                                                }
+                                                { fMonoidEndo b }
+                                              ]
+                                            )
+                                            (lam
+                                              f
+                                              (fun b (fun a b))
+                                              (lam
+                                                z
+                                                b
+                                                (lam
+                                                  t
+                                                  [t a]
+                                                  [
+                                                    [
+                                                      { appEndo b }
+                                                      [
+                                                        {
+                                                          fGeneric1TYPEDual
+                                                          [(lam a (type) (fun a a)) b]
+                                                        }
+                                                        [
+                                                          [
+                                                            [
+                                                              {
+                                                                {
+                                                                  dFoldable
+                                                                  [(lam a (type) a) [(lam a (type) (fun a a)) b]]
+                                                                }
+                                                                a
+                                                              }
+                                                              dMonoid
+                                                            ]
+                                                            (lam
+                                                              x
+                                                              a
+                                                              (lam
+                                                                y
+                                                                b
+                                                                [ [ f y ] x ]
+                                                              )
+                                                            )
+                                                          ]
+                                                          t
+                                                        ]
+                                                      ]
+                                                    ]
+                                                    z
+                                                  ]
+                                                )
+                                              )
+                                            )
+                                          )
+                                        )
+                                      )
+                                    )
+                                  )
+                                )
+                                (termbind
+                                  (strict)
+                                  (vardecl
                                     length
                                     (all t (fun (type) (type)) (all a (type) (fun [(lam t (fun (type) (type)) (all m (type) (all a (type) (fun [Monoid m] (fun (fun a m) (fun [t a] m)))))) t] (fun [t a] (con integer)))))
                                   )
@@ -5570,59 +5678,29 @@
                                       (lam
                                         dFoldable
                                         [(lam t (fun (type) (type)) (all m (type) (all a (type) (fun [Monoid m] (fun (fun a m) (fun [t a] m)))))) t]
-                                        (let
-                                          (nonrec)
-                                          (termbind
-                                            (nonstrict)
-                                            (vardecl
-                                              dMonoid
-                                              [Monoid [(lam a (type) a) [(lam a (type) (fun a a)) (con integer)]]]
-                                            )
+                                        [
+                                          [
                                             [
                                               {
-                                                fMonoidDual
-                                                [(lam a (type) (fun a a)) (con integer)]
+                                                { { foldl t } (con integer) } a
                                               }
-                                              { fMonoidEndo (con integer) }
+                                              dFoldable
                                             ]
-                                          )
-                                          (lam
-                                            t
-                                            [t a]
-                                            [
-                                              [
+                                            (lam
+                                              c
+                                              (con integer)
+                                              (lam
+                                                ds
+                                                a
                                                 [
-                                                  [
-                                                    {
-                                                      {
-                                                        dFoldable
-                                                        [(lam a (type) a) [(lam a (type) (fun a a)) (con integer)]]
-                                                      }
-                                                      a
-                                                    }
-                                                    dMonoid
-                                                  ]
-                                                  (lam
-                                                    x
-                                                    a
-                                                    (lam
-                                                      y
-                                                      (con integer)
-                                                      [
-                                                        [
-                                                          (builtin addInteger) y
-                                                        ]
-                                                        (con integer 1)
-                                                      ]
-                                                    )
-                                                  )
+                                                  [ (builtin addInteger) c ]
+                                                  (con integer 1)
                                                 ]
-                                                t
-                                              ]
-                                              (con integer 0)
-                                            ]
-                                          )
-                                        )
+                                              )
+                                            )
+                                          ]
+                                          (con integer 0)
+                                        ]
                                       )
                                     )
                                   )
@@ -6644,10 +6722,15 @@
                                   )
                                 )
                                 (termbind
+                                  (strict)
+                                  (vardecl fIsDataVoid_ctoData (fun Void Data))
+                                  (lam v Void [ { absurd Data } v ])
+                                )
+                                (termbind
                                   (nonstrict)
                                   (vardecl fIsDataVoid [IsData Void])
                                   [
-                                    [ { CConsIsData Void } { absurd Data } ]
+                                    [ { CConsIsData Void } fIsDataVoid_ctoData ]
                                     fIsDataVoid_cfromData
                                   ]
                                 )
