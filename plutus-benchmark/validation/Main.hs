@@ -63,8 +63,8 @@ contractDirs =
     , "token-account"
     , "uniswap"
     , "vesting"
-    , "marlowe" </> "trustfund"  -- The Marlowe examples aren't included in plutus-use-cases-scripts
-    , "marlowe" </> "zerocoupon"
+    -- , "marlowe" </> "trustfund"  -- The Marlowe examples aren't included in plutus-use-cases-scripts
+    -- , "marlowe" </> "zerocoupon"
     ]
 
 -- | A small subset of the contracts for quick benchmarking
@@ -74,7 +74,7 @@ contractDirs2 =
     , "prism"
     , "token-account"
     , "uniswap"
-    , "marlowe" </> "zerocoupon"
+    -- , "marlowe" </> "zerocoupon"
     ]
 
 
