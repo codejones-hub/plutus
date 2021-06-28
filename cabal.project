@@ -55,6 +55,14 @@ allow-newer:
            , beam-sqlite:dlist
            , beam-migrate:aeson
 
+           , stm:base
+
+           -- ghc-boot 8.10.4 is not in hackage, so haskell.nix needs consider 8.8.3
+           -- when cross compiling for windows or it will fail to find a solution including
+           -- a new Win32 version (ghc-boot depends on Win32 via directory)
+           , ghc-boot:base
+           , ghc-boot:ghc-boot-th
+
 constraints:
   -- big breaking change here, inline-r doens't have an upper bound
   singletons < 3.0
@@ -196,3 +204,27 @@ source-repository-package
   tag: cde90a2b27f79187ca8310b6549331e59595e7ba
 
 
+-- The following is needed because Nix is doing something crazy.
+package byron-spec-ledger
+  tests: False
+
+package marlowe
+  tests: False
+
+package plutus-doc
+  tests: False
+
+package plutus-metatheory
+  tests: False
+
+package prettyprinter-configurable
+  tests: False
+
+package small-steps
+  tests: False
+
+package small-steps-test
+  tests: False
+
+package byron-spec-chain
+  tests: False
