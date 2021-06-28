@@ -30,6 +30,8 @@ common stuff
   ghc-options: -fwarn-incomplete-patterns -fno-warn-overlapping-patterns
 
 library
+  if os(windows)
+    buildable: False
   import: stuff
   hs-source-dirs: src
   build-depends: base -any,
@@ -411,6 +413,8 @@ library
     MAlonzo.Code.Untyped.RenamingSubstitution
 
 executable plc-agda
+  if os(windows)
+    buildable: False
   import: stuff
   hs-source-dirs: exe
   main-is: Main.hs

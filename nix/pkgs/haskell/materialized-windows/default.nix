@@ -322,7 +322,6 @@
         "snap-core".flags.portable = false;
         "snap-core".flags.debug = false;
         "snap-core".flags.network-uri = true;
-        "ieee754".revision = (((hackage."ieee754")."0.8.0").revisions).default;
         "charset".revision = (((hackage."charset")."0.3.8").revisions).default;
         "dependent-sum-template".revision = (((hackage."dependent-sum-template")."0.1.0.3").revisions).default;
         "sop-core".revision = (((hackage."sop-core")."0.5.0.1").revisions).default;
