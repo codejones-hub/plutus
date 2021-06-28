@@ -57,6 +57,32 @@ let
       "https://github.com/input-output-hk/Win32-network"."94153b676617f8f33abe8d8182c37377d2784bd1" = "0pb7bg0936fldaa5r08nqbxvi2g8pcy4w3c7kdcg7pdgmimr30ss";
       "https://github.com/input-output-hk/hedgehog-extras"."8bcd3c9dc22cc44f9fcfe161f4638a384fc7a187" = "12viwpahjdfvlqpnzdgjp40nw31rvyznnab1hml9afpaxd6ixh70";
     };
+    cabalProjectLocal = lib.optionalString stdenv.hostPlatform.isWindows ''
+      -- The following is needed because Nix is doing something crazy.
+      package byron-spec-ledger
+        tests: False
+
+      package marlowe
+        tests: False
+
+      package plutus-doc
+        tests: False
+
+      package plutus-metatheory
+        tests: False
+
+      package prettyprinter-configurable
+        tests: False
+
+      package small-steps
+        tests: False
+
+      package small-steps-test
+        tests: False
+
+      package byron-spec-chain
+        tests: False
+    '';
     modules = [
       ({pkgs, ...}: {
         reinstallableLibGhc = pkgs.stdenv.hostPlatform.isWindows;
