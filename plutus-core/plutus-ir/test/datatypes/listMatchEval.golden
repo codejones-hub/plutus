@@ -1,7 +1,1 @@
-<<<<<<< HEAD
-(delay (lam x_195 x_195))
-||||||| parent of 66189fa5c (Revert "Revert "SCP-2136 Inline single occurrence bounded terms (#3257)" (#3344)")
-(delay (lam x_31 x_31))
-=======
-(delay (lam x_21 x_21))
->>>>>>> 66189fa5c (Revert "Revert "SCP-2136 Inline single occurrence bounded terms (#3257)" (#3344)")
+(delay (lam x_705 x_705))
