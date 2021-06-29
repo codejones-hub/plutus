@@ -838,7 +838,7 @@
           "cardano-node" = {
             flags = {
               "unexpected_thunks" = lib.mkOverride 900 false;
-              "systemd" = lib.mkOverride 900 true;
+              "systemd" = lib.mkOverride 900 false;
               };
             };
           "cardano-crypto-class" = {
@@ -854,7 +854,7 @@
           "lobemo-scribe-systemd" = { flags = {}; };
           "quickcheck-dynamic" = { flags = {}; };
           "cardano-config" = {
-            flags = { "systemd" = lib.mkOverride 900 true; };
+            flags = { "systemd" = lib.mkOverride 900 false; };
             };
           "network-mux" = {
             flags = {

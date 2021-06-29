@@ -82,13 +82,19 @@ let
 
       package byron-spec-chain
         tests: False
+
+      package cardano-node
+        flags: -systemd
+
+      package cardano-config
+        flags: -systemd
     '';
     modules = [
-      ({pkgs, ...}: {
+      ({pkgs, config, ...}: {
         reinstallableLibGhc = pkgs.stdenv.hostPlatform.isWindows;
       } // lib.mkIf pkgs.stdenv.hostPlatform.isWindows {
         packages.Win32.components.library.build-tools = lib.mkForce [];
-      })
+      } //
       {
         packages = {
           # See https://github.com/input-output-hk/plutus/issues/1213 and
@@ -169,7 +175,7 @@ let
           plutus-playground-server.ghcOptions = [ "-Werror" ];
           plutus-pab.ghcOptions = [ "-Werror" ];
           plutus-tx.ghcOptions = [ "-Werror" ];
-          plutus-tx-plugin.ghcOptions = [ "-Werror" ];
+          plutus-tx-plugin.ghcOptions = lib.optional (!pkgs.stdenv.hostPlatform.isWindows) [ "-Werror" ];
           plutus-doc.ghcOptions = [ "-Werror" ];
           plutus-use-cases.ghcOptions = [ "-Werror" ];
 
@@ -185,8 +191,15 @@ let
           # Honestly not sure why we need this, it has a mysterious unused dependency on "m"
           # This will go away when we upgrade nixpkgs and things use ieee754 anyway.
           ieee.components.library.libs = lib.mkForce [ ];
+
+          # By default haskell.nix chooses the `buildPackages` versions of these `build-tool-depeends`, but
+          # when cross compiling we want the cross compiled version.
+          plutus-pab.components.library.build-tools = lib.mkForce [
+            config.hsPkgs.cardano-node.components.exes.cardano-node
+            config.hsPkgs.cardano-cli.components.exes.cardano-cli
+          ];
         };
-      }
+      })
     ] ++ lib.optional enableHaskellProfiling {
       enableLibraryProfiling = true;
       enableExecutableProfiling = true;
