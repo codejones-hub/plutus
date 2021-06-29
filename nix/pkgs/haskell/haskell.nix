@@ -90,12 +90,11 @@ let
         flags: -systemd
     '';
     modules = [
+      ({pkgs, config, ...}: lib.mkIf pkgs.stdenv.hostPlatform.isWindows {
+        packages.Win32.components.library.build-tools = lib.mkForce [];
+      })
       ({pkgs, config, ...}: {
         reinstallableLibGhc = pkgs.stdenv.hostPlatform.isWindows;
-      } // lib.mkIf pkgs.stdenv.hostPlatform.isWindows {
-        packages.Win32.components.library.build-tools = lib.mkForce [];
-      } //
-      {
         packages = {
           # See https://github.com/input-output-hk/plutus/issues/1213 and
           # https://github.com/input-output-hk/plutus/pull/2865.
