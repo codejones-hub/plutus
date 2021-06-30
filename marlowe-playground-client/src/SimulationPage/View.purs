@@ -18,15 +18,16 @@ import Data.Tuple (Tuple(..), snd)
 import Data.Tuple.Nested ((/\))
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (liftEffect)
-import Halogen (RefLabel(..))
+import Halogen (RefLabel(..), ComponentHTML)
 import Halogen.Classes (aHorizontal, bold, btn, flex, flexCol, flexGrow, flexShrink0, fontBold, fullHeight, fullWidth, grid, gridColsDescriptionLocation, group, justifyBetween, justifyCenter, justifyEnd, maxH70p, minH0, noMargins, overflowHidden, overflowScroll, paddingX, plusBtn, smallBtn, smallSpaceBottom, spaceBottom, spaceLeft, spaceRight, spanText, spanTextBreakWord, textSecondaryColor, textXs, uppercase, w30p)
 import Halogen.Css (classNames)
 import Halogen.CurrencyInput (currencyInput)
 import Halogen.Extra (renderSubmodule)
-import Halogen.HTML (ClassName(..), ComponentHTML, HTML, aside, b_, button, div, div_, em_, h6, h6_, li, li_, p, p_, section, slot, span, span_, strong_, text, ul)
+import Halogen.HTML (ClassName(..), ComponentHTML, HTML, aside, b_, button, div, div_, em, em_, h6, h6_, li, li_, p, p_, section, slot, span, span_, strong_, text, ul)
 import Halogen.HTML.Events (onClick)
 import Halogen.HTML.Properties (class_, classes, disabled)
 import Halogen.Monaco (Settings, monacoComponent)
+import Hint.State (hint)
 import MainFrame.Types (ChildSlots, _simulatorEditorSlot)
 import Marlowe.Extended.Metadata (ChoiceFormat(..), MetaData, getChoiceFormat)
 import Marlowe.Monaco (daylightTheme, languageExtensionPoint)
@@ -35,6 +36,7 @@ import Marlowe.Semantics (AccountId, Assets(..), Bound(..), ChoiceId(..), Input(
 import Marlowe.Template (IntegerTemplateType(..))
 import Monaco (Editor)
 import Monaco as Monaco
+import Popper (Placement(..))
 import Pretty (renderPrettyParty, renderPrettyToken, showPrettyChoice, showPrettyMoney)
 import SimulationPage.BottomPanel (panelContents)
 import SimulationPage.Lenses (_bottomPanelState)
@@ -203,10 +205,11 @@ settings setup =
 
 ------------------------------------------------------------
 sidebar ::
-  forall p.
+  forall m.
+  MonadAff m =>
   MetaData ->
   State ->
-  Array (HTML p Action)
+  Array (ComponentHTML Action ChildSlots m)
 sidebar metadata state = case view (_marloweState <<< _Head <<< _executionState) state of
   SimulationNotStarted notStartedRecord -> [ startSimulationWidget metadata notStartedRecord ]
   SimulationRunning _ ->
@@ -216,7 +219,12 @@ sidebar metadata state = case view (_marloweState <<< _Head <<< _executionState)
     ]
 
 ------------------------------------------------------------
-startSimulationWidget :: forall p. MetaData -> InitialConditionsRecord -> HTML p Action
+startSimulationWidget ::
+  forall m.
+  MonadAff m =>
+  MetaData ->
+  InitialConditionsRecord ->
+  ComponentHTML Action ChildSlots m
 startSimulationWidget metadata { initialSlot, templateContent } =
   cardWidget "Simulation has not started yet"
     $ div_
@@ -239,34 +247,52 @@ startSimulationWidget metadata { initialSlot, templateContent } =
             ]
         ]
 
-integerTemplateParameters :: forall action p. Map String String -> (IntegerTemplateType -> String -> BigInteger -> action) -> IntegerTemplateType -> String -> String -> Map String BigInteger -> Array (HTML p action)
+integerTemplateParameters ::
+  forall action m.
+  MonadAff m =>
+  Map String String ->
+  (IntegerTemplateType -> String -> BigInteger -> action) ->
+  IntegerTemplateType ->
+  String ->
+  String ->
+  Map String BigInteger ->
+  Array (ComponentHTML action ChildSlots m)
 integerTemplateParameters explanations actionGen typeName title prefix content =
-  [ li_
-      if Map.isEmpty content then
-        []
-      else
-        ([ h6_ [ em_ [ text title ] ] ])
-          <> ( map
-                ( \(key /\ value) ->
-                    ( ( div [ class_ (ClassName "template-fields") ]
-                          ( [ div_
-                                [ text (prefix <> " ")
-                                , strong_ [ text key ]
-                                , text ":"
-                                ]
-                            , marloweActionInput [ "mx-2", "flex-grow", "flex-shrink-0" ] (actionGen typeName key) value
-                            ]
-                              <> [ div [ classes [ ClassName "action-group-explanation" ] ]
-                                    $ maybe [] (\explanation -> [ text "“" ] <> markdownToHTML explanation <> [ text "„" ])
-                                    $ Map.lookup key explanations
-                                ]
-                          )
+  let
+    parameterHint key =
+      maybe []
+        ( \explanation ->
+            [ hint ("template-parameter-" <> key) Bottom
+                -- TODO: Placeholder max-w-hint
+                (div [ classNames [ "max-w-hint" ] ] $ markdownToHTML explanation)
+            ]
+        )
+        $ Map.lookup key explanations
+  in
+    [ li_
+        if Map.isEmpty content then
+          []
+        else
+          ([ h6_ [ em_ [ text title ] ] ])
+            <> ( map
+                  ( \(key /\ value) ->
+                      ( ( div [ class_ (ClassName "template-fields") ]
+                            ( [ div_
+                                  [ text (prefix <> " ")
+                                  , strong_ [ text key ]
+                                  , text ":"
+                                  ]
+                              ]
+                                <> parameterHint key
+                                <> [ marloweActionInput [ "mx-2", "flex-grow", "flex-shrink-0" ] (actionGen typeName key) value
+                                  ]
+                            )
+                        )
                       )
-                    )
-                )
-                (Map.toUnfoldable content)
-            )
-  ]
+                  )
+                  (Map.toUnfoldable content)
+              )
+    ]
 
 ------------------------------------------------------------
 simulationStateWidget ::
@@ -303,10 +329,11 @@ simulationStateWidget state =
 
 ------------------------------------------------------------
 actionWidget ::
-  forall p.
+  forall m.
+  MonadAff m =>
   MetaData ->
   State ->
-  HTML p Action
+  ComponentHTML Action ChildSlots m
 actionWidget metadata state =
   cardWidget "Actions"
     $ div [ classes [] ]
@@ -344,36 +371,57 @@ actionWidget metadata state =
   sortParties :: forall v. Array (Tuple Party v) -> Array (Tuple Party v)
   sortParties = sortWith (\(Tuple party _) -> party == otherActionsParty)
 
-  actionsForParties :: Map Party (Map ActionInputId ActionInput) -> Array (HTML p Action)
+  actionsForParties :: Map Party (Map ActionInputId ActionInput) -> Array (ComponentHTML Action ChildSlots m)
   actionsForParties m = map (\(Tuple k v) -> participant metadata state k (vs v)) (sortParties (kvs m))
 
 participant ::
-  forall p.
+  forall m.
+  MonadAff m =>
   MetaData ->
   State ->
   Party ->
   Array ActionInput ->
-  HTML p Action
+  ComponentHTML Action ChildSlots m
 participant metadata state party actionInputs =
   li [ classes [ noMargins ] ]
     ( [ title ]
         <> (map (inputItem metadata state partyName) actionInputs)
     )
   where
+  partyHint = case party of
+    Role roleName ->
+      maybe []
+        ( \explanation ->
+            [ hint ("participant-hint-" <> roleName) Bottom
+                -- TODO: Placeholder max-w-hint
+                ( div [ classNames [ "max-w-hint" ] ] $ markdownToHTML explanation
+                )
+            ]
+        )
+        $ Map.lookup roleName metadata.roleDescriptions
+    _ -> []
+
   title =
     div [ classes [ ClassName "action-group" ] ]
       if party == otherActionsParty then
         -- QUESTION: if we only have "move to slot", could we rename this to "Slot Actions"?
-        [ div [ classes [ ClassName "action-group-title" ] ] [ h6_ [ em_ [ text "Other Actions" ] ] ] ]
+        [ h6_ [ em_ [ text "Other Actions" ] ] ]
       else
-        [ div [ classes [ ClassName "action-group-title" ] ] [ h6_ [ em_ [ text "Participant ", strong_ [ text partyName ] ] ] ] ]
-          <> [ div [ classes [ ClassName "action-group-explanation" ] ]
-                ( case party of
-                    Role roleName -> maybe [] (\explanation -> [ text "“" ] <> markdownToHTML explanation <> [ text "„" ]) $ Map.lookup roleName metadata.roleDescriptions
-                    _ -> []
-                )
-            ]
+        [ h6_
+            ( [ em [ classNames [ "mr-2" ] ]
+                  [ text "Participant "
+                  , strong_ [ text partyName ]
+                  ]
+              ]
+                <> partyHint
+            )
+        ]
 
+  -- , div [ classes [ ClassName "action-group-explanation" ] ]
+  --     ( case party of
+  --         Role roleName -> maybe [] (\explanation -> [ text "“" ] <> markdownToHTML explanation <> [ text "„" ]) $ Map.lookup roleName metadata.roleDescriptions
+  --         _ -> []
+  --     )
   partyName = case party of
     (PK name) -> name
     (Role name) -> name
