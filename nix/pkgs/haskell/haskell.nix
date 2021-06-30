@@ -90,11 +90,30 @@ let
         flags: -systemd
     '';
     modules = [
-      ({pkgs, config, ...}: lib.mkIf pkgs.stdenv.hostPlatform.isWindows {
+      # Allow reinstallation of Win32
+      ({pkgs, ...}: lib.mkIf pkgs.stdenv.hostPlatform.isWindows {
+        nonReinstallablePkgs =
+        [ "rts" "ghc-heap" "ghc-prim" "integer-gmp" "integer-simple" "base"
+          "deepseq" "array" "ghc-boot-th" "pretty" "template-haskell"
+          # ghcjs custom packages
+          "ghcjs-prim" "ghcjs-th"
+          "ghc" "array" "binary" "bytestring" "containers"
+          "filepath" "ghc-compact" "ghc-prim"
+          # "ghci" "haskeline"
+          "hpc"
+          "mtl" "parsec" "text" "transformers"
+          "xhtml"
+          # "stm" "terminfo"
+        ];
         packages.Win32.components.library.build-tools = lib.mkForce [];
       })
+      ({ pkgs, ... }: lib.mkIf (pkgs.stdenv.hostPlatform != pkgs.stdenv.buildPlatform) {
+        # Remove hsc2hs build-tool dependencies (suitable version will be available as part of the ghc derivation)
+        packages.terminal-size.components.library.build-tools = lib.mkForce [];
+        packages.network.components.library.build-tools = lib.mkForce [];
+        packages.process.components.library.libs = lib.mkForce [];
+      })
       ({pkgs, config, ...}: {
-        reinstallableLibGhc = pkgs.stdenv.hostPlatform.isWindows;
         packages = {
           # See https://github.com/input-output-hk/plutus/issues/1213 and
           # https://github.com/input-output-hk/plutus/pull/2865.
