@@ -762,6 +762,7 @@
         byron-spec-ledger = ./.plan.nix/byron-spec-ledger.nix;
         byron-spec-chain = ./.plan.nix/byron-spec-chain.nix;
         cardano-crypto-praos = ./.plan.nix/cardano-crypto-praos.nix;
+        monoidal-synchronisation = ./.plan.nix/monoidal-synchronisation.nix;
         cardano-binary-test = ./.plan.nix/cardano-binary-test.nix;
         plutus-core = ./.plan.nix/plutus-core.nix;
         cardano-prelude-test = ./.plan.nix/cardano-prelude-test.nix;
@@ -772,12 +773,12 @@
         freer-extras = ./.plan.nix/freer-extras.nix;
         cardano-ledger-byron-test = ./.plan.nix/cardano-ledger-byron-test.nix;
         plutus-tx = ./.plan.nix/plutus-tx.nix;
-        cardano-api-test = ./.plan.nix/cardano-api-test.nix;
         hedgehog-extras = ./.plan.nix/hedgehog-extras.nix;
         fake-pab = ./.plan.nix/fake-pab.nix;
         plutus-contract = ./.plan.nix/plutus-contract.nix;
         iohk-monitoring = ./.plan.nix/iohk-monitoring.nix;
         io-sim = ./.plan.nix/io-sim.nix;
+        cardano-ledger-shelley-ma-test = ./.plan.nix/cardano-ledger-shelley-ma-test.nix;
         cardano-crypto-test = ./.plan.nix/cardano-crypto-test.nix;
         web-ghc = ./.plan.nix/web-ghc.nix;
         cardano-ledger-byron = ./.plan.nix/cardano-ledger-byron.nix;
@@ -900,6 +901,7 @@
               "external-libsodium-vrf" = lib.mkOverride 900 true;
               };
             };
+          "monoidal-synchronisation" = { flags = {}; };
           "cardano-binary-test" = {
             flags = { "development" = lib.mkOverride 900 false; };
             };
@@ -920,7 +922,6 @@
             flags = { "development" = lib.mkOverride 900 false; };
             };
           "plutus-tx" = { flags = {}; };
-          "cardano-api-test" = { flags = {}; };
           "hedgehog-extras" = { flags = {}; };
           "fake-pab" = { flags = {}; };
           "plutus-contract" = { flags = {}; };
@@ -931,6 +932,7 @@
               };
             };
           "io-sim" = { flags = { "asserts" = lib.mkOverride 900 false; }; };
+          "cardano-ledger-shelley-ma-test" = { flags = {}; };
           "cardano-crypto-test" = {
             flags = { "development" = lib.mkOverride 900 false; };
             };
