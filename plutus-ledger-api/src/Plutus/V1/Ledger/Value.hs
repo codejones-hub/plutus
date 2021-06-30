@@ -116,6 +116,7 @@ currencyMPSHash :: CurrencySymbol -> MintingPolicyHash
 currencyMPSHash (CurrencySymbol h) = MintingPolicyHash h
 
 {-# INLINABLE currencySymbol #-}
+-- | Creates `CurrencySymbol` from raw `ByteString`. Shouldn't be used with literals.
 currencySymbol :: BS.ByteString -> CurrencySymbol
 currencySymbol = CurrencySymbol . PlutusTx.fromHaskellByteString
 
@@ -129,6 +130,11 @@ newtype TokenName = TokenName { unTokenName :: PlutusTx.ByteString }
 
 instance IsString TokenName where
     fromString = fromText . Text.pack
+
+{-# INLINABLE tokenName #-}
+-- | Creates `TokenName` from raw `ByteString`. Shouldn't be used with literals.
+tokenName :: BS.ByteString -> TokenName
+tokenName = TokenName . PlutusTx.fromHaskellByteString
 
 fromText :: Text -> TokenName
 fromText = TokenName . PlutusTx.fromHaskellByteString . E.encodeUtf8
@@ -175,10 +181,6 @@ instance FromJSON TokenName where
                 _              -> Haskell.pure . fromText $ t
 
 makeLift ''TokenName
-
-{-# INLINABLE tokenName #-}
-tokenName :: BS.ByteString -> TokenName
-tokenName = TokenName . PlutusTx.fromHaskellByteString
 
 -- | An asset class, identified by currency symbol and token name.
 newtype AssetClass = AssetClass { unAssetClass :: (CurrencySymbol, TokenName) }

@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveAnyClass             #-}
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE DerivingVia                #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -50,6 +51,7 @@ import qualified Data.Aeson.Extras        as JSON
 import           Data.Aeson.Types         hiding (Error, Value)
 import qualified Data.Foldable            as F
 import           Data.Scientific          (Scientific, floatingOrInteger)
+import           Data.String              (IsString (..))
 import           Data.Text                (pack)
 import           Data.Text.Encoding       as Text (decodeUtf8, encodeUtf8)
 import           Deriving.Aeson
@@ -105,16 +107,20 @@ instance Haskell.Show Party where
 type AccountId = Party
 type Timeout = Slot
 type Money = Val.Value
-type ChoiceName = ByteString
 type ChosenNum = Integer
 type SlotInterval = (Slot, Slot)
 type Accounts = Map (AccountId, Token) Integer
+
+newtype ChoiceName = ChoiceName { unChoiceName :: ByteString }
+  deriving (IsString, Haskell.Show, Pretty) via TokenName
+  deriving stock (Generic)
+  deriving newtype (Haskell.Eq, Haskell.Ord, Eq)
 
 -- * Data Types
 {-| Choices – of integers – are identified by ChoiceId
     which combines a name for the choice with the Party who had made the choice.
 -}
-data ChoiceId = ChoiceId ByteString Party
+data ChoiceId = ChoiceId ChoiceName Party
   deriving stock (Haskell.Show,Generic,Haskell.Eq,Haskell.Ord)
   deriving anyclass (Pretty)
 
@@ -134,9 +140,9 @@ instance Haskell.Show Token where
     and can be used by 'UseValue' construct.
 -}
 newtype ValueId = ValueId ByteString
-  deriving stock (Haskell.Show,Haskell.Eq,Haskell.Ord,Generic)
+  deriving (IsString, Haskell.Show) via TokenName
+  deriving stock (Haskell.Eq,Haskell.Ord,Generic)
   deriving anyclass (Newtype)
-
 
 {-| Values include some quantities that change with time,
     including “the slot interval”, “the current balance of an account (in Lovelace)”,
@@ -820,12 +826,12 @@ instance ToJSON Party where
 
 instance FromJSON ChoiceId where
   parseJSON = withObject "ChoiceId" (\v ->
-       ChoiceId <$> (fromHaskellByteString . Text.encodeUtf8 <$> (v .: "choice_name"))
+       ChoiceId <$> (ChoiceName . fromHaskellByteString . Text.encodeUtf8 <$> (v .: "choice_name"))
                 <*> (v .: "choice_owner")
                                     )
 
 instance ToJSON ChoiceId where
-  toJSON (ChoiceId name party) = object [ "choice_name" .= (JSON.String $ Text.decodeUtf8 $ toHaskellByteString name)
+  toJSON (ChoiceId name party) = object [ "choice_name" .= (JSON.String $ Text.decodeUtf8 $ toHaskellByteString $ unChoiceName name)
                                         , "choice_owner" .= party
                                         ]
 
@@ -1288,6 +1294,8 @@ instance Eq State where
 
 
 -- Lifting data types to Plutus Core
+makeLift ''ChoiceName
+makeIsDataIndexed ''ChoiceName [('ChoiceName,0)]
 makeLift ''Party
 makeIsDataIndexed ''Party [('PK,0),('Role,1)]
 makeLift ''ChoiceId
