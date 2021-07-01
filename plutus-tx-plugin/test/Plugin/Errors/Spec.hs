@@ -38,6 +38,7 @@ errors = testNested "Errors" [
     , goldenUPlcCatch "recursiveNewtype" recursiveNewtype
     , goldenUPlcCatch "mutualRecursionUnfoldingsLocal" mutualRecursionUnfoldingsLocal
     , goldenUPlcCatch "literalCaseInt" literalCaseInt
+    , goldenUPlcCatch "literalCaseBs" literalCaseBs
     , goldenUPlcCatch "literalConcatenateBs" literalConcatenateBs
     , goldenUPlcCatch "literalCaseOther" literalCaseOther
   ]
@@ -70,6 +71,9 @@ mutualRecursionUnfoldingsLocal = plc (Proxy @"mutualRecursionUnfoldingsLocal") (
 
 literalCaseInt :: CompiledCode (Integer -> Integer)
 literalCaseInt = plc (Proxy @"literalCaseInt") (\case { 1 -> 2; x -> x})
+
+literalCaseBs :: CompiledCode (Builtins.ByteString -> Builtins.ByteString)
+literalCaseBs = plc (Proxy @"literalCaseBs") (\x -> case x of { "abc" -> ""; x -> x})
 
 literalConcatenateBs :: CompiledCode (Builtins.ByteString -> Builtins.ByteString)
 literalConcatenateBs = plc (Proxy @"literalConcatenateBs") (\x -> Builtins.concatenate "hello" x)
