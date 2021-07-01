@@ -55,7 +55,7 @@
           (hsPkgs."text" or (errorHandler.buildDepError "text"))
           (hsPkgs."transformers" or (errorHandler.buildDepError "transformers"))
           ];
-        buildable = if system.isWindows then false else true;
+        buildable = true;
         modules = [
           "MAlonzo/Code/Main"
           "MAlonzo/Code/Agda/Builtin/Bool"
@@ -250,9 +250,9 @@
             (hsPkgs."base" or (errorHandler.buildDepError "base"))
             (hsPkgs."plutus-metatheory" or (errorHandler.buildDepError "plutus-metatheory"))
             ];
-          buildable = if system.isWindows then false else true;
+          buildable = true;
           hsSourceDirs = [ "exe" ];
-          mainPath = [ "Main.hs" ] ++ (pkgs.lib).optional (system.isWindows) "";
+          mainPath = [ "Main.hs" ];
           };
         };
       tests = {
