@@ -11,13 +11,14 @@ import           Lib
 import           PlcTestUtils
 import           Plugin.Lib
 
-import qualified PlutusTx.Builtins  as Builtins
+import qualified PlutusTx.Builtins       as Builtins
+import qualified PlutusTx.Builtins.Class as Builtins
 import           PlutusTx.Code
 import           PlutusTx.Lift
 import           PlutusTx.Plugin
-import qualified PlutusTx.Prelude   as P
+import qualified PlutusTx.Prelude        as P
 
-import qualified PlutusCore.Default as PLC
+import qualified PlutusCore.Default      as PLC
 
 import           Data.Proxy
 
@@ -121,23 +122,23 @@ bsEquals = plc (Proxy @"bs32Equals") (\(x :: Builtins.ByteString) (y :: Builtins
 bsLt :: CompiledCode (Builtins.ByteString -> Builtins.ByteString -> Bool)
 bsLt = plc (Proxy @"bsLt") (\(x :: Builtins.ByteString) (y :: Builtins.ByteString) -> Builtins.lessThanByteString x y)
 
-bsDecode :: CompiledCode (Builtins.ByteString -> Builtins.String)
+bsDecode :: CompiledCode (Builtins.ByteString -> Builtins.BuiltinString)
 bsDecode = plc (Proxy @"bsDecode") (\(x :: Builtins.ByteString) -> Builtins.decodeUtf8 x)
 
 verify :: CompiledCode (Builtins.ByteString -> Builtins.ByteString -> Builtins.ByteString -> Bool)
 verify = plc (Proxy @"verify") (\(x::Builtins.ByteString) (y::Builtins.ByteString) (z::Builtins.ByteString) -> Builtins.verifySignature x y z)
 
-trace :: CompiledCode (Builtins.String -> ())
-trace = plc (Proxy @"trace") (\(x :: Builtins.String) -> Builtins.trace x)
+trace :: CompiledCode (Builtins.BuiltinString -> ())
+trace = plc (Proxy @"trace") (\(x :: Builtins.BuiltinString) -> Builtins.trace x)
 
-stringLiteral :: CompiledCode (Builtins.String)
-stringLiteral = plc (Proxy @"stringLiteral") ("abc"::Builtins.String)
+stringLiteral :: CompiledCode (Builtins.BuiltinString)
+stringLiteral = plc (Proxy @"stringLiteral") ("abc"::Builtins.BuiltinString)
 
-stringConvert :: CompiledCode (Builtins.String)
-stringConvert = plc (Proxy @"stringConvert") ((noinline P.stringToBuiltinString) "abc")
+stringConvert :: CompiledCode (Builtins.BuiltinString)
+stringConvert = plc (Proxy @"stringConvert") ((noinline Builtins.stringToBuiltinString) "abc")
 
 stringEquals :: CompiledCode (String -> String -> Bool)
-stringEquals = plc (Proxy @"string32Equals") (\(x :: String) (y :: String) -> Builtins.equalsString (P.stringToBuiltinString x) (P.stringToBuiltinString y))
+stringEquals = plc (Proxy @"string32Equals") (\(x :: String) (y :: String) -> Builtins.equalsString (Builtins.stringToBuiltinString x) (Builtins.stringToBuiltinString y))
 
 stringEncode :: CompiledCode (Builtins.ByteString)
 stringEncode = plc (Proxy @"stringEncode") (Builtins.encodeUtf8 "abc")

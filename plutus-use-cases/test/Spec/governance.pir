@@ -154,20 +154,21 @@
                 equalsInteger (fun (con integer) (fun (con integer) Bool))
               )
               (lam
-                arg
+                x
                 (con integer)
                 (lam
-                  arg
+                  y
                   (con integer)
-                  (let
-                    (nonrec)
-                    (termbind
-                      (strict)
-                      (vardecl b (con bool))
-                      [ [ (builtin eqInteger) arg ] arg ]
-                    )
-                    [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
-                  )
+                  [
+                    [
+                      [
+                        { (builtin ifThenElse) Bool }
+                        [ [ (builtin eqInteger) x ] y ]
+                      ]
+                      True
+                    ]
+                    False
+                  ]
                 )
               )
             )
@@ -178,20 +179,21 @@
                 (fun (con bytestring) (fun (con bytestring) Bool))
               )
               (lam
-                arg
+                x
                 (con bytestring)
                 (lam
-                  arg
+                  y
                   (con bytestring)
-                  (let
-                    (nonrec)
-                    (termbind
-                      (strict)
-                      (vardecl b (con bool))
-                      [ [ (builtin eqByteString) arg ] arg ]
-                    )
-                    [ [ [ { (builtin ifThenElse) Bool } b ] True ] False ]
-                  )
+                  [
+                    [
+                      [
+                        { (builtin ifThenElse) Bool }
+                        [ [ (builtin eqByteString) x ] y ]
+                      ]
+                      True
+                    ]
+                    False
+                  ]
                 )
               )
             )
@@ -320,9 +322,26 @@
                                                             Bool_match
                                                             [
                                                               [
-                                                                equalsInteger i
+                                                                [
+                                                                  {
+                                                                    (builtin
+                                                                      ifThenElse
+                                                                    )
+                                                                    Bool
+                                                                  }
+                                                                  [
+                                                                    [
+                                                                      (builtin
+                                                                        eqInteger
+                                                                      )
+                                                                      i
+                                                                    ]
+                                                                    i
+                                                                  ]
+                                                                ]
+                                                                True
                                                               ]
-                                                              i
+                                                              False
                                                             ]
                                                           ]
                                                           (fun Unit Bool)
@@ -690,9 +709,28 @@
                                                             Bool_match
                                                             [
                                                               [
-                                                                equalsInteger i
+                                                                [
+                                                                  {
+                                                                    (builtin
+                                                                      ifThenElse
+                                                                    )
+                                                                    Bool
+                                                                  }
+                                                                  [
+                                                                    [
+                                                                      (builtin
+                                                                        eqInteger
+                                                                      )
+                                                                      i
+                                                                    ]
+                                                                    (con
+                                                                      integer 1
+                                                                    )
+                                                                  ]
+                                                                ]
+                                                                True
                                                               ]
-                                                              (con integer 1)
+                                                              False
                                                             ]
                                                           ]
                                                           (fun Unit [Maybe [Maybe a]])
@@ -746,13 +784,29 @@
                                                                       Bool_match
                                                                       [
                                                                         [
-                                                                          equalsInteger
-                                                                          i
+                                                                          [
+                                                                            {
+                                                                              (builtin
+                                                                                ifThenElse
+                                                                              )
+                                                                              Bool
+                                                                            }
+                                                                            [
+                                                                              [
+                                                                                (builtin
+                                                                                  eqInteger
+                                                                                )
+                                                                                i
+                                                                              ]
+                                                                              (con
+                                                                                integer
+                                                                                  0
+                                                                              )
+                                                                            ]
+                                                                          ]
+                                                                          True
                                                                         ]
-                                                                        (con
-                                                                          integer
-                                                                            0
-                                                                        )
+                                                                        False
                                                                       ]
                                                                     ]
                                                                     (fun Unit [Maybe [Maybe a]])
@@ -1133,13 +1187,29 @@
                                                                                     Bool_match
                                                                                     [
                                                                                       [
-                                                                                        equalsInteger
-                                                                                        i
+                                                                                        [
+                                                                                          {
+                                                                                            (builtin
+                                                                                              ifThenElse
+                                                                                            )
+                                                                                            Bool
+                                                                                          }
+                                                                                          [
+                                                                                            [
+                                                                                              (builtin
+                                                                                                eqInteger
+                                                                                              )
+                                                                                              i
+                                                                                            ]
+                                                                                            (con
+                                                                                              integer
+                                                                                                0
+                                                                                            )
+                                                                                          ]
+                                                                                        ]
+                                                                                        True
                                                                                       ]
-                                                                                      (con
-                                                                                        integer
-                                                                                          0
-                                                                                      )
+                                                                                      False
                                                                                     ]
                                                                                   ]
                                                                                   (fun Unit [Maybe [[Tuple2 a] b]])
@@ -1471,13 +1541,29 @@
                                                                                       Bool_match
                                                                                       [
                                                                                         [
-                                                                                          equalsInteger
-                                                                                          i
+                                                                                          [
+                                                                                            {
+                                                                                              (builtin
+                                                                                                ifThenElse
+                                                                                              )
+                                                                                              Bool
+                                                                                            }
+                                                                                            [
+                                                                                              [
+                                                                                                (builtin
+                                                                                                  eqInteger
+                                                                                                )
+                                                                                                i
+                                                                                              ]
+                                                                                              (con
+                                                                                                integer
+                                                                                                  0
+                                                                                              )
+                                                                                            ]
+                                                                                          ]
+                                                                                          True
                                                                                         ]
-                                                                                        (con
-                                                                                          integer
-                                                                                            0
-                                                                                        )
+                                                                                        False
                                                                                       ]
                                                                                     ]
                                                                                     (fun Unit [Maybe Proposal])
@@ -2088,9 +2174,28 @@
                                                             Bool_match
                                                             [
                                                               [
-                                                                equalsInteger i
+                                                                [
+                                                                  {
+                                                                    (builtin
+                                                                      ifThenElse
+                                                                    )
+                                                                    Bool
+                                                                  }
+                                                                  [
+                                                                    [
+                                                                      (builtin
+                                                                        eqInteger
+                                                                      )
+                                                                      i
+                                                                    ]
+                                                                    (con
+                                                                      integer 0
+                                                                    )
+                                                                  ]
+                                                                ]
+                                                                True
                                                               ]
-                                                              (con integer 0)
+                                                              False
                                                             ]
                                                           ]
                                                           (fun Unit [Maybe Bool])
@@ -2114,12 +2219,29 @@
                                                                   Bool_match
                                                                   [
                                                                     [
-                                                                      equalsInteger
-                                                                      i
+                                                                      [
+                                                                        {
+                                                                          (builtin
+                                                                            ifThenElse
+                                                                          )
+                                                                          Bool
+                                                                        }
+                                                                        [
+                                                                          [
+                                                                            (builtin
+                                                                              eqInteger
+                                                                            )
+                                                                            i
+                                                                          ]
+                                                                          (con
+                                                                            integer
+                                                                              1
+                                                                          )
+                                                                        ]
+                                                                      ]
+                                                                      True
                                                                     ]
-                                                                    (con
-                                                                      integer 1
-                                                                    )
+                                                                    False
                                                                   ]
                                                                 ]
                                                                 (fun Unit [Maybe Bool])
@@ -2408,13 +2530,29 @@
                                                                                 Bool_match
                                                                                 [
                                                                                   [
-                                                                                    equalsInteger
-                                                                                    i
+                                                                                    [
+                                                                                      {
+                                                                                        (builtin
+                                                                                          ifThenElse
+                                                                                        )
+                                                                                        Bool
+                                                                                      }
+                                                                                      [
+                                                                                        [
+                                                                                          (builtin
+                                                                                            eqInteger
+                                                                                          )
+                                                                                          i
+                                                                                        ]
+                                                                                        (con
+                                                                                          integer
+                                                                                            0
+                                                                                        )
+                                                                                      ]
+                                                                                    ]
+                                                                                    True
                                                                                   ]
-                                                                                  (con
-                                                                                    integer
-                                                                                      0
-                                                                                  )
+                                                                                  False
                                                                                 ]
                                                                               ]
                                                                               (fun Unit [Maybe Voting])
@@ -3148,13 +3286,29 @@
                                                                                               Bool_match
                                                                                               [
                                                                                                 [
-                                                                                                  equalsInteger
-                                                                                                  i
+                                                                                                  [
+                                                                                                    {
+                                                                                                      (builtin
+                                                                                                        ifThenElse
+                                                                                                      )
+                                                                                                      Bool
+                                                                                                    }
+                                                                                                    [
+                                                                                                      [
+                                                                                                        (builtin
+                                                                                                          eqInteger
+                                                                                                        )
+                                                                                                        i
+                                                                                                      ]
+                                                                                                      (con
+                                                                                                        integer
+                                                                                                          0
+                                                                                                      )
+                                                                                                    ]
+                                                                                                  ]
+                                                                                                  True
                                                                                                 ]
-                                                                                                (con
-                                                                                                  integer
-                                                                                                    0
-                                                                                                )
+                                                                                                False
                                                                                               ]
                                                                                             ]
                                                                                             (fun Unit [Maybe GovState])
@@ -4566,6 +4720,22 @@
                                   )
                                 )
                               )
+                              (termbind
+                                (strict)
+                                (vardecl
+                                  addInteger
+                                  (fun (con integer) (fun (con integer) (con integer)))
+                                )
+                                (lam
+                                  x
+                                  (con integer)
+                                  (lam
+                                    y
+                                    (con integer)
+                                    [ [ (builtin addInteger) x ] y ]
+                                  )
+                                )
+                              )
                               (datatypebind
                                 (datatype
                                   (tyvardecl AdditiveMonoid (fun (type) (type)))
@@ -5888,7 +6058,7 @@
                                       fMonoidValue_c
                                       (fun [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]] (fun [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]))
                                     )
-                                    [ unionWith (builtin addInteger) ]
+                                    [ unionWith addInteger ]
                                   )
                                   (termbind
                                     (nonstrict)
@@ -6083,49 +6253,6 @@
                                           (vardecl
                                             Params
                                             (fun (con bytestring) (fun [List (con bytestring)] (fun (con integer) Params)))
-                                          )
-                                        )
-                                      )
-                                      (termbind
-                                        (strict)
-                                        (vardecl
-                                          greaterThanEqInteger
-                                          (fun (con integer) (fun (con integer) Bool))
-                                        )
-                                        (lam
-                                          arg
-                                          (con integer)
-                                          (lam
-                                            arg
-                                            (con integer)
-                                            (let
-                                              (nonrec)
-                                              (termbind
-                                                (strict)
-                                                (vardecl b (con bool))
-                                                [
-                                                  [
-                                                    (builtin
-                                                      greaterThanEqInteger
-                                                    )
-                                                    arg
-                                                  ]
-                                                  arg
-                                                ]
-                                              )
-                                              [
-                                                [
-                                                  [
-                                                    {
-                                                      (builtin ifThenElse) Bool
-                                                    }
-                                                    b
-                                                  ]
-                                                  True
-                                                ]
-                                                False
-                                              ]
-                                            )
                                           )
                                         )
                                       )
@@ -7428,13 +7555,29 @@
                                                                                                                                         Bool_match
                                                                                                                                         [
                                                                                                                                           [
-                                                                                                                                            greaterThanEqInteger
                                                                                                                                             [
-                                                                                                                                              go
-                                                                                                                                              oldMap
+                                                                                                                                              {
+                                                                                                                                                (builtin
+                                                                                                                                                  ifThenElse
+                                                                                                                                                )
+                                                                                                                                                Bool
+                                                                                                                                              }
+                                                                                                                                              [
+                                                                                                                                                [
+                                                                                                                                                  (builtin
+                                                                                                                                                    greaterThanEqInteger
+                                                                                                                                                  )
+                                                                                                                                                  [
+                                                                                                                                                    go
+                                                                                                                                                    oldMap
+                                                                                                                                                  ]
+                                                                                                                                                ]
+                                                                                                                                                ds
+                                                                                                                                              ]
                                                                                                                                             ]
+                                                                                                                                            True
                                                                                                                                           ]
-                                                                                                                                          ds
+                                                                                                                                          False
                                                                                                                                         ]
                                                                                                                                       ]
                                                                                                                                       (fun Unit (con bytestring))
@@ -8211,13 +8354,29 @@
                                                                                                                                   Bool_match
                                                                                                                                   [
                                                                                                                                     [
-                                                                                                                                      greaterThanEqInteger
                                                                                                                                       [
-                                                                                                                                        go
-                                                                                                                                        oldMap
+                                                                                                                                        {
+                                                                                                                                          (builtin
+                                                                                                                                            ifThenElse
+                                                                                                                                          )
+                                                                                                                                          Bool
+                                                                                                                                        }
+                                                                                                                                        [
+                                                                                                                                          [
+                                                                                                                                            (builtin
+                                                                                                                                              greaterThanEqInteger
+                                                                                                                                            )
+                                                                                                                                            [
+                                                                                                                                              go
+                                                                                                                                              oldMap
+                                                                                                                                            ]
+                                                                                                                                          ]
+                                                                                                                                          ds
+                                                                                                                                        ]
                                                                                                                                       ]
+                                                                                                                                      True
                                                                                                                                     ]
-                                                                                                                                    ds
+                                                                                                                                    False
                                                                                                                                   ]
                                                                                                                                 ]
                                                                                                                                 (fun Unit (con bytestring))
@@ -9320,13 +9479,29 @@
                                                                                                                                 Bool_match
                                                                                                                                 [
                                                                                                                                   [
-                                                                                                                                    greaterThanEqInteger
                                                                                                                                     [
-                                                                                                                                      go
-                                                                                                                                      oldMap
+                                                                                                                                      {
+                                                                                                                                        (builtin
+                                                                                                                                          ifThenElse
+                                                                                                                                        )
+                                                                                                                                        Bool
+                                                                                                                                      }
+                                                                                                                                      [
+                                                                                                                                        [
+                                                                                                                                          (builtin
+                                                                                                                                            greaterThanEqInteger
+                                                                                                                                          )
+                                                                                                                                          [
+                                                                                                                                            go
+                                                                                                                                            oldMap
+                                                                                                                                          ]
+                                                                                                                                        ]
+                                                                                                                                        ds
+                                                                                                                                      ]
                                                                                                                                     ]
+                                                                                                                                    True
                                                                                                                                   ]
-                                                                                                                                  ds
+                                                                                                                                  False
                                                                                                                                 ]
                                                                                                                               ]
                                                                                                                               (fun Unit (con bytestring))
@@ -9773,23 +9948,6 @@
                                           )
                                         )
                                       )
-                                      (termbind
-                                        (strict)
-                                        (vardecl trace (fun (con string) Unit))
-                                        (lam
-                                          arg
-                                          (con string)
-                                          (let
-                                            (nonrec)
-                                            (termbind
-                                              (strict)
-                                              (vardecl b (con unit))
-                                              [ (builtin trace) arg ]
-                                            )
-                                            Unit
-                                          )
-                                        )
-                                      )
                                       (datatypebind
                                         (datatype
                                           (tyvardecl
@@ -9972,40 +10130,60 @@
                                                       Bool_match
                                                       [
                                                         [
-                                                          equalsByteString
                                                           [
                                                             {
-                                                              [
-                                                                TxOutRef_match l
-                                                              ]
-                                                              (con bytestring)
-                                                            }
-                                                            (lam
-                                                              ds
-                                                              (con bytestring)
-                                                              (lam
-                                                                ds
-                                                                (con integer)
-                                                                ds
+                                                              (builtin
+                                                                ifThenElse
                                                               )
-                                                            )
+                                                              Bool
+                                                            }
+                                                            [
+                                                              [
+                                                                (builtin
+                                                                  eqByteString
+                                                                )
+                                                                [
+                                                                  {
+                                                                    [
+                                                                      TxOutRef_match
+                                                                      l
+                                                                    ]
+                                                                    (con bytestring)
+                                                                  }
+                                                                  (lam
+                                                                    ds
+                                                                    (con bytestring)
+                                                                    (lam
+                                                                      ds
+                                                                      (con integer)
+                                                                      ds
+                                                                    )
+                                                                  )
+                                                                ]
+                                                              ]
+                                                              [
+                                                                {
+                                                                  [
+                                                                    TxOutRef_match
+                                                                    r
+                                                                  ]
+                                                                  (con bytestring)
+                                                                }
+                                                                (lam
+                                                                  ds
+                                                                  (con bytestring)
+                                                                  (lam
+                                                                    ds
+                                                                    (con integer)
+                                                                    ds
+                                                                  )
+                                                                )
+                                                              ]
+                                                            ]
                                                           ]
+                                                          True
                                                         ]
-                                                        [
-                                                          {
-                                                            [ TxOutRef_match r ]
-                                                            (con bytestring)
-                                                          }
-                                                          (lam
-                                                            ds
-                                                            (con bytestring)
-                                                            (lam
-                                                              ds
-                                                              (con integer)
-                                                              ds
-                                                            )
-                                                          )
-                                                        ]
+                                                        False
                                                       ]
                                                     ]
                                                     (fun Unit Bool)
@@ -10015,36 +10193,57 @@
                                                     Unit
                                                     [
                                                       [
-                                                        equalsInteger
                                                         [
                                                           {
-                                                            [ TxOutRef_match l ]
-                                                            (con integer)
+                                                            (builtin ifThenElse)
+                                                            Bool
                                                           }
-                                                          (lam
-                                                            ds
-                                                            (con bytestring)
-                                                            (lam
-                                                              ds
-                                                              (con integer)
-                                                              ds
-                                                            )
-                                                          )
+                                                          [
+                                                            [
+                                                              (builtin eqInteger
+                                                              )
+                                                              [
+                                                                {
+                                                                  [
+                                                                    TxOutRef_match
+                                                                    l
+                                                                  ]
+                                                                  (con integer)
+                                                                }
+                                                                (lam
+                                                                  ds
+                                                                  (con bytestring)
+                                                                  (lam
+                                                                    ds
+                                                                    (con integer)
+                                                                    ds
+                                                                  )
+                                                                )
+                                                              ]
+                                                            ]
+                                                            [
+                                                              {
+                                                                [
+                                                                  TxOutRef_match
+                                                                  r
+                                                                ]
+                                                                (con integer)
+                                                              }
+                                                              (lam
+                                                                ds
+                                                                (con bytestring)
+                                                                (lam
+                                                                  ds
+                                                                  (con integer)
+                                                                  ds
+                                                                )
+                                                              )
+                                                            ]
+                                                          ]
                                                         ]
+                                                        True
                                                       ]
-                                                      [
-                                                        {
-                                                          [ TxOutRef_match r ]
-                                                          (con integer)
-                                                        }
-                                                        (lam
-                                                          ds
-                                                          (con bytestring)
-                                                          (lam
-                                                            ds (con integer) ds
-                                                          )
-                                                        )
-                                                      ]
+                                                      False
                                                     ]
                                                   )
                                                 ]
@@ -10139,95 +10338,50 @@
                                                                                   [
                                                                                     [
                                                                                       {
-                                                                                        [
-                                                                                          Bool_match
-                                                                                          [
-                                                                                            [
-                                                                                              [
-                                                                                                {
-                                                                                                  {
-                                                                                                    fFoldableNil_cfoldMap
-                                                                                                    [(lam a (type) a) Bool]
-                                                                                                  }
-                                                                                                  TxInInfo
-                                                                                                }
-                                                                                                [
-                                                                                                  {
-                                                                                                    fMonoidSum
-                                                                                                    Bool
-                                                                                                  }
-                                                                                                  fAdditiveMonoidBool
-                                                                                                ]
-                                                                                              ]
-                                                                                              (lam
-                                                                                                ds
-                                                                                                TxInInfo
-                                                                                                [
-                                                                                                  {
-                                                                                                    [
-                                                                                                      TxInInfo_match
-                                                                                                      ds
-                                                                                                    ]
-                                                                                                    Bool
-                                                                                                  }
-                                                                                                  (lam
-                                                                                                    ds
-                                                                                                    TxOutRef
-                                                                                                    (lam
-                                                                                                      ds
-                                                                                                      TxOut
-                                                                                                      [
-                                                                                                        [
-                                                                                                          fEqTxOutRef_c
-                                                                                                          ds
-                                                                                                        ]
-                                                                                                        ds
-                                                                                                      ]
-                                                                                                    )
-                                                                                                  )
-                                                                                                ]
-                                                                                              )
-                                                                                            ]
-                                                                                            ds
-                                                                                          ]
-                                                                                        ]
-                                                                                        (fun Unit Bool)
+                                                                                        {
+                                                                                          fFoldableNil_cfoldMap
+                                                                                          [(lam a (type) a) Bool]
+                                                                                        }
+                                                                                        TxInInfo
                                                                                       }
-                                                                                      (lam
-                                                                                        thunk
-                                                                                        Unit
-                                                                                        True
-                                                                                      )
+                                                                                      [
+                                                                                        {
+                                                                                          fMonoidSum
+                                                                                          Bool
+                                                                                        }
+                                                                                        fAdditiveMonoidBool
+                                                                                      ]
                                                                                     ]
                                                                                     (lam
-                                                                                      thunk
-                                                                                      Unit
+                                                                                      ds
+                                                                                      TxInInfo
                                                                                       [
-                                                                                        [
-                                                                                          {
-                                                                                            [
-                                                                                              Unit_match
-                                                                                              [
-                                                                                                trace
-                                                                                                (con
-                                                                                                  string
-                                                                                                    "Input constraint"
-                                                                                                )
-                                                                                              ]
-                                                                                            ]
-                                                                                            (fun Unit Bool)
-                                                                                          }
+                                                                                        {
+                                                                                          [
+                                                                                            TxInInfo_match
+                                                                                            ds
+                                                                                          ]
+                                                                                          Bool
+                                                                                        }
+                                                                                        (lam
+                                                                                          ds
+                                                                                          TxOutRef
                                                                                           (lam
-                                                                                            thunk
-                                                                                            Unit
-                                                                                            False
+                                                                                            ds
+                                                                                            TxOut
+                                                                                            [
+                                                                                              [
+                                                                                                fEqTxOutRef_c
+                                                                                                ds
+                                                                                              ]
+                                                                                              ds
+                                                                                            ]
                                                                                           )
-                                                                                        ]
-                                                                                        Unit
+                                                                                        )
                                                                                       ]
                                                                                     )
                                                                                   ]
-                                                                                  Unit
+                                                                                  ds
                                                                                 ]
                                                                               )
                                                                             )
@@ -10608,10 +10762,26 @@
                                                                       Bool_match
                                                                       [
                                                                         [
-                                                                          equalsInteger
-                                                                          a
+                                                                          [
+                                                                            {
+                                                                              (builtin
+                                                                                ifThenElse
+                                                                              )
+                                                                              Bool
+                                                                            }
+                                                                            [
+                                                                              [
+                                                                                (builtin
+                                                                                  eqInteger
+                                                                                )
+                                                                                a
+                                                                              ]
+                                                                              a
+                                                                            ]
+                                                                          ]
+                                                                          True
                                                                         ]
-                                                                        a
+                                                                        False
                                                                       ]
                                                                     ]
                                                                     (fun Unit Bool)
@@ -10627,10 +10797,26 @@
                                                                               Bool_match
                                                                               [
                                                                                 [
-                                                                                  equalsInteger
-                                                                                  b
+                                                                                  [
+                                                                                    {
+                                                                                      (builtin
+                                                                                        ifThenElse
+                                                                                      )
+                                                                                      Bool
+                                                                                    }
+                                                                                    [
+                                                                                      [
+                                                                                        (builtin
+                                                                                          eqInteger
+                                                                                        )
+                                                                                        b
+                                                                                      ]
+                                                                                      b
+                                                                                    ]
+                                                                                  ]
+                                                                                  True
                                                                                 ]
-                                                                                b
+                                                                                False
                                                                               ]
                                                                             ]
                                                                             (fun Unit Bool)
@@ -10841,10 +11027,26 @@
                                                                                 Bool_match
                                                                                 [
                                                                                   [
-                                                                                    equalsByteString
-                                                                                    l
+                                                                                    [
+                                                                                      {
+                                                                                        (builtin
+                                                                                          ifThenElse
+                                                                                        )
+                                                                                        Bool
+                                                                                      }
+                                                                                      [
+                                                                                        [
+                                                                                          (builtin
+                                                                                            eqByteString
+                                                                                          )
+                                                                                          l
+                                                                                        ]
+                                                                                        r
+                                                                                      ]
+                                                                                    ]
+                                                                                    True
                                                                                   ]
-                                                                                  r
+                                                                                  False
                                                                                 ]
                                                                               ]
                                                                               (fun Unit Bool)
@@ -10902,10 +11104,26 @@
                                                                             Bool_match
                                                                             [
                                                                               [
-                                                                                equalsByteString
-                                                                                a
+                                                                                [
+                                                                                  {
+                                                                                    (builtin
+                                                                                      ifThenElse
+                                                                                    )
+                                                                                    Bool
+                                                                                  }
+                                                                                  [
+                                                                                    [
+                                                                                      (builtin
+                                                                                        eqByteString
+                                                                                      )
+                                                                                      a
+                                                                                    ]
+                                                                                    a
+                                                                                  ]
+                                                                                ]
+                                                                                True
                                                                               ]
-                                                                              a
+                                                                              False
                                                                             ]
                                                                           ]
                                                                           (fun Unit Bool)
@@ -10941,9 +11159,13 @@
                                       (termbind
                                         (strict)
                                         (vardecl
-                                          error (all a (type) (fun Unit a))
+                                          error
+                                          (all a (type) (fun (con unit) a))
                                         )
-                                        (abs e (type) (lam thunk Unit (error e))
+                                        (abs
+                                          a
+                                          (type)
+                                          (lam thunk (con unit) (error a))
                                         )
                                       )
                                       (termbind
@@ -11372,7 +11594,10 @@
                                               (lam
                                                 thunk
                                                 Unit
-                                                [ { error [List TxOut] } Unit ]
+                                                [
+                                                  { error [List TxOut] }
+                                                  (con unit ())
+                                                ]
                                               )
                                             ]
                                             Unit
@@ -11756,135 +11981,118 @@
                                                                 [
                                                                   [
                                                                     {
-                                                                      [
-                                                                        Bool_match
+                                                                      {
+                                                                        fFoldableNil_cfoldMap
+                                                                        [(lam a (type) a) Bool]
+                                                                      }
+                                                                      TxOut
+                                                                    }
+                                                                    [
+                                                                      {
+                                                                        fMonoidSum
+                                                                        Bool
+                                                                      }
+                                                                      fAdditiveMonoidBool
+                                                                    ]
+                                                                  ]
+                                                                  (lam
+                                                                    ds
+                                                                    TxOut
+                                                                    [
+                                                                      {
                                                                         [
-                                                                          [
+                                                                          TxOut_match
+                                                                          ds
+                                                                        ]
+                                                                        Bool
+                                                                      }
+                                                                      (lam
+                                                                        ds
+                                                                        Address
+                                                                        (lam
+                                                                          ds
+                                                                          [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                          (lam
+                                                                            ds
+                                                                            [Maybe (con bytestring)]
                                                                             [
-                                                                              {
-                                                                                {
-                                                                                  fFoldableNil_cfoldMap
-                                                                                  [(lam a (type) a) Bool]
-                                                                                }
-                                                                                TxOut
-                                                                              }
                                                                               [
-                                                                                {
-                                                                                  fMonoidSum
-                                                                                  Bool
-                                                                                }
-                                                                                fAdditiveMonoidBool
-                                                                              ]
-                                                                            ]
-                                                                            (lam
-                                                                              ds
-                                                                              TxOut
-                                                                              [
-                                                                                {
-                                                                                  [
-                                                                                    TxOut_match
-                                                                                    ds
-                                                                                  ]
-                                                                                  Bool
-                                                                                }
-                                                                                (lam
-                                                                                  ds
-                                                                                  Address
-                                                                                  (lam
-                                                                                    ds
-                                                                                    [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
-                                                                                    (lam
+                                                                                [
+                                                                                  {
+                                                                                    [
+                                                                                      {
+                                                                                        Maybe_match
+                                                                                        (con bytestring)
+                                                                                      }
                                                                                       ds
-                                                                                      [Maybe (con bytestring)]
+                                                                                    ]
+                                                                                    (fun Unit Bool)
+                                                                                  }
+                                                                                  (lam
+                                                                                    svh
+                                                                                    (con bytestring)
+                                                                                    (lam
+                                                                                      thunk
+                                                                                      Unit
                                                                                       [
                                                                                         [
                                                                                           [
                                                                                             {
                                                                                               [
-                                                                                                {
-                                                                                                  Maybe_match
-                                                                                                  (con bytestring)
-                                                                                                }
-                                                                                                ds
+                                                                                                Bool_match
+                                                                                                [
+                                                                                                  [
+                                                                                                    [
+                                                                                                      checkBinRel
+                                                                                                      equalsInteger
+                                                                                                    ]
+                                                                                                    ds
+                                                                                                  ]
+                                                                                                  ds
+                                                                                                ]
                                                                                               ]
                                                                                               (fun Unit Bool)
                                                                                             }
                                                                                             (lam
-                                                                                              svh
-                                                                                              (con bytestring)
-                                                                                              (lam
-                                                                                                thunk
-                                                                                                Unit
+                                                                                              thunk
+                                                                                              Unit
+                                                                                              [
                                                                                                 [
                                                                                                   [
-                                                                                                    [
-                                                                                                      {
-                                                                                                        [
-                                                                                                          Bool_match
-                                                                                                          [
-                                                                                                            [
-                                                                                                              [
-                                                                                                                checkBinRel
-                                                                                                                equalsInteger
-                                                                                                              ]
-                                                                                                              ds
-                                                                                                            ]
-                                                                                                            ds
-                                                                                                          ]
-                                                                                                        ]
-                                                                                                        (fun Unit Bool)
-                                                                                                      }
+                                                                                                    {
+                                                                                                      [
+                                                                                                        {
+                                                                                                          Maybe_match
+                                                                                                          (con bytestring)
+                                                                                                        }
+                                                                                                        hsh
+                                                                                                      ]
+                                                                                                      (fun Unit Bool)
+                                                                                                    }
+                                                                                                    (lam
+                                                                                                      a
+                                                                                                      (con bytestring)
                                                                                                       (lam
                                                                                                         thunk
                                                                                                         Unit
                                                                                                         [
                                                                                                           [
-                                                                                                            [
-                                                                                                              {
-                                                                                                                [
-                                                                                                                  {
-                                                                                                                    Maybe_match
-                                                                                                                    (con bytestring)
-                                                                                                                  }
-                                                                                                                  hsh
-                                                                                                                ]
-                                                                                                                (fun Unit Bool)
-                                                                                                              }
-                                                                                                              (lam
-                                                                                                                a
-                                                                                                                (con bytestring)
-                                                                                                                (lam
-                                                                                                                  thunk
-                                                                                                                  Unit
-                                                                                                                  [
-                                                                                                                    [
-                                                                                                                      equalsByteString
-                                                                                                                      a
-                                                                                                                    ]
-                                                                                                                    svh
-                                                                                                                  ]
-                                                                                                                )
-                                                                                                              )
-                                                                                                            ]
-                                                                                                            (lam
-                                                                                                              thunk
-                                                                                                              Unit
-                                                                                                              False
-                                                                                                            )
+                                                                                                            equalsByteString
+                                                                                                            a
                                                                                                           ]
-                                                                                                          Unit
+                                                                                                          svh
                                                                                                         ]
                                                                                                       )
-                                                                                                    ]
-                                                                                                    (lam
-                                                                                                      thunk
-                                                                                                      Unit
-                                                                                                      False
                                                                                                     )
                                                                                                   ]
-                                                                                                  Unit
+                                                                                                  (lam
+                                                                                                    thunk
+                                                                                                    Unit
+                                                                                                    False
+                                                                                                  )
                                                                                                 ]
-                                                                                              )
+                                                                                                Unit
+                                                                                              ]
                                                                                             )
                                                                                           ]
                                                                                           (lam
@@ -11897,53 +12105,25 @@
                                                                                       ]
                                                                                     )
                                                                                   )
+                                                                                ]
+                                                                                (lam
+                                                                                  thunk
+                                                                                  Unit
+                                                                                  False
                                                                                 )
                                                                               ]
-                                                                            )
-                                                                          ]
-                                                                          [
-                                                                            getContinuingOutputs
-                                                                            ctx
-                                                                          ]
-                                                                        ]
-                                                                      ]
-                                                                      (fun Unit Bool)
-                                                                    }
-                                                                    (lam
-                                                                      thunk
-                                                                      Unit
-                                                                      True
-                                                                    )
-                                                                  ]
-                                                                  (lam
-                                                                    thunk
-                                                                    Unit
-                                                                    [
-                                                                      [
-                                                                        {
-                                                                          [
-                                                                            Unit_match
-                                                                            [
-                                                                              trace
-                                                                              (con
-                                                                                string
-                                                                                  "Output constraint"
-                                                                              )
+                                                                              Unit
                                                                             ]
-                                                                          ]
-                                                                          (fun Unit Bool)
-                                                                        }
-                                                                        (lam
-                                                                          thunk
-                                                                          Unit
-                                                                          False
+                                                                          )
                                                                         )
-                                                                      ]
-                                                                      Unit
+                                                                      )
                                                                     ]
                                                                   )
                                                                 ]
-                                                                Unit
+                                                                [
+                                                                  getContinuingOutputs
+                                                                  ctx
+                                                                ]
                                                               ]
                                                             )
                                                           )
@@ -11970,47 +12150,6 @@
                                       (termbind
                                         (strict)
                                         (vardecl
-                                          lessThanEqInteger
-                                          (fun (con integer) (fun (con integer) Bool))
-                                        )
-                                        (lam
-                                          arg
-                                          (con integer)
-                                          (lam
-                                            arg
-                                            (con integer)
-                                            (let
-                                              (nonrec)
-                                              (termbind
-                                                (strict)
-                                                (vardecl b (con bool))
-                                                [
-                                                  [
-                                                    (builtin lessThanEqInteger)
-                                                    arg
-                                                  ]
-                                                  arg
-                                                ]
-                                              )
-                                              [
-                                                [
-                                                  [
-                                                    {
-                                                      (builtin ifThenElse) Bool
-                                                    }
-                                                    b
-                                                  ]
-                                                  True
-                                                ]
-                                                False
-                                              ]
-                                            )
-                                          )
-                                        )
-                                      )
-                                      (termbind
-                                        (strict)
-                                        (vardecl
                                           fOrdData_ccompare
                                           (fun (con integer) (fun (con integer) Ordering))
                                         )
@@ -12026,7 +12165,29 @@
                                                   {
                                                     [
                                                       Bool_match
-                                                      [ [ equalsInteger x ] y ]
+                                                      [
+                                                        [
+                                                          [
+                                                            {
+                                                              (builtin
+                                                                ifThenElse
+                                                              )
+                                                              Bool
+                                                            }
+                                                            [
+                                                              [
+                                                                (builtin
+                                                                  eqInteger
+                                                                )
+                                                                x
+                                                              ]
+                                                              y
+                                                            ]
+                                                          ]
+                                                          True
+                                                        ]
+                                                        False
+                                                      ]
                                                     ]
                                                     (fun Unit Ordering)
                                                   }
@@ -12043,10 +12204,26 @@
                                                             Bool_match
                                                             [
                                                               [
-                                                                lessThanEqInteger
-                                                                x
+                                                                [
+                                                                  {
+                                                                    (builtin
+                                                                      ifThenElse
+                                                                    )
+                                                                    Bool
+                                                                  }
+                                                                  [
+                                                                    [
+                                                                      (builtin
+                                                                        lessThanEqInteger
+                                                                      )
+                                                                      x
+                                                                    ]
+                                                                    y
+                                                                  ]
+                                                                ]
+                                                                True
                                                               ]
-                                                              y
+                                                              False
                                                             ]
                                                           ]
                                                           (fun Unit Ordering)
@@ -12083,8 +12260,27 @@
                                                     [
                                                       Bool_match
                                                       [
-                                                        [ lessThanEqInteger x ]
-                                                        y
+                                                        [
+                                                          [
+                                                            {
+                                                              (builtin
+                                                                ifThenElse
+                                                              )
+                                                              Bool
+                                                            }
+                                                            [
+                                                              [
+                                                                (builtin
+                                                                  lessThanEqInteger
+                                                                )
+                                                                x
+                                                              ]
+                                                              y
+                                                            ]
+                                                          ]
+                                                          True
+                                                        ]
+                                                        False
                                                       ]
                                                     ]
                                                     (fun Unit (con integer))
@@ -12117,8 +12313,27 @@
                                                     [
                                                       Bool_match
                                                       [
-                                                        [ lessThanEqInteger x ]
-                                                        y
+                                                        [
+                                                          [
+                                                            {
+                                                              (builtin
+                                                                ifThenElse
+                                                              )
+                                                              Bool
+                                                            }
+                                                            [
+                                                              [
+                                                                (builtin
+                                                                  lessThanEqInteger
+                                                                )
+                                                                x
+                                                              ]
+                                                              y
+                                                            ]
+                                                          ]
+                                                          True
+                                                        ]
+                                                        False
                                                       ]
                                                     ]
                                                     (fun Unit (con integer))
@@ -12135,41 +12350,66 @@
                                       (termbind
                                         (strict)
                                         (vardecl
+                                          greaterThanEqInteger
+                                          (fun (con integer) (fun (con integer) Bool))
+                                        )
+                                        (lam
+                                          x
+                                          (con integer)
+                                          (lam
+                                            y
+                                            (con integer)
+                                            [
+                                              [
+                                                [
+                                                  { (builtin ifThenElse) Bool }
+                                                  [
+                                                    [
+                                                      (builtin
+                                                        greaterThanEqInteger
+                                                      )
+                                                      x
+                                                    ]
+                                                    y
+                                                  ]
+                                                ]
+                                                True
+                                              ]
+                                              False
+                                            ]
+                                          )
+                                        )
+                                      )
+                                      (termbind
+                                        (strict)
+                                        (vardecl
                                           greaterThanInteger
                                           (fun (con integer) (fun (con integer) Bool))
                                         )
                                         (lam
-                                          arg
+                                          x
                                           (con integer)
                                           (lam
-                                            arg
+                                            y
                                             (con integer)
-                                            (let
-                                              (nonrec)
-                                              (termbind
-                                                (strict)
-                                                (vardecl b (con bool))
-                                                [
-                                                  [
-                                                    (builtin greaterThanInteger)
-                                                    arg
-                                                  ]
-                                                  arg
-                                                ]
-                                              )
+                                            [
                                               [
                                                 [
+                                                  { (builtin ifThenElse) Bool }
                                                   [
-                                                    {
-                                                      (builtin ifThenElse) Bool
-                                                    }
-                                                    b
+                                                    [
+                                                      (builtin
+                                                        greaterThanInteger
+                                                      )
+                                                      x
+                                                    ]
+                                                    y
                                                   ]
-                                                  True
                                                 ]
-                                                False
+                                                True
                                               ]
-                                            )
+                                              False
+                                            ]
                                           )
                                         )
                                       )
@@ -12180,37 +12420,27 @@
                                           (fun (con integer) (fun (con integer) Bool))
                                         )
                                         (lam
-                                          arg
+                                          x
                                           (con integer)
                                           (lam
-                                            arg
+                                            y
                                             (con integer)
-                                            (let
-                                              (nonrec)
-                                              (termbind
-                                                (strict)
-                                                (vardecl b (con bool))
-                                                [
-                                                  [
-                                                    (builtin lessThanInteger)
-                                                    arg
-                                                  ]
-                                                  arg
-                                                ]
-                                              )
+                                            [
                                               [
                                                 [
+                                                  { (builtin ifThenElse) Bool }
                                                   [
-                                                    {
-                                                      (builtin ifThenElse) Bool
-                                                    }
-                                                    b
+                                                    [
+                                                      (builtin lessThanInteger)
+                                                      x
+                                                    ]
+                                                    y
                                                   ]
-                                                  True
                                                 ]
-                                                False
+                                                True
                                               ]
-                                            )
+                                              False
+                                            ]
                                           )
                                         )
                                       )
@@ -12222,6 +12452,38 @@
                                           (vardecl
                                             CConsOrd
                                             (fun [(lam a (type) (fun a (fun a Bool))) a] (fun (fun a (fun a Ordering)) (fun (fun a (fun a Bool)) (fun (fun a (fun a Bool)) (fun (fun a (fun a Bool)) (fun (fun a (fun a Bool)) (fun (fun a (fun a a)) (fun (fun a (fun a a)) [Ord a]))))))))
+                                          )
+                                        )
+                                      )
+                                      (termbind
+                                        (strict)
+                                        (vardecl
+                                          lessThanEqInteger
+                                          (fun (con integer) (fun (con integer) Bool))
+                                        )
+                                        (lam
+                                          x
+                                          (con integer)
+                                          (lam
+                                            y
+                                            (con integer)
+                                            [
+                                              [
+                                                [
+                                                  { (builtin ifThenElse) Bool }
+                                                  [
+                                                    [
+                                                      (builtin lessThanEqInteger
+                                                      )
+                                                      x
+                                                    ]
+                                                    y
+                                                  ]
+                                                ]
+                                                True
+                                              ]
+                                              False
+                                            ]
                                           )
                                         )
                                       )
@@ -14486,10 +14748,26 @@
                                                                                                   Bool_match
                                                                                                   [
                                                                                                     [
-                                                                                                      equalsByteString
-                                                                                                      dsh
+                                                                                                      [
+                                                                                                        {
+                                                                                                          (builtin
+                                                                                                            ifThenElse
+                                                                                                          )
+                                                                                                          Bool
+                                                                                                        }
+                                                                                                        [
+                                                                                                          [
+                                                                                                            (builtin
+                                                                                                              eqByteString
+                                                                                                            )
+                                                                                                            dsh
+                                                                                                          ]
+                                                                                                          dsh
+                                                                                                        ]
+                                                                                                      ]
+                                                                                                      True
                                                                                                     ]
-                                                                                                    dsh
+                                                                                                    False
                                                                                                   ]
                                                                                                 ]
                                                                                                 (fun Unit [Maybe [[Tuple2 (con bytestring)] Data]])
@@ -14802,109 +15080,113 @@
                                                                 (lam
                                                                   ds
                                                                   (con bytestring)
-                                                                  (let
-                                                                    (nonrec)
-                                                                    (termbind
-                                                                      (nonstrict
-                                                                      )
-                                                                      (vardecl
-                                                                        p
-                                                                        (fun (con bytestring) Bool)
-                                                                      )
-                                                                      [
-                                                                        equalsByteString
-                                                                        k
-                                                                      ]
-                                                                    )
+                                                                  [
                                                                     [
                                                                       [
-                                                                        [
-                                                                          {
+                                                                        {
+                                                                          [
+                                                                            {
+                                                                              Maybe_match
+                                                                              (con bytestring)
+                                                                            }
                                                                             [
-                                                                              {
-                                                                                Maybe_match
-                                                                                (con bytestring)
-                                                                              }
                                                                               [
                                                                                 [
-                                                                                  [
+                                                                                  {
                                                                                     {
-                                                                                      {
-                                                                                        fFoldableNil_cfoldMap
-                                                                                        [(lam a (type) [Maybe a]) (con bytestring)]
-                                                                                      }
-                                                                                      (con bytestring)
+                                                                                      fFoldableNil_cfoldMap
+                                                                                      [(lam a (type) [Maybe a]) (con bytestring)]
                                                                                     }
-                                                                                    {
-                                                                                      fMonoidFirst
-                                                                                      (con bytestring)
-                                                                                    }
-                                                                                  ]
-                                                                                  (lam
-                                                                                    x
                                                                                     (con bytestring)
+                                                                                  }
+                                                                                  {
+                                                                                    fMonoidFirst
+                                                                                    (con bytestring)
+                                                                                  }
+                                                                                ]
+                                                                                (lam
+                                                                                  x
+                                                                                  (con bytestring)
+                                                                                  [
                                                                                     [
                                                                                       [
-                                                                                        [
-                                                                                          {
+                                                                                        {
+                                                                                          [
+                                                                                            Bool_match
                                                                                             [
-                                                                                              Bool_match
                                                                                               [
-                                                                                                p
-                                                                                                x
+                                                                                                [
+                                                                                                  {
+                                                                                                    (builtin
+                                                                                                      ifThenElse
+                                                                                                    )
+                                                                                                    Bool
+                                                                                                  }
+                                                                                                  [
+                                                                                                    [
+                                                                                                      (builtin
+                                                                                                        eqByteString
+                                                                                                      )
+                                                                                                      k
+                                                                                                    ]
+                                                                                                    x
+                                                                                                  ]
+                                                                                                ]
+                                                                                                True
                                                                                               ]
+                                                                                              False
                                                                                             ]
-                                                                                            (fun Unit [Maybe (con bytestring)])
-                                                                                          }
-                                                                                          (lam
-                                                                                            thunk
-                                                                                            Unit
-                                                                                            [
-                                                                                              {
-                                                                                                Just
-                                                                                                (con bytestring)
-                                                                                              }
-                                                                                              x
-                                                                                            ]
-                                                                                          )
-                                                                                        ]
+                                                                                          ]
+                                                                                          (fun Unit [Maybe (con bytestring)])
+                                                                                        }
                                                                                         (lam
                                                                                           thunk
                                                                                           Unit
-                                                                                          {
-                                                                                            Nothing
-                                                                                            (con bytestring)
-                                                                                          }
+                                                                                          [
+                                                                                            {
+                                                                                              Just
+                                                                                              (con bytestring)
+                                                                                            }
+                                                                                            x
+                                                                                          ]
                                                                                         )
                                                                                       ]
-                                                                                      Unit
+                                                                                      (lam
+                                                                                        thunk
+                                                                                        Unit
+                                                                                        {
+                                                                                          Nothing
+                                                                                          (con bytestring)
+                                                                                        }
+                                                                                      )
                                                                                     ]
-                                                                                  )
-                                                                                ]
-                                                                                ds
+                                                                                    Unit
+                                                                                  ]
+                                                                                )
                                                                               ]
+                                                                              ds
                                                                             ]
-                                                                            (fun Unit Bool)
-                                                                          }
-                                                                          (lam
-                                                                            ds
-                                                                            (con bytestring)
-                                                                            (lam
-                                                                              thunk
-                                                                              Unit
-                                                                              True
-                                                                            )
-                                                                          )
-                                                                        ]
+                                                                          ]
+                                                                          (fun Unit Bool)
+                                                                        }
                                                                         (lam
-                                                                          thunk
-                                                                          Unit
-                                                                          False
+                                                                          ds
+                                                                          (con bytestring)
+                                                                          (lam
+                                                                            thunk
+                                                                            Unit
+                                                                            True
+                                                                          )
                                                                         )
                                                                       ]
-                                                                      Unit
+                                                                      (lam
+                                                                        thunk
+                                                                        Unit
+                                                                        False
+                                                                      )
                                                                     ]
-                                                                  )
+                                                                    Unit
+                                                                  ]
                                                                 )
                                                               )
                                                             )
@@ -15004,10 +15286,26 @@
                                                                                 Bool_match
                                                                                 [
                                                                                   [
-                                                                                    equalsByteString
-                                                                                    c
+                                                                                    [
+                                                                                      {
+                                                                                        (builtin
+                                                                                          ifThenElse
+                                                                                        )
+                                                                                        Bool
+                                                                                      }
+                                                                                      [
+                                                                                        [
+                                                                                          (builtin
+                                                                                            eqByteString
+                                                                                          )
+                                                                                          c
+                                                                                        ]
+                                                                                        tn
+                                                                                      ]
+                                                                                    ]
+                                                                                    True
                                                                                   ]
-                                                                                  tn
+                                                                                  False
                                                                                 ]
                                                                               ]
                                                                               (fun Unit (con integer))
@@ -15100,10 +15398,26 @@
                                                                             Bool_match
                                                                             [
                                                                               [
-                                                                                equalsByteString
-                                                                                c
+                                                                                [
+                                                                                  {
+                                                                                    (builtin
+                                                                                      ifThenElse
+                                                                                    )
+                                                                                    Bool
+                                                                                  }
+                                                                                  [
+                                                                                    [
+                                                                                      (builtin
+                                                                                        eqByteString
+                                                                                      )
+                                                                                      c
+                                                                                    ]
+                                                                                    cur
+                                                                                  ]
+                                                                                ]
+                                                                                True
                                                                               ]
-                                                                              cur
+                                                                              False
                                                                             ]
                                                                           ]
                                                                           (fun Unit (con integer))
@@ -15322,10 +15636,26 @@
                                                                                                           Bool_match
                                                                                                           [
                                                                                                             [
-                                                                                                              equalsByteString
-                                                                                                              pk
+                                                                                                              [
+                                                                                                                {
+                                                                                                                  (builtin
+                                                                                                                    ifThenElse
+                                                                                                                  )
+                                                                                                                  Bool
+                                                                                                                }
+                                                                                                                [
+                                                                                                                  [
+                                                                                                                    (builtin
+                                                                                                                      eqByteString
+                                                                                                                    )
+                                                                                                                    pk
+                                                                                                                  ]
+                                                                                                                  pk
+                                                                                                                ]
+                                                                                                              ]
+                                                                                                              True
                                                                                                             ]
-                                                                                                            pk
+                                                                                                            False
                                                                                                           ]
                                                                                                         ]
                                                                                                         (fun Unit [List [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]])
@@ -15573,55 +15903,10 @@
                                                                           (con bytestring)
                                                                           [
                                                                             [
-                                                                              [
-                                                                                {
-                                                                                  [
-                                                                                    Bool_match
-                                                                                    [
-                                                                                      [
-                                                                                        txSignedBy
-                                                                                        ds
-                                                                                      ]
-                                                                                      pubKey
-                                                                                    ]
-                                                                                  ]
-                                                                                  (fun Unit Bool)
-                                                                                }
-                                                                                (lam
-                                                                                  thunk
-                                                                                  Unit
-                                                                                  True
-                                                                                )
-                                                                              ]
-                                                                              (lam
-                                                                                thunk
-                                                                                Unit
-                                                                                [
-                                                                                  [
-                                                                                    {
-                                                                                      [
-                                                                                        Unit_match
-                                                                                        [
-                                                                                          trace
-                                                                                          (con
-                                                                                            string
-                                                                                              "Missing signature"
-                                                                                          )
-                                                                                        ]
-                                                                                      ]
-                                                                                      (fun Unit Bool)
-                                                                                    }
-                                                                                    (lam
-                                                                                      thunk
-                                                                                      Unit
-                                                                                      False
-                                                                                    )
-                                                                                  ]
-                                                                                  Unit
-                                                                                ]
-                                                                              )
+                                                                              txSignedBy
+                                                                              ds
                                                                             ]
-                                                                            Unit
+                                                                            pubKey
                                                                           ]
                                                                         )
                                                                       ]
@@ -15631,107 +15916,49 @@
                                                                         (lam
                                                                           dv
                                                                           Data
-                                                                          (let
-                                                                            (nonrec
-                                                                            )
-                                                                            (termbind
-                                                                              (nonstrict
-                                                                              )
-                                                                              (vardecl
-                                                                                j
-                                                                                Bool
-                                                                              )
+                                                                          [
+                                                                            [
                                                                               [
-                                                                                [
-                                                                                  {
+                                                                                {
+                                                                                  [
+                                                                                    {
+                                                                                      Maybe_match
+                                                                                      Data
+                                                                                    }
                                                                                     [
-                                                                                      Unit_match
                                                                                       [
-                                                                                        trace
-                                                                                        (con
-                                                                                          string
-                                                                                            "MustHashDatum"
-                                                                                        )
+                                                                                        findDatum
+                                                                                        dvh
                                                                                       ]
+                                                                                      ds
                                                                                     ]
-                                                                                    (fun Unit Bool)
-                                                                                  }
+                                                                                  ]
+                                                                                  (fun Unit Bool)
+                                                                                }
+                                                                                (lam
+                                                                                  a
+                                                                                  Data
                                                                                   (lam
                                                                                     thunk
                                                                                     Unit
-                                                                                    False
-                                                                                  )
-                                                                                ]
-                                                                                Unit
-                                                                              ]
-                                                                            )
-                                                                            [
-                                                                              [
-                                                                                [
-                                                                                  {
                                                                                     [
-                                                                                      {
-                                                                                        Maybe_match
-                                                                                        Data
-                                                                                      }
                                                                                       [
-                                                                                        [
-                                                                                          findDatum
-                                                                                          dvh
-                                                                                        ]
-                                                                                        ds
+                                                                                        fEqData_c
+                                                                                        a
                                                                                       ]
+                                                                                      dv
                                                                                     ]
-                                                                                    (fun Unit Bool)
-                                                                                  }
-                                                                                  (lam
-                                                                                    a
-                                                                                    Data
-                                                                                    (lam
-                                                                                      thunk
-                                                                                      Unit
-                                                                                      [
-                                                                                        [
-                                                                                          [
-                                                                                            {
-                                                                                              [
-                                                                                                Bool_match
-                                                                                                [
-                                                                                                  [
-                                                                                                    fEqData_c
-                                                                                                    a
-                                                                                                  ]
-                                                                                                  dv
-                                                                                                ]
-                                                                                              ]
-                                                                                              (fun Unit Bool)
-                                                                                            }
-                                                                                            (lam
-                                                                                              thunk
-                                                                                              Unit
-                                                                                              True
-                                                                                            )
-                                                                                          ]
-                                                                                          (lam
-                                                                                            thunk
-                                                                                            Unit
-                                                                                            j
-                                                                                          )
-                                                                                        ]
-                                                                                        Unit
-                                                                                      ]
-                                                                                    )
                                                                                   )
-                                                                                ]
-                                                                                (lam
-                                                                                  thunk
-                                                                                  Unit
-                                                                                  j
                                                                                 )
                                                                               ]
-                                                                              Unit
+                                                                              (lam
+                                                                                thunk
+                                                                                Unit
+                                                                                False
+                                                                              )
                                                                             ]
-                                                                          )
+                                                                            Unit
+                                                                          ]
                                                                         )
                                                                       )
                                                                     ]
@@ -15780,89 +16007,44 @@
                                                                                               [
                                                                                                 [
                                                                                                   {
-                                                                                                    [
-                                                                                                      Bool_match
-                                                                                                      [
-                                                                                                        [
-                                                                                                          [
-                                                                                                            {
-                                                                                                              {
-                                                                                                                fFoldableNil_cfoldMap
-                                                                                                                [(lam a (type) a) Bool]
-                                                                                                              }
-                                                                                                              Data
-                                                                                                            }
-                                                                                                            [
-                                                                                                              {
-                                                                                                                fMonoidSum
-                                                                                                                Bool
-                                                                                                              }
-                                                                                                              fAdditiveMonoidBool
-                                                                                                            ]
-                                                                                                          ]
-                                                                                                          [
-                                                                                                            fEqData_c
-                                                                                                            dv
-                                                                                                          ]
-                                                                                                        ]
-                                                                                                        [
-                                                                                                          [
-                                                                                                            {
-                                                                                                              {
-                                                                                                                fFunctorNil_cfmap
-                                                                                                                [[Tuple2 (con bytestring)] Data]
-                                                                                                              }
-                                                                                                              Data
-                                                                                                            }
-                                                                                                            {
-                                                                                                              {
-                                                                                                                snd
-                                                                                                                (con bytestring)
-                                                                                                              }
-                                                                                                              Data
-                                                                                                            }
-                                                                                                          ]
-                                                                                                          ds
-                                                                                                        ]
-                                                                                                      ]
-                                                                                                    ]
-                                                                                                    (fun Unit Bool)
+                                                                                                    {
+                                                                                                      fFoldableNil_cfoldMap
+                                                                                                      [(lam a (type) a) Bool]
+                                                                                                    }
+                                                                                                    Data
                                                                                                   }
-                                                                                                  (lam
-                                                                                                    thunk
-                                                                                                    Unit
-                                                                                                    True
-                                                                                                  )
-                                                                                                ]
-                                                                                                (lam
-                                                                                                  thunk
-                                                                                                  Unit
                                                                                                   [
-                                                                                                    [
-                                                                                                      {
-                                                                                                        [
-                                                                                                          Unit_match
-                                                                                                          [
-                                                                                                            trace
-                                                                                                            (con
-                                                                                                              string
-                                                                                                                "Missing datum"
-                                                                                                            )
-                                                                                                          ]
-                                                                                                        ]
-                                                                                                        (fun Unit Bool)
-                                                                                                      }
-                                                                                                      (lam
-                                                                                                        thunk
-                                                                                                        Unit
-                                                                                                        False
-                                                                                                      )
-                                                                                                    ]
-                                                                                                    Unit
+                                                                                                    {
+                                                                                                      fMonoidSum
+                                                                                                      Bool
+                                                                                                    }
+                                                                                                    fAdditiveMonoidBool
                                                                                                   ]
-                                                                                                )
+                                                                                                ]
+                                                                                                [
+                                                                                                  fEqData_c
+                                                                                                  dv
+                                                                                                ]
                                                                                               ]
-                                                                                              Unit
+                                                                                              [
+                                                                                                [
+                                                                                                  {
+                                                                                                    {
+                                                                                                      fFunctorNil_cfmap
+                                                                                                      [[Tuple2 (con bytestring)] Data]
+                                                                                                    }
+                                                                                                    Data
+                                                                                                  }
+                                                                                                  {
+                                                                                                    {
+                                                                                                      snd
+                                                                                                      (con bytestring)
+                                                                                                    }
+                                                                                                    Data
+                                                                                                  }
+                                                                                                ]
+                                                                                                ds
+                                                                                              ]
                                                                                             ]
                                                                                           )
                                                                                         )
@@ -15893,56 +16075,59 @@
                                                                             [
                                                                               [
                                                                                 {
+                                                                                  (builtin
+                                                                                    ifThenElse
+                                                                                  )
+                                                                                  Bool
+                                                                                }
+                                                                                [
                                                                                   [
-                                                                                    Bool_match
+                                                                                    (builtin
+                                                                                      eqInteger
+                                                                                    )
                                                                                     [
                                                                                       [
-                                                                                        equalsInteger
                                                                                         [
+                                                                                          valueOf
                                                                                           [
-                                                                                            [
-                                                                                              valueOf
+                                                                                            {
                                                                                               [
-                                                                                                {
-                                                                                                  [
-                                                                                                    TxInfo_match
-                                                                                                    ds
-                                                                                                  ]
-                                                                                                  [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
-                                                                                                }
+                                                                                                TxInfo_match
+                                                                                                ds
+                                                                                              ]
+                                                                                              [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                                            }
+                                                                                            (lam
+                                                                                              ds
+                                                                                              [List TxInInfo]
+                                                                                              (lam
+                                                                                                ds
+                                                                                                [List TxOut]
                                                                                                 (lam
                                                                                                   ds
-                                                                                                  [List TxInInfo]
+                                                                                                  [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
                                                                                                   (lam
                                                                                                     ds
-                                                                                                    [List TxOut]
+                                                                                                    [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
                                                                                                     (lam
                                                                                                       ds
-                                                                                                      [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                                                      [List DCert]
                                                                                                       (lam
                                                                                                         ds
-                                                                                                        [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                                                        [List [[Tuple2 StakingCredential] (con integer)]]
                                                                                                         (lam
                                                                                                           ds
-                                                                                                          [List DCert]
+                                                                                                          [Interval (con integer)]
                                                                                                           (lam
                                                                                                             ds
-                                                                                                            [List [[Tuple2 StakingCredential] (con integer)]]
+                                                                                                            [List (con bytestring)]
                                                                                                             (lam
                                                                                                               ds
-                                                                                                              [Interval (con integer)]
+                                                                                                              [List [[Tuple2 (con bytestring)] Data]]
                                                                                                               (lam
                                                                                                                 ds
-                                                                                                                [List (con bytestring)]
-                                                                                                                (lam
-                                                                                                                  ds
-                                                                                                                  [List [[Tuple2 (con bytestring)] Data]]
-                                                                                                                  (lam
-                                                                                                                    ds
-                                                                                                                    (con bytestring)
-                                                                                                                    ds
-                                                                                                                  )
-                                                                                                                )
+                                                                                                                (con bytestring)
+                                                                                                                ds
                                                                                                               )
                                                                                                             )
                                                                                                           )
@@ -15951,53 +16136,21 @@
                                                                                                     )
                                                                                                   )
                                                                                                 )
-                                                                                              ]
-                                                                                            ]
-                                                                                            mps
+                                                                                              )
+                                                                                            )
                                                                                           ]
-                                                                                          tn
                                                                                         ]
+                                                                                        mps
                                                                                       ]
-                                                                                      v
+                                                                                      tn
                                                                                     ]
                                                                                   ]
-                                                                                  (fun Unit Bool)
-                                                                                }
-                                                                                (lam
-                                                                                  thunk
-                                                                                  Unit
-                                                                                  True
-                                                                                )
-                                                                              ]
-                                                                              (lam
-                                                                                thunk
-                                                                                Unit
-                                                                                [
-                                                                                  [
-                                                                                    {
-                                                                                      [
-                                                                                        Unit_match
-                                                                                        [
-                                                                                          trace
-                                                                                          (con
-                                                                                            string
-                                                                                              "Value minted not OK"
-                                                                                          )
-                                                                                        ]
-                                                                                      ]
-                                                                                      (fun Unit Bool)
-                                                                                    }
-                                                                                    (lam
-                                                                                      thunk
-                                                                                      Unit
-                                                                                      False
-                                                                                    )
-                                                                                  ]
-                                                                                  Unit
+                                                                                  v
                                                                                 ]
-                                                                              )
+                                                                              ]
+                                                                              True
                                                                             ]
-                                                                            Unit
+                                                                            False
                                                                           ]
                                                                         )
                                                                       )
@@ -16102,84 +16255,97 @@
                                                                                                 [
                                                                                                   [
                                                                                                     {
-                                                                                                      [
-                                                                                                        Bool_match
+                                                                                                      {
+                                                                                                        fFoldableNil_cfoldMap
+                                                                                                        [(lam a (type) a) Bool]
+                                                                                                      }
+                                                                                                      TxOut
+                                                                                                    }
+                                                                                                    [
+                                                                                                      {
+                                                                                                        fMonoidSum
+                                                                                                        Bool
+                                                                                                      }
+                                                                                                      fAdditiveMonoidBool
+                                                                                                    ]
+                                                                                                  ]
+                                                                                                  (lam
+                                                                                                    ds
+                                                                                                    TxOut
+                                                                                                    [
+                                                                                                      {
                                                                                                         [
-                                                                                                          [
+                                                                                                          TxOut_match
+                                                                                                          ds
+                                                                                                        ]
+                                                                                                        Bool
+                                                                                                      }
+                                                                                                      (lam
+                                                                                                        ds
+                                                                                                        Address
+                                                                                                        (lam
+                                                                                                          ds
+                                                                                                          [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                                                          (lam
+                                                                                                            ds
+                                                                                                            [Maybe (con bytestring)]
                                                                                                             [
-                                                                                                              {
-                                                                                                                {
-                                                                                                                  fFoldableNil_cfoldMap
-                                                                                                                  [(lam a (type) a) Bool]
-                                                                                                                }
-                                                                                                                TxOut
-                                                                                                              }
                                                                                                               [
-                                                                                                                {
-                                                                                                                  fMonoidSum
-                                                                                                                  Bool
-                                                                                                                }
-                                                                                                                fAdditiveMonoidBool
-                                                                                                              ]
-                                                                                                            ]
-                                                                                                            (lam
-                                                                                                              ds
-                                                                                                              TxOut
-                                                                                                              [
-                                                                                                                {
-                                                                                                                  [
-                                                                                                                    TxOut_match
-                                                                                                                    ds
-                                                                                                                  ]
-                                                                                                                  Bool
-                                                                                                                }
-                                                                                                                (lam
-                                                                                                                  ds
-                                                                                                                  Address
-                                                                                                                  (lam
-                                                                                                                    ds
-                                                                                                                    [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
-                                                                                                                    (lam
+                                                                                                                [
+                                                                                                                  {
+                                                                                                                    [
+                                                                                                                      {
+                                                                                                                        Maybe_match
+                                                                                                                        (con bytestring)
+                                                                                                                      }
                                                                                                                       ds
-                                                                                                                      [Maybe (con bytestring)]
+                                                                                                                    ]
+                                                                                                                    (fun Unit Bool)
+                                                                                                                  }
+                                                                                                                  (lam
+                                                                                                                    svh
+                                                                                                                    (con bytestring)
+                                                                                                                    (lam
+                                                                                                                      thunk
+                                                                                                                      Unit
                                                                                                                       [
                                                                                                                         [
                                                                                                                           [
                                                                                                                             {
                                                                                                                               [
-                                                                                                                                {
-                                                                                                                                  Maybe_match
-                                                                                                                                  (con bytestring)
-                                                                                                                                }
-                                                                                                                                ds
+                                                                                                                                Bool_match
+                                                                                                                                [
+                                                                                                                                  [
+                                                                                                                                    [
+                                                                                                                                      checkBinRel
+                                                                                                                                      equalsInteger
+                                                                                                                                    ]
+                                                                                                                                    ds
+                                                                                                                                  ]
+                                                                                                                                  vl
+                                                                                                                                ]
                                                                                                                               ]
                                                                                                                               (fun Unit Bool)
                                                                                                                             }
                                                                                                                             (lam
-                                                                                                                              svh
-                                                                                                                              (con bytestring)
-                                                                                                                              (lam
-                                                                                                                                thunk
-                                                                                                                                Unit
+                                                                                                                              thunk
+                                                                                                                              Unit
+                                                                                                                              [
                                                                                                                                 [
                                                                                                                                   [
-                                                                                                                                    [
-                                                                                                                                      {
-                                                                                                                                        [
-                                                                                                                                          Bool_match
-                                                                                                                                          [
-                                                                                                                                            [
-                                                                                                                                              [
-                                                                                                                                                checkBinRel
-                                                                                                                                                equalsInteger
-                                                                                                                                              ]
-                                                                                                                                              ds
-                                                                                                                                            ]
-                                                                                                                                            vl
-                                                                                                                                          ]
-                                                                                                                                        ]
-                                                                                                                                        (fun Unit Bool)
-                                                                                                                                      }
+                                                                                                                                    {
+                                                                                                                                      [
+                                                                                                                                        {
+                                                                                                                                          Maybe_match
+                                                                                                                                          (con bytestring)
+                                                                                                                                        }
+                                                                                                                                        hsh
+                                                                                                                                      ]
+                                                                                                                                      (fun Unit Bool)
+                                                                                                                                    }
+                                                                                                                                    (lam
+                                                                                                                                      a
+                                                                                                                                      (con bytestring)
                                                                                                                                       (lam
                                                                                                                                         thunk
                                                                                                                                         Unit
@@ -16188,57 +16354,43 @@
                                                                                                                                             [
                                                                                                                                               {
                                                                                                                                                 [
-                                                                                                                                                  {
-                                                                                                                                                    Maybe_match
-                                                                                                                                                    (con bytestring)
-                                                                                                                                                  }
-                                                                                                                                                  hsh
-                                                                                                                                                ]
-                                                                                                                                                (fun Unit Bool)
-                                                                                                                                              }
-                                                                                                                                              (lam
-                                                                                                                                                a
-                                                                                                                                                (con bytestring)
-                                                                                                                                                (lam
-                                                                                                                                                  thunk
-                                                                                                                                                  Unit
+                                                                                                                                                  Bool_match
                                                                                                                                                   [
                                                                                                                                                     [
                                                                                                                                                       [
                                                                                                                                                         {
-                                                                                                                                                          [
-                                                                                                                                                            Bool_match
-                                                                                                                                                            [
-                                                                                                                                                              [
-                                                                                                                                                                equalsByteString
-                                                                                                                                                                a
-                                                                                                                                                              ]
-                                                                                                                                                              svh
-                                                                                                                                                            ]
-                                                                                                                                                          ]
-                                                                                                                                                          (fun Unit Bool)
+                                                                                                                                                          (builtin
+                                                                                                                                                            ifThenElse
+                                                                                                                                                          )
+                                                                                                                                                          Bool
                                                                                                                                                         }
-                                                                                                                                                        (lam
-                                                                                                                                                          thunk
-                                                                                                                                                          Unit
+                                                                                                                                                        [
                                                                                                                                                           [
-                                                                                                                                                            [
-                                                                                                                                                              fEqAddress_c
-                                                                                                                                                              ds
-                                                                                                                                                            ]
-                                                                                                                                                            addr
+                                                                                                                                                            (builtin
+                                                                                                                                                              eqByteString
+                                                                                                                                                            )
+                                                                                                                                                            a
                                                                                                                                                           ]
-                                                                                                                                                        )
+                                                                                                                                                          svh
+                                                                                                                                                        ]
                                                                                                                                                       ]
-                                                                                                                                                      (lam
-                                                                                                                                                        thunk
-                                                                                                                                                        Unit
-                                                                                                                                                        False
-                                                                                                                                                      )
+                                                                                                                                                      True
                                                                                                                                                     ]
-                                                                                                                                                    Unit
+                                                                                                                                                    False
                                                                                                                                                   ]
-                                                                                                                                                )
+                                                                                                                                                ]
+                                                                                                                                                (fun Unit Bool)
+                                                                                                                                              }
+                                                                                                                                              (lam
+                                                                                                                                                thunk
+                                                                                                                                                Unit
+                                                                                                                                                [
+                                                                                                                                                  [
+                                                                                                                                                    fEqAddress_c
+                                                                                                                                                    ds
+                                                                                                                                                  ]
+                                                                                                                                                  addr
+                                                                                                                                                ]
                                                                                                                                               )
                                                                                                                                             ]
                                                                                                                                             (lam
@@ -16250,16 +16402,16 @@
                                                                                                                                           Unit
                                                                                                                                         ]
                                                                                                                                       )
-                                                                                                                                    ]
-                                                                                                                                    (lam
-                                                                                                                                      thunk
-                                                                                                                                      Unit
-                                                                                                                                      False
                                                                                                                                     )
                                                                                                                                   ]
-                                                                                                                                  Unit
+                                                                                                                                  (lam
+                                                                                                                                    thunk
+                                                                                                                                    Unit
+                                                                                                                                    False
+                                                                                                                                  )
                                                                                                                                 ]
-                                                                                                                              )
+                                                                                                                                Unit
+                                                                                                                              ]
                                                                                                                             )
                                                                                                                           ]
                                                                                                                           (lam
@@ -16272,50 +16424,22 @@
                                                                                                                       ]
                                                                                                                     )
                                                                                                                   )
+                                                                                                                ]
+                                                                                                                (lam
+                                                                                                                  thunk
+                                                                                                                  Unit
+                                                                                                                  False
                                                                                                                 )
                                                                                                               ]
-                                                                                                            )
-                                                                                                          ]
-                                                                                                          ds
-                                                                                                        ]
-                                                                                                      ]
-                                                                                                      (fun Unit Bool)
-                                                                                                    }
-                                                                                                    (lam
-                                                                                                      thunk
-                                                                                                      Unit
-                                                                                                      True
-                                                                                                    )
-                                                                                                  ]
-                                                                                                  (lam
-                                                                                                    thunk
-                                                                                                    Unit
-                                                                                                    [
-                                                                                                      [
-                                                                                                        {
-                                                                                                          [
-                                                                                                            Unit_match
-                                                                                                            [
-                                                                                                              trace
-                                                                                                              (con
-                                                                                                                string
-                                                                                                                  "MustPayToOtherScript"
-                                                                                                              )
+                                                                                                              Unit
                                                                                                             ]
-                                                                                                          ]
-                                                                                                          (fun Unit Bool)
-                                                                                                        }
-                                                                                                        (lam
-                                                                                                          thunk
-                                                                                                          Unit
-                                                                                                          False
+                                                                                                          )
                                                                                                         )
-                                                                                                      ]
-                                                                                                      Unit
+                                                                                                      )
                                                                                                     ]
                                                                                                   )
                                                                                                 ]
-                                                                                                Unit
+                                                                                                ds
                                                                                               ]
                                                                                             )
                                                                                           )
@@ -16342,63 +16466,18 @@
                                                                   [
                                                                     [
                                                                       [
-                                                                        {
-                                                                          [
-                                                                            Bool_match
-                                                                            [
-                                                                              [
-                                                                                [
-                                                                                  checkBinRel
-                                                                                  lessThanEqInteger
-                                                                                ]
-                                                                                vl
-                                                                              ]
-                                                                              [
-                                                                                [
-                                                                                  valuePaidTo
-                                                                                  ds
-                                                                                ]
-                                                                                pk
-                                                                              ]
-                                                                            ]
-                                                                          ]
-                                                                          (fun Unit Bool)
-                                                                        }
-                                                                        (lam
-                                                                          thunk
-                                                                          Unit
-                                                                          True
-                                                                        )
+                                                                        checkBinRel
+                                                                        lessThanEqInteger
                                                                       ]
-                                                                      (lam
-                                                                        thunk
-                                                                        Unit
-                                                                        [
-                                                                          [
-                                                                            {
-                                                                              [
-                                                                                Unit_match
-                                                                                [
-                                                                                  trace
-                                                                                  (con
-                                                                                    string
-                                                                                      "MustPayToPubKey"
-                                                                                  )
-                                                                                ]
-                                                                              ]
-                                                                              (fun Unit Bool)
-                                                                            }
-                                                                            (lam
-                                                                              thunk
-                                                                              Unit
-                                                                              False
-                                                                            )
-                                                                          ]
-                                                                          Unit
-                                                                        ]
-                                                                      )
+                                                                      vl
                                                                     ]
-                                                                    Unit
+                                                                    [
+                                                                      [
+                                                                        valuePaidTo
+                                                                        ds
+                                                                      ]
+                                                                      pk
+                                                                    ]
                                                                   ]
                                                                 )
                                                               )
@@ -16409,60 +16488,15 @@
                                                               [
                                                                 [
                                                                   [
-                                                                    {
-                                                                      [
-                                                                        Bool_match
-                                                                        [
-                                                                          [
-                                                                            [
-                                                                              checkBinRel
-                                                                              lessThanEqInteger
-                                                                            ]
-                                                                            vl
-                                                                          ]
-                                                                          [
-                                                                            valueProduced
-                                                                            ds
-                                                                          ]
-                                                                        ]
-                                                                      ]
-                                                                      (fun Unit Bool)
-                                                                    }
-                                                                    (lam
-                                                                      thunk
-                                                                      Unit
-                                                                      True
-                                                                    )
+                                                                    checkBinRel
+                                                                    lessThanEqInteger
                                                                   ]
-                                                                  (lam
-                                                                    thunk
-                                                                    Unit
-                                                                    [
-                                                                      [
-                                                                        {
-                                                                          [
-                                                                            Unit_match
-                                                                            [
-                                                                              trace
-                                                                              (con
-                                                                                string
-                                                                                  "Produced value not OK"
-                                                                              )
-                                                                            ]
-                                                                          ]
-                                                                          (fun Unit Bool)
-                                                                        }
-                                                                        (lam
-                                                                          thunk
-                                                                          Unit
-                                                                          False
-                                                                        )
-                                                                      ]
-                                                                      Unit
-                                                                    ]
-                                                                  )
+                                                                  vl
                                                                 ]
-                                                                Unit
+                                                                [
+                                                                  valueProduced
+                                                                  ds
+                                                                ]
                                                               ]
                                                             )
                                                           ]
@@ -16472,302 +16506,227 @@
                                                             [
                                                               [
                                                                 [
-                                                                  {
-                                                                    [
-                                                                      Bool_match
-                                                                      [
-                                                                        [
-                                                                          [
-                                                                            checkBinRel
-                                                                            lessThanEqInteger
-                                                                          ]
-                                                                          vl
-                                                                        ]
-                                                                        [
-                                                                          {
-                                                                            [
-                                                                              TxInfo_match
-                                                                              ds
-                                                                            ]
-                                                                            [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
-                                                                          }
+                                                                  checkBinRel
+                                                                  lessThanEqInteger
+                                                                ]
+                                                                vl
+                                                              ]
+                                                              [
+                                                                {
+                                                                  [
+                                                                    TxInfo_match
+                                                                    ds
+                                                                  ]
+                                                                  [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                }
+                                                                (lam
+                                                                  ds
+                                                                  [List TxInInfo]
+                                                                  (lam
+                                                                    ds
+                                                                    [List TxOut]
+                                                                    (lam
+                                                                      ds
+                                                                      [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                      (lam
+                                                                        ds
+                                                                        [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                        (lam
+                                                                          ds
+                                                                          [List DCert]
                                                                           (lam
                                                                             ds
-                                                                            [List TxInInfo]
+                                                                            [List [[Tuple2 StakingCredential] (con integer)]]
                                                                             (lam
                                                                               ds
-                                                                              [List TxOut]
+                                                                              [Interval (con integer)]
                                                                               (lam
                                                                                 ds
-                                                                                [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                                [List (con bytestring)]
                                                                                 (lam
                                                                                   ds
-                                                                                  [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                                  [List [[Tuple2 (con bytestring)] Data]]
                                                                                   (lam
                                                                                     ds
-                                                                                    [List DCert]
-                                                                                    (lam
-                                                                                      ds
-                                                                                      [List [[Tuple2 StakingCredential] (con integer)]]
-                                                                                      (lam
-                                                                                        ds
-                                                                                        [Interval (con integer)]
+                                                                                    (con bytestring)
+                                                                                    [
+                                                                                      [
+                                                                                        [
+                                                                                          {
+                                                                                            {
+                                                                                              fFoldableNil_cfoldMap
+                                                                                              [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                                            }
+                                                                                            TxInInfo
+                                                                                          }
+                                                                                          fMonoidValue
+                                                                                        ]
                                                                                         (lam
-                                                                                          ds
-                                                                                          [List (con bytestring)]
-                                                                                          (lam
-                                                                                            ds
-                                                                                            [List [[Tuple2 (con bytestring)] Data]]
+                                                                                          x
+                                                                                          TxInInfo
+                                                                                          [
+                                                                                            {
+                                                                                              [
+                                                                                                TxInInfo_match
+                                                                                                x
+                                                                                              ]
+                                                                                              [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                                            }
                                                                                             (lam
                                                                                               ds
-                                                                                              (con bytestring)
-                                                                                              [
+                                                                                              TxOutRef
+                                                                                              (lam
+                                                                                                ds
+                                                                                                TxOut
                                                                                                 [
-                                                                                                  [
-                                                                                                    {
-                                                                                                      {
-                                                                                                        fFoldableNil_cfoldMap
-                                                                                                        [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
-                                                                                                      }
-                                                                                                      TxInInfo
-                                                                                                    }
-                                                                                                    fMonoidValue
-                                                                                                  ]
-                                                                                                  (lam
-                                                                                                    x
-                                                                                                    TxInInfo
+                                                                                                  {
                                                                                                     [
-                                                                                                      {
-                                                                                                        [
-                                                                                                          TxInInfo_match
-                                                                                                          x
-                                                                                                        ]
-                                                                                                        [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
-                                                                                                      }
+                                                                                                      TxOut_match
+                                                                                                      ds
+                                                                                                    ]
+                                                                                                    [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                                                  }
+                                                                                                  (lam
+                                                                                                    ds
+                                                                                                    Address
+                                                                                                    (lam
+                                                                                                      ds
+                                                                                                      [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
                                                                                                       (lam
                                                                                                         ds
-                                                                                                        TxOutRef
-                                                                                                        (lam
-                                                                                                          ds
-                                                                                                          TxOut
-                                                                                                          [
-                                                                                                            {
-                                                                                                              [
-                                                                                                                TxOut_match
-                                                                                                                ds
-                                                                                                              ]
-                                                                                                              [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
-                                                                                                            }
-                                                                                                            (lam
-                                                                                                              ds
-                                                                                                              Address
-                                                                                                              (lam
-                                                                                                                ds
-                                                                                                                [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
-                                                                                                                (lam
-                                                                                                                  ds
-                                                                                                                  [Maybe (con bytestring)]
-                                                                                                                  ds
-                                                                                                                )
-                                                                                                              )
-                                                                                                            )
-                                                                                                          ]
-                                                                                                        )
+                                                                                                        [Maybe (con bytestring)]
+                                                                                                        ds
                                                                                                       )
-                                                                                                    ]
+                                                                                                    )
                                                                                                   )
                                                                                                 ]
-                                                                                                ds
-                                                                                              ]
+                                                                                              )
                                                                                             )
-                                                                                          )
+                                                                                          ]
                                                                                         )
-                                                                                      )
-                                                                                    )
+                                                                                      ]
+                                                                                      ds
+                                                                                    ]
                                                                                   )
                                                                                 )
                                                                               )
                                                                             )
                                                                           )
-                                                                        ]
-                                                                      ]
-                                                                    ]
-                                                                    (fun Unit Bool)
-                                                                  }
-                                                                  (lam
-                                                                    thunk
-                                                                    Unit
-                                                                    True
-                                                                  )
-                                                                ]
-                                                                (lam
-                                                                  thunk
-                                                                  Unit
-                                                                  [
-                                                                    [
-                                                                      {
-                                                                        [
-                                                                          Unit_match
-                                                                          [
-                                                                            trace
-                                                                            (con
-                                                                              string
-                                                                                "Spent value not OK"
-                                                                            )
-                                                                          ]
-                                                                        ]
-                                                                        (fun Unit Bool)
-                                                                      }
-                                                                      (lam
-                                                                        thunk
-                                                                        Unit
-                                                                        False
+                                                                        )
                                                                       )
-                                                                    ]
-                                                                    Unit
-                                                                  ]
+                                                                    )
+                                                                  )
                                                                 )
                                                               ]
-                                                              Unit
                                                             ]
                                                           )
                                                         ]
                                                         (lam
                                                           txOutRef
                                                           TxOutRef
-                                                          (let
-                                                            (nonrec)
-                                                            (termbind
-                                                              (nonstrict)
-                                                              (vardecl j Bool)
+                                                          [
+                                                            [
                                                               [
-                                                                [
-                                                                  {
+                                                                {
+                                                                  [
+                                                                    {
+                                                                      Maybe_match
+                                                                      TxInInfo
+                                                                    }
                                                                     [
-                                                                      Unit_match
                                                                       [
-                                                                        trace
-                                                                        (con
-                                                                          string
-                                                                            "Public key output not spent"
-                                                                        )
+                                                                        findTxInByTxOutRef
+                                                                        txOutRef
                                                                       ]
+                                                                      ds
                                                                     ]
-                                                                    (fun Unit Bool)
-                                                                  }
+                                                                  ]
+                                                                  (fun Unit Bool)
+                                                                }
+                                                                (lam
+                                                                  a
+                                                                  TxInInfo
                                                                   (lam
                                                                     thunk
                                                                     Unit
-                                                                    False
-                                                                  )
-                                                                ]
-                                                                Unit
-                                                              ]
-                                                            )
-                                                            [
-                                                              [
-                                                                [
-                                                                  {
                                                                     [
                                                                       {
-                                                                        Maybe_match
-                                                                        TxInInfo
-                                                                      }
-                                                                      [
                                                                         [
-                                                                          findTxInByTxOutRef
-                                                                          txOutRef
+                                                                          TxInInfo_match
+                                                                          a
                                                                         ]
+                                                                        Bool
+                                                                      }
+                                                                      (lam
                                                                         ds
-                                                                      ]
-                                                                    ]
-                                                                    (fun Unit Bool)
-                                                                  }
-                                                                  (lam
-                                                                    a
-                                                                    TxInInfo
-                                                                    (lam
-                                                                      thunk
-                                                                      Unit
-                                                                      [
-                                                                        {
-                                                                          [
-                                                                            TxInInfo_match
-                                                                            a
-                                                                          ]
-                                                                          Bool
-                                                                        }
+                                                                        TxOutRef
                                                                         (lam
                                                                           ds
-                                                                          TxOutRef
-                                                                          (lam
-                                                                            ds
-                                                                            TxOut
-                                                                            [
-                                                                              {
-                                                                                [
-                                                                                  TxOut_match
-                                                                                  ds
-                                                                                ]
-                                                                                Bool
-                                                                              }
+                                                                          TxOut
+                                                                          [
+                                                                            {
+                                                                              [
+                                                                                TxOut_match
+                                                                                ds
+                                                                              ]
+                                                                              Bool
+                                                                            }
+                                                                            (lam
+                                                                              ds
+                                                                              Address
                                                                               (lam
                                                                                 ds
-                                                                                Address
+                                                                                [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
                                                                                 (lam
                                                                                   ds
-                                                                                  [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
-                                                                                  (lam
-                                                                                    ds
-                                                                                    [Maybe (con bytestring)]
+                                                                                  [Maybe (con bytestring)]
+                                                                                  [
                                                                                     [
                                                                                       [
-                                                                                        [
-                                                                                          {
-                                                                                            [
-                                                                                              {
-                                                                                                Maybe_match
-                                                                                                (con bytestring)
-                                                                                              }
-                                                                                              ds
-                                                                                            ]
-                                                                                            (fun Unit Bool)
-                                                                                          }
-                                                                                          (lam
+                                                                                        {
+                                                                                          [
+                                                                                            {
+                                                                                              Maybe_match
+                                                                                              (con bytestring)
+                                                                                            }
                                                                                             ds
-                                                                                            (con bytestring)
-                                                                                            (lam
-                                                                                              thunk
-                                                                                              Unit
-                                                                                              j
-                                                                                            )
-                                                                                          )
-                                                                                        ]
+                                                                                          ]
+                                                                                          (fun Unit Bool)
+                                                                                        }
                                                                                         (lam
-                                                                                          thunk
-                                                                                          Unit
-                                                                                          True
+                                                                                          ds
+                                                                                          (con bytestring)
+                                                                                          (lam
+                                                                                            thunk
+                                                                                            Unit
+                                                                                            False
+                                                                                          )
                                                                                         )
                                                                                       ]
-                                                                                      Unit
+                                                                                      (lam
+                                                                                        thunk
+                                                                                        Unit
+                                                                                        True
+                                                                                      )
                                                                                     ]
-                                                                                  )
+                                                                                    Unit
+                                                                                  ]
                                                                                 )
                                                                               )
-                                                                            ]
-                                                                          )
+                                                                            )
+                                                                          ]
                                                                         )
-                                                                      ]
-                                                                    )
+                                                                      )
+                                                                    ]
                                                                   )
-                                                                ]
-                                                                (lam
-                                                                  thunk Unit j
                                                                 )
                                                               ]
-                                                              Unit
+                                                              (lam
+                                                                thunk Unit False
+                                                              )
                                                             ]
-                                                          )
+                                                            Unit
+                                                          ]
                                                         )
                                                       ]
                                                       (lam
@@ -16806,31 +16765,7 @@
                                                                 )
                                                               ]
                                                               (lam
-                                                                thunk
-                                                                Unit
-                                                                [
-                                                                  [
-                                                                    {
-                                                                      [
-                                                                        Unit_match
-                                                                        [
-                                                                          trace
-                                                                          (con
-                                                                            string
-                                                                              "Script output not spent"
-                                                                          )
-                                                                        ]
-                                                                      ]
-                                                                      (fun Unit Bool)
-                                                                    }
-                                                                    (lam
-                                                                      thunk
-                                                                      Unit
-                                                                      False
-                                                                    )
-                                                                  ]
-                                                                  Unit
-                                                                ]
+                                                                thunk Unit False
                                                               )
                                                             ]
                                                             Unit
@@ -16845,105 +16780,60 @@
                                                         [
                                                           [
                                                             {
-                                                              [
-                                                                Bool_match
-                                                                [
-                                                                  [
-                                                                    [
-                                                                      {
-                                                                        contains
-                                                                        (con integer)
-                                                                      }
-                                                                      fOrdPOSIXTime
-                                                                    ]
-                                                                    interval
-                                                                  ]
-                                                                  [
-                                                                    {
-                                                                      [
-                                                                        TxInfo_match
-                                                                        ds
-                                                                      ]
-                                                                      [Interval (con integer)]
-                                                                    }
+                                                              contains
+                                                              (con integer)
+                                                            }
+                                                            fOrdPOSIXTime
+                                                          ]
+                                                          interval
+                                                        ]
+                                                        [
+                                                          {
+                                                            [ TxInfo_match ds ]
+                                                            [Interval (con integer)]
+                                                          }
+                                                          (lam
+                                                            ds
+                                                            [List TxInInfo]
+                                                            (lam
+                                                              ds
+                                                              [List TxOut]
+                                                              (lam
+                                                                ds
+                                                                [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                (lam
+                                                                  ds
+                                                                  [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                  (lam
+                                                                    ds
+                                                                    [List DCert]
                                                                     (lam
                                                                       ds
-                                                                      [List TxInInfo]
+                                                                      [List [[Tuple2 StakingCredential] (con integer)]]
                                                                       (lam
                                                                         ds
-                                                                        [List TxOut]
+                                                                        [Interval (con integer)]
                                                                         (lam
                                                                           ds
-                                                                          [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                          [List (con bytestring)]
                                                                           (lam
                                                                             ds
-                                                                            [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
+                                                                            [List [[Tuple2 (con bytestring)] Data]]
                                                                             (lam
                                                                               ds
-                                                                              [List DCert]
-                                                                              (lam
-                                                                                ds
-                                                                                [List [[Tuple2 StakingCredential] (con integer)]]
-                                                                                (lam
-                                                                                  ds
-                                                                                  [Interval (con integer)]
-                                                                                  (lam
-                                                                                    ds
-                                                                                    [List (con bytestring)]
-                                                                                    (lam
-                                                                                      ds
-                                                                                      [List [[Tuple2 (con bytestring)] Data]]
-                                                                                      (lam
-                                                                                        ds
-                                                                                        (con bytestring)
-                                                                                        ds
-                                                                                      )
-                                                                                    )
-                                                                                  )
-                                                                                )
-                                                                              )
+                                                                              (con bytestring)
+                                                                              ds
                                                                             )
                                                                           )
                                                                         )
                                                                       )
                                                                     )
-                                                                  ]
-                                                                ]
-                                                              ]
-                                                              (fun Unit Bool)
-                                                            }
-                                                            (lam thunk Unit True
-                                                            )
-                                                          ]
-                                                          (lam
-                                                            thunk
-                                                            Unit
-                                                            [
-                                                              [
-                                                                {
-                                                                  [
-                                                                    Unit_match
-                                                                    [
-                                                                      trace
-                                                                      (con
-                                                                        string
-                                                                          "Wrong validation interval"
-                                                                      )
-                                                                    ]
-                                                                  ]
-                                                                  (fun Unit Bool)
-                                                                }
-                                                                (lam
-                                                                  thunk
-                                                                  Unit
-                                                                  False
+                                                                  )
                                                                 )
-                                                              ]
-                                                              Unit
-                                                            ]
+                                                              )
+                                                            )
                                                           )
                                                         ]
-                                                        Unit
                                                       ]
                                                     )
                                                   ]
@@ -16997,185 +16887,132 @@
                                                         (lam
                                                           ds
                                                           [List [OutputConstraint o]]
-                                                          (let
-                                                            (nonrec)
-                                                            (termbind
-                                                              (nonstrict)
-                                                              (vardecl j Bool)
-                                                              [
-                                                                [
-                                                                  {
-                                                                    [
-                                                                      Unit_match
-                                                                      [
-                                                                        trace
-                                                                        (con
-                                                                          string
-                                                                            "checkScriptContext failed"
-                                                                        )
-                                                                      ]
-                                                                    ]
-                                                                    (fun Unit Bool)
-                                                                  }
-                                                                  (lam
-                                                                    thunk
-                                                                    Unit
-                                                                    False
-                                                                  )
-                                                                ]
-                                                                Unit
-                                                              ]
-                                                            )
+                                                          [
                                                             [
                                                               [
-                                                                [
-                                                                  {
-                                                                    [
-                                                                      Bool_match
-                                                                      [
-                                                                        [
-                                                                          [
-                                                                            {
-                                                                              {
-                                                                                fFoldableNil_cfoldMap
-                                                                                [(lam a (type) a) Bool]
-                                                                              }
-                                                                              TxConstraint
-                                                                            }
-                                                                            [
-                                                                              {
-                                                                                fMonoidProduct
-                                                                                Bool
-                                                                              }
-                                                                              fMultiplicativeMonoidBool
-                                                                            ]
-                                                                          ]
-                                                                          [
-                                                                            checkTxConstraint
-                                                                            ptx
-                                                                          ]
-                                                                        ]
-                                                                        ds
-                                                                      ]
-                                                                    ]
-                                                                    (fun Unit Bool)
-                                                                  }
-                                                                  (lam
-                                                                    thunk
-                                                                    Unit
+                                                                {
+                                                                  [
+                                                                    Bool_match
                                                                     [
                                                                       [
                                                                         [
                                                                           {
-                                                                            [
-                                                                              Bool_match
-                                                                              [
-                                                                                [
-                                                                                  [
-                                                                                    {
-                                                                                      {
-                                                                                        fFoldableNil_cfoldMap
-                                                                                        [(lam a (type) a) Bool]
-                                                                                      }
-                                                                                      [InputConstraint i]
-                                                                                    }
-                                                                                    [
-                                                                                      {
-                                                                                        fMonoidProduct
-                                                                                        Bool
-                                                                                      }
-                                                                                      fMultiplicativeMonoidBool
-                                                                                    ]
-                                                                                  ]
-                                                                                  [
-                                                                                    {
-                                                                                      checkOwnInputConstraint
-                                                                                      i
-                                                                                    }
-                                                                                    ptx
-                                                                                  ]
-                                                                                ]
-                                                                                ds
-                                                                              ]
-                                                                            ]
-                                                                            (fun Unit Bool)
+                                                                            {
+                                                                              fFoldableNil_cfoldMap
+                                                                              [(lam a (type) a) Bool]
+                                                                            }
+                                                                            TxConstraint
                                                                           }
-                                                                          (lam
-                                                                            thunk
-                                                                            Unit
+                                                                          [
+                                                                            {
+                                                                              fMonoidProduct
+                                                                              Bool
+                                                                            }
+                                                                            fMultiplicativeMonoidBool
+                                                                          ]
+                                                                        ]
+                                                                        [
+                                                                          checkTxConstraint
+                                                                          ptx
+                                                                        ]
+                                                                      ]
+                                                                      ds
+                                                                    ]
+                                                                  ]
+                                                                  (fun Unit Bool)
+                                                                }
+                                                                (lam
+                                                                  thunk
+                                                                  Unit
+                                                                  [
+                                                                    [
+                                                                      [
+                                                                        {
+                                                                          [
+                                                                            Bool_match
                                                                             [
                                                                               [
                                                                                 [
                                                                                   {
-                                                                                    [
-                                                                                      Bool_match
-                                                                                      [
-                                                                                        [
-                                                                                          [
-                                                                                            {
-                                                                                              {
-                                                                                                fFoldableNil_cfoldMap
-                                                                                                [(lam a (type) a) Bool]
-                                                                                              }
-                                                                                              [OutputConstraint o]
-                                                                                            }
-                                                                                            [
-                                                                                              {
-                                                                                                fMonoidProduct
-                                                                                                Bool
-                                                                                              }
-                                                                                              fMultiplicativeMonoidBool
-                                                                                            ]
-                                                                                          ]
-                                                                                          [
-                                                                                            [
-                                                                                              {
-                                                                                                checkOwnOutputConstraint
-                                                                                                o
-                                                                                              }
-                                                                                              dIsData
-                                                                                            ]
-                                                                                            ptx
-                                                                                          ]
-                                                                                        ]
-                                                                                        ds
-                                                                                      ]
-                                                                                    ]
-                                                                                    (fun Unit Bool)
+                                                                                    {
+                                                                                      fFoldableNil_cfoldMap
+                                                                                      [(lam a (type) a) Bool]
+                                                                                    }
+                                                                                    [InputConstraint i]
                                                                                   }
-                                                                                  (lam
-                                                                                    thunk
-                                                                                    Unit
-                                                                                    True
-                                                                                  )
+                                                                                  [
+                                                                                    {
+                                                                                      fMonoidProduct
+                                                                                      Bool
+                                                                                    }
+                                                                                    fMultiplicativeMonoidBool
+                                                                                  ]
                                                                                 ]
-                                                                                (lam
-                                                                                  thunk
-                                                                                  Unit
-                                                                                  j
-                                                                                )
+                                                                                [
+                                                                                  {
+                                                                                    checkOwnInputConstraint
+                                                                                    i
+                                                                                  }
+                                                                                  ptx
+                                                                                ]
                                                                               ]
-                                                                              Unit
+                                                                              ds
                                                                             ]
-                                                                          )
-                                                                        ]
+                                                                          ]
+                                                                          (fun Unit Bool)
+                                                                        }
                                                                         (lam
                                                                           thunk
                                                                           Unit
-                                                                          j
+                                                                          [
+                                                                            [
+                                                                              [
+                                                                                {
+                                                                                  {
+                                                                                    fFoldableNil_cfoldMap
+                                                                                    [(lam a (type) a) Bool]
+                                                                                  }
+                                                                                  [OutputConstraint o]
+                                                                                }
+                                                                                [
+                                                                                  {
+                                                                                    fMonoidProduct
+                                                                                    Bool
+                                                                                  }
+                                                                                  fMultiplicativeMonoidBool
+                                                                                ]
+                                                                              ]
+                                                                              [
+                                                                                [
+                                                                                  {
+                                                                                    checkOwnOutputConstraint
+                                                                                    o
+                                                                                  }
+                                                                                  dIsData
+                                                                                ]
+                                                                                ptx
+                                                                              ]
+                                                                            ]
+                                                                            ds
+                                                                          ]
                                                                         )
                                                                       ]
-                                                                      Unit
+                                                                      (lam
+                                                                        thunk
+                                                                        Unit
+                                                                        False
+                                                                      )
                                                                     ]
-                                                                  )
-                                                                ]
-                                                                (lam
-                                                                  thunk Unit j
+                                                                    Unit
+                                                                  ]
                                                                 )
                                                               ]
-                                                              Unit
+                                                              (lam
+                                                                thunk Unit False
+                                                              )
                                                             ]
-                                                          )
+                                                            Unit
+                                                          ]
                                                         )
                                                       )
                                                     )
@@ -17320,13 +17157,29 @@
                                                                                                 Bool_match
                                                                                                 [
                                                                                                   [
-                                                                                                    equalsInteger
-                                                                                                    (con
-                                                                                                      integer
-                                                                                                        0
-                                                                                                    )
+                                                                                                    [
+                                                                                                      {
+                                                                                                        (builtin
+                                                                                                          ifThenElse
+                                                                                                        )
+                                                                                                        Bool
+                                                                                                      }
+                                                                                                      [
+                                                                                                        [
+                                                                                                          (builtin
+                                                                                                            eqInteger
+                                                                                                          )
+                                                                                                          (con
+                                                                                                            integer
+                                                                                                              0
+                                                                                                          )
+                                                                                                        ]
+                                                                                                        x
+                                                                                                      ]
+                                                                                                    ]
+                                                                                                    True
                                                                                                   ]
-                                                                                                  x
+                                                                                                  False
                                                                                                 ]
                                                                                               ]
                                                                                               (fun Unit Bool)
@@ -17525,7 +17378,10 @@
                                                                                               error
                                                                                               [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] [[(lam k (type) (lam v (type) [List [[Tuple2 k] v]])) (con bytestring)] (con integer)]]
                                                                                             }
-                                                                                            Unit
+                                                                                            (con
+                                                                                              unit
+                                                                                                ()
+                                                                                            )
                                                                                           ]
                                                                                         )
                                                                                       ]
@@ -17617,91 +17473,24 @@
                                                                                                             [
                                                                                                               [
                                                                                                                 {
-                                                                                                                  [
-                                                                                                                    Bool_match
-                                                                                                                    [
-                                                                                                                      [
-                                                                                                                        [
-                                                                                                                          {
-                                                                                                                            {
-                                                                                                                              checkScriptContext
-                                                                                                                              Void
-                                                                                                                            }
-                                                                                                                            Void
-                                                                                                                          }
-                                                                                                                          fIsDataVoid
-                                                                                                                        ]
-                                                                                                                        newConstraints
-                                                                                                                      ]
-                                                                                                                      w
-                                                                                                                    ]
-                                                                                                                  ]
-                                                                                                                  (fun Unit Bool)
+                                                                                                                  {
+                                                                                                                    checkScriptContext
+                                                                                                                    Void
+                                                                                                                  }
+                                                                                                                  Void
                                                                                                                 }
-                                                                                                                (lam
-                                                                                                                  thunk
-                                                                                                                  Unit
-                                                                                                                  True
-                                                                                                                )
+                                                                                                                fIsDataVoid
                                                                                                               ]
-                                                                                                              (lam
-                                                                                                                thunk
-                                                                                                                Unit
-                                                                                                                [
-                                                                                                                  [
-                                                                                                                    {
-                                                                                                                      [
-                                                                                                                        Unit_match
-                                                                                                                        [
-                                                                                                                          trace
-                                                                                                                          (con
-                                                                                                                            string
-                                                                                                                              "State transition invalid - constraints not satisfied by ScriptContext"
-                                                                                                                          )
-                                                                                                                        ]
-                                                                                                                      ]
-                                                                                                                      (fun Unit Bool)
-                                                                                                                    }
-                                                                                                                    (lam
-                                                                                                                      thunk
-                                                                                                                      Unit
-                                                                                                                      False
-                                                                                                                    )
-                                                                                                                  ]
-                                                                                                                  Unit
-                                                                                                                ]
-                                                                                                              )
+                                                                                                              newConstraints
                                                                                                             ]
-                                                                                                            Unit
+                                                                                                            w
                                                                                                           ]
                                                                                                         )
                                                                                                       ]
                                                                                                       (lam
                                                                                                         thunk
                                                                                                         Unit
-                                                                                                        [
-                                                                                                          [
-                                                                                                            {
-                                                                                                              [
-                                                                                                                Unit_match
-                                                                                                                [
-                                                                                                                  trace
-                                                                                                                  (con
-                                                                                                                    string
-                                                                                                                      "Non-zero value allocated in final state"
-                                                                                                                  )
-                                                                                                                ]
-                                                                                                              ]
-                                                                                                              (fun Unit Bool)
-                                                                                                            }
-                                                                                                            (lam
-                                                                                                              thunk
-                                                                                                              Unit
-                                                                                                              False
-                                                                                                            )
-                                                                                                          ]
-                                                                                                          Unit
-                                                                                                        ]
+                                                                                                        False
                                                                                                       )
                                                                                                     ]
                                                                                                     Unit
@@ -17715,157 +17504,110 @@
                                                                                                   [
                                                                                                     [
                                                                                                       {
+                                                                                                        {
+                                                                                                          checkScriptContext
+                                                                                                          Void
+                                                                                                        }
+                                                                                                        s
+                                                                                                      }
+                                                                                                      w
+                                                                                                    ]
+                                                                                                    [
+                                                                                                      {
                                                                                                         [
-                                                                                                          Bool_match
-                                                                                                          [
+                                                                                                          {
+                                                                                                            {
+                                                                                                              TxConstraints_match
+                                                                                                              Void
+                                                                                                            }
+                                                                                                            Void
+                                                                                                          }
+                                                                                                          newConstraints
+                                                                                                        ]
+                                                                                                        [[TxConstraints Void] s]
+                                                                                                      }
+                                                                                                      (lam
+                                                                                                        ds
+                                                                                                        [List TxConstraint]
+                                                                                                        (lam
+                                                                                                          ds
+                                                                                                          [List [InputConstraint Void]]
+                                                                                                          (lam
+                                                                                                            ds
+                                                                                                            [List [OutputConstraint Void]]
                                                                                                             [
                                                                                                               [
-                                                                                                                {
+                                                                                                                [
                                                                                                                   {
-                                                                                                                    checkScriptContext
-                                                                                                                    Void
+                                                                                                                    {
+                                                                                                                      TxConstraints
+                                                                                                                      Void
+                                                                                                                    }
+                                                                                                                    s
                                                                                                                   }
-                                                                                                                  s
-                                                                                                                }
-                                                                                                                w
+                                                                                                                  ds
+                                                                                                                ]
+                                                                                                                ds
                                                                                                               ]
                                                                                                               [
                                                                                                                 {
-                                                                                                                  [
-                                                                                                                    {
-                                                                                                                      {
-                                                                                                                        TxConstraints_match
-                                                                                                                        Void
-                                                                                                                      }
-                                                                                                                      Void
-                                                                                                                    }
-                                                                                                                    newConstraints
-                                                                                                                  ]
-                                                                                                                  [[TxConstraints Void] s]
+                                                                                                                  build
+                                                                                                                  [OutputConstraint s]
                                                                                                                 }
-                                                                                                                (lam
-                                                                                                                  ds
-                                                                                                                  [List TxConstraint]
+                                                                                                                (abs
+                                                                                                                  a
+                                                                                                                  (type)
                                                                                                                   (lam
-                                                                                                                    ds
-                                                                                                                    [List [InputConstraint Void]]
+                                                                                                                    c
+                                                                                                                    (fun [OutputConstraint s] (fun a a))
                                                                                                                     (lam
-                                                                                                                      ds
-                                                                                                                      [List [OutputConstraint Void]]
+                                                                                                                      n
+                                                                                                                      a
                                                                                                                       [
                                                                                                                         [
+                                                                                                                          c
                                                                                                                           [
-                                                                                                                            {
+                                                                                                                            [
                                                                                                                               {
-                                                                                                                                TxConstraints
-                                                                                                                                Void
+                                                                                                                                OutputConstraint
+                                                                                                                                s
                                                                                                                               }
-                                                                                                                              s
-                                                                                                                            }
-                                                                                                                            ds
-                                                                                                                          ]
-                                                                                                                          ds
-                                                                                                                        ]
-                                                                                                                        [
-                                                                                                                          {
-                                                                                                                            build
-                                                                                                                            [OutputConstraint s]
-                                                                                                                          }
-                                                                                                                          (abs
-                                                                                                                            a
-                                                                                                                            (type)
-                                                                                                                            (lam
-                                                                                                                              c
-                                                                                                                              (fun [OutputConstraint s] (fun a a))
-                                                                                                                              (lam
-                                                                                                                                n
-                                                                                                                                a
+                                                                                                                              ds
+                                                                                                                            ]
+                                                                                                                            [
+                                                                                                                              [
                                                                                                                                 [
-                                                                                                                                  [
-                                                                                                                                    c
-                                                                                                                                    [
-                                                                                                                                      [
-                                                                                                                                        {
-                                                                                                                                          OutputConstraint
-                                                                                                                                          s
-                                                                                                                                        }
-                                                                                                                                        ds
-                                                                                                                                      ]
-                                                                                                                                      [
-                                                                                                                                        [
-                                                                                                                                          [
-                                                                                                                                            unionWith
-                                                                                                                                            (builtin
-                                                                                                                                              addInteger
-                                                                                                                                            )
-                                                                                                                                          ]
-                                                                                                                                          ds
-                                                                                                                                        ]
-                                                                                                                                        [
-                                                                                                                                          {
-                                                                                                                                            {
-                                                                                                                                              wthreadTokenValue
-                                                                                                                                              s
-                                                                                                                                            }
-                                                                                                                                            i
-                                                                                                                                          }
-                                                                                                                                          ww
-                                                                                                                                        ]
-                                                                                                                                      ]
-                                                                                                                                    ]
-                                                                                                                                  ]
-                                                                                                                                  n
+                                                                                                                                  unionWith
+                                                                                                                                  addInteger
                                                                                                                                 ]
-                                                                                                                              )
-                                                                                                                            )
-                                                                                                                          )
+                                                                                                                                ds
+                                                                                                                              ]
+                                                                                                                              [
+                                                                                                                                {
+                                                                                                                                  {
+                                                                                                                                    wthreadTokenValue
+                                                                                                                                    s
+                                                                                                                                  }
+                                                                                                                                  i
+                                                                                                                                }
+                                                                                                                                ww
+                                                                                                                              ]
+                                                                                                                            ]
+                                                                                                                          ]
                                                                                                                         ]
+                                                                                                                        n
                                                                                                                       ]
                                                                                                                     )
                                                                                                                   )
                                                                                                                 )
                                                                                                               ]
                                                                                                             ]
-                                                                                                            w
-                                                                                                          ]
-                                                                                                        ]
-                                                                                                        (fun Unit Bool)
-                                                                                                      }
-                                                                                                      (lam
-                                                                                                        thunk
-                                                                                                        Unit
-                                                                                                        True
+                                                                                                          )
+                                                                                                        )
                                                                                                       )
                                                                                                     ]
-                                                                                                    (lam
-                                                                                                      thunk
-                                                                                                      Unit
-                                                                                                      [
-                                                                                                        [
-                                                                                                          {
-                                                                                                            [
-                                                                                                              Unit_match
-                                                                                                              [
-                                                                                                                trace
-                                                                                                                (con
-                                                                                                                  string
-                                                                                                                    "State transition invalid - constraints not satisfied by ScriptContext"
-                                                                                                                )
-                                                                                                              ]
-                                                                                                            ]
-                                                                                                            (fun Unit Bool)
-                                                                                                          }
-                                                                                                          (lam
-                                                                                                            thunk
-                                                                                                            Unit
-                                                                                                            False
-                                                                                                          )
-                                                                                                        ]
-                                                                                                        Unit
-                                                                                                      ]
-                                                                                                    )
                                                                                                   ]
-                                                                                                  Unit
+                                                                                                  w
                                                                                                 ]
                                                                                               )
                                                                                             ]
@@ -17883,29 +17625,7 @@
                                                                         (lam
                                                                           thunk
                                                                           Unit
-                                                                          [
-                                                                            [
-                                                                              {
-                                                                                [
-                                                                                  Unit_match
-                                                                                  [
-                                                                                    trace
-                                                                                    (con
-                                                                                      string
-                                                                                        "State transition invalid - input is not a valid transition at the current state"
-                                                                                    )
-                                                                                  ]
-                                                                                ]
-                                                                                (fun Unit Bool)
-                                                                              }
-                                                                              (lam
-                                                                                thunk
-                                                                                Unit
-                                                                                False
-                                                                              )
-                                                                            ]
-                                                                            Unit
-                                                                          ]
+                                                                          False
                                                                         )
                                                                       ]
                                                                       Unit
@@ -17915,29 +17635,7 @@
                                                                 (lam
                                                                   thunk
                                                                   Unit
-                                                                  [
-                                                                    [
-                                                                      {
-                                                                        [
-                                                                          Unit_match
-                                                                          [
-                                                                            trace
-                                                                            (con
-                                                                              string
-                                                                                "State transition invalid - checks failed"
-                                                                            )
-                                                                          ]
-                                                                        ]
-                                                                        (fun Unit Bool)
-                                                                      }
-                                                                      (lam
-                                                                        thunk
-                                                                        Unit
-                                                                        False
-                                                                      )
-                                                                    ]
-                                                                    Unit
-                                                                  ]
+                                                                  False
                                                                 )
                                                               ]
                                                               Unit
