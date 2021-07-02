@@ -47,7 +47,8 @@ makeLift ''DiffSeconds
 newtype POSIXTime = POSIXTime { getPOSIXTime :: Integer }
   deriving stock (Haskell.Eq, Haskell.Ord, Haskell.Show, Generic)
   deriving anyclass (FromJSON, FromJSONKey, ToJSON, ToJSONKey, NFData)
-  deriving newtype (Haskell.Num, AdditiveSemigroup, AdditiveMonoid, AdditiveGroup, Haskell.Enum, Eq, Ord, Serialise, Hashable, PlutusTx.IsData)
+  deriving newtype (AdditiveSemigroup, AdditiveMonoid, AdditiveGroup, Eq, Ord, Enum, PlutusTx.IsData)
+  deriving newtype (Haskell.Num, Haskell.Enum, Serialise, Hashable)
 
 makeLift ''POSIXTime
 
